@@ -1,3 +1,5 @@
+export type WalletBalanceType = "real" | "bonus" | "withdrawable";
+
 export interface BET62WalletConfig {
   currency: string;
   decimalPlaces: number;
@@ -39,6 +41,13 @@ export interface BET62WalletConfig {
     negativeBalanceProtection: boolean;
     dailyStatementEmail: boolean;
     monthlyStatementEmail: boolean;
+  };
+  WALLET_CONFIG: {
+    REAL_BALANCE: WalletBalanceType;
+    BONUS_BALANCE: WalletBalanceType;
+    WITHDRAWABLE_BALANCE: WalletBalanceType;
+    USE_BONUS_FIRST_ON_ELIGIBLE: boolean;
+    STALE_DEPOSIT_DAYS: number;
   };
   stripe: {
     enabled: boolean;
@@ -91,6 +100,13 @@ export const DEFAULT_WALLET_CONFIG: BET62WalletConfig = {
     negativeBalanceProtection: true,
     dailyStatementEmail: false,
     monthlyStatementEmail: true,
+  },
+  WALLET_CONFIG: {
+    REAL_BALANCE: "real",
+    BONUS_BALANCE: "bonus",
+    WITHDRAWABLE_BALANCE: "withdrawable",
+    USE_BONUS_FIRST_ON_ELIGIBLE: true,
+    STALE_DEPOSIT_DAYS: 14,
   },
   stripe: {
     enabled: true,

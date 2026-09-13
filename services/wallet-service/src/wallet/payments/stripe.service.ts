@@ -3,6 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { PaymentProvider } from '@bet62/shared';
 
+type CheckoutPaymentMethod = 'card' | 'mbway' | 'multibanco';
+
+interface CreateCheckoutSessionDto {
+  userId: string;
+  amountCents: number;
+  currency: string;
+  paymentMethod: CheckoutPaymentMethod;
+  returnUrl: string;
+  promoCode?: string;
+}
+
 @Injectable()
 export class StripeService {
   private readonly logger = new Logger(StripeService.name);
@@ -47,6 +58,96 @@ export class StripeService {
       clientSecret: intent.client_secret ?? '',
       intentId: intent.id,
       status: intent.status,
+      provider: PaymentProvider.STRIPE,
+    };
+  }
+
+  async createCheckoutSession(
+    dto: CreateCheckoutSessionDto,
+  ): Promise<{
+    sessionId: string;
+    url: string;
+    clientSecret?: string;
+    status: string;
+    provider: PaymentProvider;
+  }> {
+    const { userId, amountCents, currency, paymentMethod, returnUrl, promoCode } = dto;
+    const successUrl = returnUrl && returnUrl.length > 0
+      ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}payType=${paymentMethod}&sessionId={CHECKOUT_SESSION_ID}&status=success`
+      : undefined;
+    const cancelUrl = returnUrl && returnUrl.length > 0
+      ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}payType=${paymentMethod}&status=cancel`
+      : undefined;
+
+    if (!this.stripe) {
+      this.logger.debug(`[MOCK] createCheckoutSession user=${userId} amount=${amountCents} currency=${currency} method=${paymentMethod}`);
+      const sessionId = `cs_mock_${userId}_${Date.now()}`;
+      return {
+        sessionId,
+        url: `${returnUrl || 'http://localhost'}${returnUrl?.includes('?') ? '&' : '?'}payType=${paymentMethod}&sessionId=${sessionId}&status=success`,
+        clientSecret: `cs_mock_${userId}_${Date.now()}_secret_${Math.random().toString(36).slice(2)}`,
+        status: 'open',
+        provider: PaymentProvider.STRIPE,
+      };
+    }
+
+    const metadata: Record<string, string> = { userId, paymentMethod };
+    if (promoCode) metadata.promoCode = promoCode;
+
+    let paymentMethodTypes: any;
+    let paymentMethodOptions: Stripe.Checkout.SessionCreateParams.PaymentMethodOptions | undefined;
+
+    switch (paymentMethod) {
+      case 'card':
+        paymentMethodTypes = ['card' as const];
+        break;
+
+      case 'multibanco':
+        paymentMethodTypes = ['multibanco' as const, 'card' as const];
+        break;
+
+      case 'mbway':
+        // Stripe suporta MB Way através Stripe Payments API Stripe.Checkout.Session.create com
+        // payment_method_types: ['multibanco', 'card'] para métodos de PT;
+        // mbway via pix/bancontact dependendo da conta Stripe PT ativada.
+        // Em ambiente de produção com Stripe PT devidamente ativado, MB Way pode ser disponibilizado
+        // através de payment_method_types apropriados ou fluxos de pagamento alternativos.
+        paymentMethodTypes = ['card' as const];
+        paymentMethodOptions = {};
+        break;
+
+      default:
+        paymentMethodTypes = ['card' as const];
+    }
+
+    const session = await this.stripe.checkout.sessions.create({
+      mode: 'payment',
+      line_items: [
+        {
+          price_data: {
+            currency: currency.toLowerCase(),
+            product_data: {
+              name: `Depósito ${amountCents / 100} ${currency.toUpperCase()}`,
+              description: `Depósito via ${paymentMethod}`,
+            },
+            unit_amount: amountCents,
+          },
+          quantity: 1,
+        },
+      ],
+      payment_method_types: paymentMethodTypes,
+      payment_method_options: paymentMethodOptions,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata,
+      client_reference_id: userId,
+    });
+
+    return {
+      sessionId: session.id,
+      url: session.url ?? '',
+      clientSecret: session.client_secret ?? undefined,
+      status: session.status,
       provider: PaymentProvider.STRIPE,
     };
   }

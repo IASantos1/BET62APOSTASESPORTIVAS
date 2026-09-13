@@ -417,10 +417,10 @@ export default function EventsPage() {
                                       <button
                                         key={k}
                                         onClick={() => addOdd({ ...m, league: lg.meta.name, flag: lg.meta.flag, odds: m.odds }, k, v, 'Resultado (1X2)', '1X2')}
-                                        className="rounded-xl py-2.5 border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/8 group transition text-center"
+                                        className="group h-14 w-full flex flex-col items-center justify-center gap-0.5 px-1 rounded-xl border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/8 transition-all text-center"
                                       >
-                                        <p className="text-[10px] uppercase tracking-wider text-white/45">{k} · {selName.length > 10 ? selName.slice(0, 9) + '…' : selName}</p>
-                                        <p className="font-mono font-bold text-bet62-primary group-hover:bg-bet62-primary group-hover:text-bet62-bg inline-block px-2 mt-0.5 rounded-md transition">
+                                        <p className="text-[9px] uppercase tracking-wider text-white/45 leading-none">{k} · {selName.length > 10 ? selName.slice(0, 9) + '…' : selName}</p>
+                                        <p className="font-mono font-bold text-sm text-bet62-primary group-hover:bg-bet62-primary group-hover:text-bet62-bg inline-block px-2 mt-0.5 rounded-md transition-all leading-none">
                                           {formatOdds(v)}
                                         </p>
                                       </button>
@@ -487,10 +487,10 @@ export default function EventsPage() {
                                 onClick={() => addOdd({ id: m.id, home: m.home, away: m.away, league: m.league, flag: m.flag, kickoffAt: m.kickoffAt, marketsCount: m.marketsCount, odds: [m.odds[0], m.odds[1]] as [number, number], hot: m.hot },
                                   k as '1' | '2', v, 'Vencedor do Jogo', 'ML',
                                 )}
-                                className="rounded-xl py-2.5 border border-bet62-border hover:border-bet62-accent hover:bg-bet62-accent/8 transition text-center"
+                                className="group h-14 w-full flex flex-col items-center justify-center gap-0.5 px-1 rounded-xl border border-bet62-border hover:border-bet62-accent hover:bg-bet62-accent/8 transition-all text-center"
                               >
-                                <p className="text-[10px] uppercase tracking-wider text-white/45">{k} · {nm.length > 12 ? nm.slice(0, 10) + '…' : nm}</p>
-                                <p className="font-mono font-bold text-bet62-accent mt-0.5">{formatOdds(v)}</p>
+                                <p className="text-[9px] uppercase tracking-wider text-white/45 leading-none">{k} · {nm.length > 12 ? nm.slice(0, 10) + '…' : nm}</p>
+                                <p className="font-mono font-bold text-sm text-bet62-accent leading-none mt-0.5">{formatOdds(v)}</p>
                               </button>
                             ))}
                           </div>
@@ -555,10 +555,10 @@ export default function EventsPage() {
                                     k as 'P1' | 'P2', v, 'Vencedor do Encontro', 'ML',
                                   )
                                 }
-                                className="rounded-xl py-2.5 border border-bet62-border hover:border-bet62-secondary hover:bg-bet62-secondary/8 transition text-center"
+                                className="group h-14 w-full flex flex-col items-center justify-center gap-0.5 px-1 rounded-xl border border-bet62-border hover:border-bet62-secondary hover:bg-bet62-secondary/8 transition-all text-center"
                               >
-                                <p className="text-[10px] uppercase tracking-wider text-white/45">{k} · {nm.split(' ').slice(-1)[0]}</p>
-                                <p className="font-mono font-bold text-bet62-secondary mt-0.5">{formatOdds(v)}</p>
+                                <p className="text-[9px] uppercase tracking-wider text-white/45 leading-none">{k} · {nm.split(' ').slice(-1)[0]}</p>
+                                <p className="font-mono font-bold text-sm text-bet62-secondary leading-none mt-0.5">{formatOdds(v)}</p>
                               </button>
                             ))}
                           </div>

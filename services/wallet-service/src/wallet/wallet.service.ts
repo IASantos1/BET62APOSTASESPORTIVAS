@@ -8,6 +8,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeService } from './payments/stripe.service';
+import { WithdrawalRiskEngineService, WithdrawalRiskResult } from './withdrawal-risk-engine.service';
 import {
   LedgerAccountType,
   LedgerEntryType,
@@ -50,6 +51,30 @@ interface ApplyResult {
   deltaBonus: number;
 }
 
+interface WagerProgressBonus {
+  grantedAmount: number;
+  rolloverRequiredTotal: number;
+  rolloverCompletedWeighted: number;
+  status: string;
+}
+
+interface BalanceResponse {
+  real: number;
+  bonus: number;
+  withdrawable: number;
+  rolloverRemaining: number;
+  totalTurnover: number;
+}
+
+export interface WithdrawalProcessingResult {
+  withdrawal: unknown;
+  transaction: unknown;
+  riskResult: WithdrawalRiskResult;
+  payoutInitiated: boolean;
+  pendingReview: boolean;
+  blocked: boolean;
+}
+
 @Injectable()
 export class WalletService {
   private readonly logger = new Logger(WalletService.name);
@@ -58,6 +83,7 @@ export class WalletService {
     private readonly prisma: PrismaService,
     private readonly stripe: StripeService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly riskEngine: WithdrawalRiskEngineService,
   ) {}
 
   async getOrCreateWallet(userId: string, currency: string = 'EUR') {
@@ -68,8 +94,99 @@ export class WalletService {
     });
   }
 
-  async getBalance(userId: string, currency: string = 'EUR') {
-    return this.getOrCreateWallet(userId, currency);
+  async getBalance(userId: string, currency: string = 'EUR'): Promise<BalanceResponse> {
+    const wallet = await this.getOrCreateWallet(userId, currency);
+    const wagerProgress = await this.fetchWagerProgress(userId, currency);
+    return this.computeWithdrawableAndRollover(wallet, wagerProgress);
+  }
+
+  private async fetchWagerProgress(userId: string, _currency: string): Promise<WagerProgressBonus[]> {
+    try {
+      const result = await this.prisma.$queryRawUnsafe<
+        Array<{
+          granted_amount: string;
+          rollover_required_total: string;
+          rollover_completed_weighted: string;
+          status: string;
+        }>
+      >(
+        `SELECT
+          granted_amount,
+          rollover_required_total,
+          rollover_completed_weighted,
+          status
+         FROM bonus.user_bonus
+         WHERE user_id = $1
+           AND status IN ('ACTIVE', 'ROLLOVER_COMPLETE')`,
+        userId,
+      );
+      return result.map((r) => ({
+        grantedAmount: parseFloat(r.granted_amount),
+        rolloverRequiredTotal: parseFloat(r.rollover_required_total),
+        rolloverCompletedWeighted: parseFloat(r.rollover_completed_weighted),
+        status: r.status,
+      }));
+    } catch (err) {
+      this.logger.debug(`fetchWagerProgress fallback (schema bonus not available): ${(err as Error).message}`);
+      return [];
+    }
+  }
+
+  private computeWithdrawableAndRollover(
+    wallet: {
+      realBalance: number;
+      bonusBalance: number;
+      totalTurnover: string | number | unknown;
+    },
+    wagerProgress: WagerProgressBonus[],
+  ): BalanceResponse {
+    const real = Number(wallet.realBalance) || 0;
+    const bonus = Number(wallet.bonusBalance) || 0;
+    const totalTurnoverNum = Number(wallet.totalTurnover) || 0;
+
+    let rolloverRemaining = 0;
+    let bonusReleasedPart = 0;
+    let bonusLockedPart = 0;
+
+    if (wagerProgress.length === 0) {
+      bonusReleasedPart = bonus;
+    } else {
+      const totalGranted = wagerProgress.reduce((s, b) => s + b.grantedAmount, 0);
+      let weightReleased = 0;
+      let weightRemaining = 0;
+
+      for (const b of wagerProgress) {
+        const progress = b.rolloverRequiredTotal > 0
+          ? Math.min(1, b.rolloverCompletedWeighted / b.rolloverRequiredTotal)
+          : (b.status === 'ROLLOVER_COMPLETE' ? 1 : 0);
+        const share = totalGranted > 0 ? b.grantedAmount / totalGranted : 0;
+        weightReleased += share * progress;
+        weightRemaining += share * Math.max(0, 1 - progress);
+        if (b.rolloverRequiredTotal > 0) {
+          rolloverRemaining += Math.max(0, b.rolloverRequiredTotal - b.rolloverCompletedWeighted);
+        }
+      }
+
+      const denom = weightReleased + weightRemaining;
+      if (denom > 0) {
+        bonusReleasedPart = bonus * (weightReleased / denom);
+        bonusLockedPart = bonus * (weightRemaining / denom);
+      } else {
+        bonusReleasedPart = bonus;
+      }
+    }
+
+    const withdrawable = real + bonusReleasedPart;
+
+    void bonusLockedPart;
+
+    return {
+      real: Math.round(real * 100) / 100,
+      bonus: Math.round(bonus * 100) / 100,
+      withdrawable: Math.round(withdrawable * 100) / 100,
+      rolloverRemaining: Math.round(rolloverRemaining * 100) / 100,
+      totalTurnover: Math.round(totalTurnoverNum * 100) / 100,
+    };
   }
 
   async getTransactions(userId: string, query: WalletTransactionsQueryDto, currency: string = 'EUR') {
@@ -97,12 +214,41 @@ export class WalletService {
     if (wallet.isFrozen) throw new ForbiddenException('Wallet is frozen');
 
     const amountCents = Math.round(dto.amount * 100);
-    const intent = await this.stripe.createPaymentIntent(
-      userId,
-      amountCents,
-      dto.currency,
-      { returnUrl: dto.returnUrl ?? '', promoCode: dto.promoCode ?? '' },
-    );
+
+    let intentResult;
+    let providerRefType: string;
+    let providerRefId: string;
+    let clientSecret: string | undefined;
+    let checkoutUrl: string | undefined;
+    let sessionId: string | undefined;
+
+    if (dto.paymentMethod) {
+      const session = await this.stripe.createCheckoutSession({
+        userId,
+        amountCents,
+        currency: dto.currency,
+        paymentMethod: dto.paymentMethod,
+        returnUrl: dto.returnUrl ?? '',
+        promoCode: dto.promoCode ?? '',
+      });
+      intentResult = session;
+      providerRefType = 'STRIPE_CHECKOUT_SESSION';
+      providerRefId = session.sessionId;
+      checkoutUrl = session.url;
+      sessionId = session.sessionId;
+      clientSecret = session.clientSecret;
+    } else {
+      const intent = await this.stripe.createPaymentIntent(
+        userId,
+        amountCents,
+        dto.currency,
+        { returnUrl: dto.returnUrl ?? '', promoCode: dto.promoCode ?? '' },
+      );
+      intentResult = intent;
+      providerRefType = 'STRIPE_PAYMENT_INTENT';
+      providerRefId = intent.intentId;
+      clientSecret = intent.clientSecret;
+    }
 
     const { deposit } = await this.prisma.$transaction(
       async (tx) => {
@@ -116,9 +262,9 @@ export class WalletService {
             amountCurrency: dto.currency,
             status: PaymentStatus.PENDING,
             provider: dto.provider,
-            externalId: intent.intentId,
-            referenceId: intent.intentId,
-            referenceType: 'STRIPE_PAYMENT_INTENT',
+            externalId: providerRefId,
+            referenceId: providerRefId,
+            referenceType: providerRefType,
             kycLevelAtTime: wallet.kycLevelApplied,
           },
         });
@@ -131,9 +277,10 @@ export class WalletService {
             amountAmount: dto.amount,
             amountCurrency: dto.currency,
             provider: dto.provider,
-            providerTransactionId: intent.intentId,
+            providerTransactionId: providerRefId,
             status: PaymentStatus.PENDING,
             returnUrl: dto.returnUrl,
+            paymentMethodType: dto.paymentMethod,
           },
         });
         await tx.wallet.update({
@@ -145,22 +292,59 @@ export class WalletService {
       { isolationLevel: 'Serializable', timeout: 10000 },
     );
 
-    return { deposit, clientSecret: intent.clientSecret, intentId: intent.intentId };
+    return {
+      deposit,
+      clientSecret,
+      intentId: providerRefId,
+      sessionId,
+      checkoutUrl,
+      paymentMethod: dto.paymentMethod,
+    };
   }
 
   async handleStripeWebhook(rawBody: Buffer, signature: string) {
     const { event, valid } = this.stripe.constructWebhookEvent(rawBody, signature);
     if (!valid) throw new BadRequestException('Invalid stripe webhook signature');
 
+    let userId: string | undefined;
+    let providerTransactionId: string | undefined;
+    let amount = 0;
+    let currency = '';
+    let handled = false;
+
     if (event.type === 'payment_intent.succeeded') {
-      const pi = event.data.object as { id: string; amount: number; currency: string; metadata?: { userId?: string } };
-      const userId = pi.metadata?.userId;
-      if (!userId) return { handled: false, reason: 'no_user_in_metadata' };
-      const amount = pi.amount / 100;
-      const currency = pi.currency.toUpperCase();
-      await this.completeDeposit(userId, pi.id, amount, currency, pi);
+      const pi = event.data.object as {
+        id: string;
+        amount: number;
+        currency: string;
+        metadata?: { userId?: string };
+      };
+      userId = pi.metadata?.userId;
+      providerTransactionId = pi.id;
+      amount = pi.amount / 100;
+      currency = pi.currency.toUpperCase();
+      handled = true;
+    } else if (event.type === 'checkout.session.completed') {
+      const cs = event.data.object as {
+        id: string;
+        amount_total: number | null;
+        currency: string | null;
+        metadata?: { userId?: string };
+        payment_intent?: string | null;
+      };
+      userId = cs.metadata?.userId;
+      providerTransactionId = cs.payment_intent ?? cs.id;
+      amount = (cs.amount_total ?? 0) / 100;
+      currency = (cs.currency ?? 'eur').toUpperCase();
+      handled = true;
     }
-    return { handled: true, eventType: event.type };
+
+    if (handled && userId && providerTransactionId && amount > 0) {
+      await this.completeDeposit(userId, providerTransactionId, amount, currency, event.data.object);
+      return { handled: true, eventType: event.type };
+    }
+
+    return { handled: false, reason: 'unhandled_event_type', eventType: event.type };
   }
 
   private async completeDeposit(
@@ -175,7 +359,12 @@ export class WalletService {
     const result = await this.prisma.$transaction(
       async (tx) => {
         const deposit = await tx.deposit.findFirst({
-          where: { userId, walletCurrency: currency, providerTransactionId },
+          where: {
+            OR: [
+              { userId, walletCurrency: currency, providerTransactionId },
+              { userId, walletCurrency: currency, transactionId: providerTransactionId },
+            ],
+          },
         });
         if (!deposit) throw new NotFoundException('Deposit not found');
         if (deposit.status === PaymentStatus.COMPLETED) return { skipped: true, deposit };
@@ -211,7 +400,10 @@ export class WalletService {
 
         const updatedWallet = await tx.wallet.update({
           where: { userId_currency: { userId, currency } },
-          data: { totalDeposited: { increment: amount } },
+          data: {
+            totalDeposited: { increment: amount },
+            lastDepositAt: new Date(),
+          },
         });
 
         return { deposit, apply, updatedWallet, skipped: false };
@@ -249,13 +441,60 @@ export class WalletService {
     return result;
   }
 
-  async requestWithdrawal(userId: string, dto: RequestWithdrawalDto) {
+  async requestWithdrawal(
+    userId: string,
+    dto: RequestWithdrawalDto,
+    riskContext: { ipAddress?: string; userAgent?: string; deviceFingerprint?: string; email?: string } = {},
+  ): Promise<WithdrawalProcessingResult> {
     const wallet = await this.getOrCreateWallet(userId, dto.currency);
     if (wallet.isFrozen) throw new ForbiddenException('Wallet is frozen');
-    const available = wallet.realBalance - wallet.pendingWithdrawals;
+
+    const balance = await this.getBalance(userId, dto.currency);
+    const available = balance.withdrawable - wallet.pendingWithdrawals;
     if (available < dto.amount) {
-      throw new BadRequestException(`Insufficient balance: available ${available.toFixed(2)}${dto.currency}`);
+      throw new BadRequestException(`Insufficient withdrawable balance: available ${available.toFixed(2)}${dto.currency}`);
     }
+
+    const riskResult = await this.riskEngine.evaluateWithdrawalRisk(
+      userId,
+      dto.amount,
+      dto.provider ?? 'STRIPE',
+      riskContext,
+    );
+
+    this.logger.log(
+      `Withdrawal risk check user=${userId} amount=${dto.amount} status=${riskResult.status} score=${riskResult.score}`,
+    );
+
+    if (riskResult.status === 'BLOCKED') {
+      this.eventEmitter.emit(
+        BET62_EVENTS.WALLET.WITHDRAWAL_REJECTED,
+        createEnvelope({
+          event: BET62_EVENTS.WALLET.WITHDRAWAL_REJECTED,
+          aggregateType: 'Wallet',
+          aggregateId: userId,
+          producer: 'wallet-service',
+          payload: {
+            userId,
+            withdrawalId: null,
+            amount: dto.amount,
+            currency: dto.currency,
+            reason: riskResult.factors.join('; '),
+            riskScore: riskResult.score,
+            rejectedAt: new Date().toISOString(),
+          },
+        }),
+      );
+      throw new BadRequestException({
+        message: 'Saque bloqueado pelo motor de risco',
+        riskFactors: riskResult.factors,
+        riskScore: riskResult.score,
+      });
+    }
+
+    const initialStatus: PaymentStatus = riskResult.status === 'RISK_REVIEW'
+      ? PaymentStatus.UNDER_REVIEW
+      : PaymentStatus.PENDING;
 
     const result = await this.prisma.$transaction(
       async (tx) => {
@@ -267,10 +506,13 @@ export class WalletService {
             type: TransactionType.WITHDRAWAL,
             amountAmount: dto.amount,
             amountCurrency: dto.currency,
-            status: PaymentStatus.PENDING,
+            status: initialStatus,
             provider: dto.provider,
             referenceType: 'WITHDRAWAL_REQUEST',
             kycLevelAtTime: wallet.kycLevelApplied,
+            riskScore: riskResult.score,
+            note: riskResult.factors.length > 0 ? riskResult.factors.join(' | ') : null,
+            metadata: { riskFactors: riskResult.factors, riskDetails: riskResult.details },
           },
         });
         const withdrawal = await tx.withdrawal.create({
@@ -283,18 +525,52 @@ export class WalletService {
             amountCurrency: dto.currency,
             provider: dto.provider,
             beneficiaryAccountJson: dto.beneficiary as unknown as object,
+            status: initialStatus,
             kycLevelAtRequest: wallet.kycLevelApplied,
             pendingDocumentIds: [],
+            riskScore: riskResult.score,
+            correlationId: `wd-${Date.now()}-${userId.slice(0, 8)}`,
           },
         });
         await tx.wallet.update({
           where: { userId_currency: { userId, currency: dto.currency } },
-          data: { pendingWithdrawals: { increment: dto.amount } },
+          data: {
+            pendingWithdrawals: { increment: dto.amount },
+          },
         });
         return { withdrawal, transaction };
       },
       { isolationLevel: 'Serializable', timeout: 10000 },
     );
+
+    let payoutInitiated = false;
+    let pendingReview = false;
+    let blocked = false;
+
+    if (riskResult.status === 'ALLOWED') {
+      try {
+        if (dto.provider === 'STRIPE') {
+          const amountCents = Math.round(dto.amount * 100);
+          this.logger.log(`Initiating STRIPE payout for withdrawal=${result.withdrawal.id} amount=${dto.amount}`);
+          await this.stripe.createPayout(
+            userId,
+            amountCents,
+            dto.currency,
+            { withdrawalId: result.withdrawal.id },
+          ).catch((err) => {
+            this.logger.error(`Failed to initiate stripe payout withdrawal=${result.withdrawal.id}`, err as Error);
+          });
+          payoutInitiated = true;
+        }
+      } catch (err) {
+        this.logger.error(`Payout initiation failed`, err as Error);
+      }
+    } else if (riskResult.status === 'RISK_REVIEW') {
+      pendingReview = true;
+      this.logger.log(
+        `Withdrawal PENDING_REVIEW id=${result.withdrawal.id} user=${userId} factors=${riskResult.factors.join(', ')}`,
+      );
+    }
 
     const payload: WalletWithdrawalRequestedPayload = {
       userId,
@@ -307,11 +583,21 @@ export class WalletService {
       balanceBefore: { real: wallet.realBalance, bonus: wallet.bonusBalance },
       kycLevelAtRequest: wallet.kycLevelApplied,
       requestedAt: new Date().toISOString(),
-      requiresManualApproval: wallet.kycLevelApplied < 1 || dto.amount >= 10000,
+      requiresManualApproval: pendingReview || wallet.kycLevelApplied < 1 || dto.amount >= 10000,
     };
     this.emitEnvelope(BET62_EVENTS.WALLET.WITHDRAWAL_REQUESTED, 'WALLET', userId, payload);
-    this.logger.log(`Withdrawal requested user=${userId} amount=${dto.amount}${dto.currency}`);
-    return result;
+    this.logger.log(
+      `Withdrawal ${initialStatus} user=${userId} id=${result.withdrawal.id} amount=${dto.amount}${dto.currency} risk=${riskResult.status}/${riskResult.score}`,
+    );
+
+    return {
+      withdrawal: result.withdrawal,
+      transaction: result.transaction,
+      riskResult,
+      payoutInitiated,
+      pendingReview,
+      blocked,
+    };
   }
 
   async internalDebit(
@@ -442,15 +728,31 @@ export class WalletService {
     const pw = params.pendingWithdrawalsDelta ?? 0;
     const rb = params.reservedBetsDelta ?? 0;
 
+    const isBetStake = [TransactionType.BET_PLACED, TransactionType.CASINO_BET].includes(transactionType);
+    const isBetWin = [
+      TransactionType.BET_SETTLED_WON,
+      TransactionType.BET_SETTLED_HALF_WON,
+      TransactionType.CASINO_WIN,
+      TransactionType.BET_CASHOUT,
+    ].includes(transactionType);
+    const turnoverAbs =
+      isBetStake ? Math.abs(real) + Math.abs(bonus) :
+      isBetWin ? Math.abs(real) + Math.abs(bonus) : 0;
+
+    const walletUpdateData: Record<string, unknown> = {
+      realBalance: { increment: real },
+      bonusBalance: { increment: bonus },
+      pendingDeposits: { increment: pd },
+      pendingWithdrawals: { increment: pw },
+      reservedBets: { increment: rb },
+    };
+    if (turnoverAbs > 0) {
+      walletUpdateData.totalTurnover = { increment: turnoverAbs };
+    }
+
     const wallet = await tx.wallet.update({
       where: { userId_currency: { userId, currency } },
-      data: {
-        realBalance: { increment: real },
-        bonusBalance: { increment: bonus },
-        pendingDeposits: { increment: pd },
-        pendingWithdrawals: { increment: pw },
-        reservedBets: { increment: rb },
-      },
+      data: walletUpdateData,
     });
 
     const entries: Array<Record<string, unknown>> = [];

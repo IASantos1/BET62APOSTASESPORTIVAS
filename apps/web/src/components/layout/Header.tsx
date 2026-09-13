@@ -19,6 +19,12 @@ import {
   ChevronDown,
   Sparkles,
   LogIn,
+  Gift,
+  Plus,
+  Banknote,
+  CreditCard,
+  Smartphone,
+  Percent,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
@@ -32,6 +38,7 @@ const NAV = [
   { href: '/live', label: 'Ao Vivo', icon: Radio, badge: '24' },
   { href: '/events', label: 'Próximos', icon: CalendarDays },
   { href: '/casino', label: 'Cassino', icon: Dices },
+  { href: '/promocoes', label: 'Promoções', icon: Gift, badge: '5' },
 ];
 
 export function Bet62Logo({ className }: { className?: string }) {
@@ -48,13 +55,43 @@ export function Bet62Logo({ className }: { className?: string }) {
   );
 }
 
+type PaymentMethod = 'mbway' | 'multibanco' | 'card';
+
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [menuOpen, setMenuOpen] = React.useState(false);
+  const [depositOpen, setDepositOpen] = React.useState(false);
+  const [depositAmount, setDepositAmount] = React.useState<number>(20);
+  const [selectedMethod, setSelectedMethod] = React.useState<PaymentMethod>('mbway');
+  const [depositLoading, setDepositLoading] = React.useState(false);
   const { user, isAuthenticated, logout, isLoading } = useAuthStore();
   const balance = 0;
+
+  const handleDeposit = async () => {
+    if (depositAmount < 10) return;
+    setDepositLoading(true);
+    try {
+      const res = await fetch('/api/client/deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: depositAmount,
+          method: selectedMethod,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.url) {
+        window.location.href = data.url;
+      } else if (data?.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+      }
+    } catch {
+    } finally {
+      setDepositLoading(false);
+    }
+  };
 
   return (
     <>
@@ -107,6 +144,13 @@ export function Header() {
             ) : (
               <>
                 <div className="hidden md:flex items-center gap-2 pl-2 border-l border-bet62-border">
+                  <button
+                    onClick={() => setDepositOpen(true)}
+                    className="h-10 w-10 rounded-xl bg-[#10b981] hover:bg-[#059669] shadow-md p-2 text-white font-bold flex items-center justify-center transition-all active:scale-[0.98]"
+                    aria-label="Depósito rápido"
+                  >
+                    <Plus size={18} strokeWidth={2.5} />
+                  </button>
                   <Button variant="primary" size="sm" className="gap-1.5">
                     <Wallet size={16} />
                     <span className="font-mono font-bold">{formatCurrencyEUR(balance)}</span>
@@ -171,6 +215,13 @@ export function Header() {
                   </div>
                 </div>
                 <div className="md:hidden flex items-center gap-2">
+                  <button
+                    onClick={() => setDepositOpen(true)}
+                    className="h-9 w-9 rounded-xl bg-[#10b981] hover:bg-[#059669] shadow-md text-white font-bold flex items-center justify-center transition-all active:scale-[0.98] shrink-0"
+                    aria-label="Depósito rápido"
+                  >
+                    <Plus size={16} strokeWidth={2.5} />
+                  </button>
                   <div className="hidden">
                     <span className="font-mono text-sm text-bet62-primary font-bold">
                       {formatCurrencyEUR(balance)}
@@ -292,6 +343,165 @@ export function Header() {
                 </Button>
               </div>
             </motion.aside>
+          </>
+        ) : null}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {depositOpen ? (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDepositOpen(false)}
+              className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70]"
+            />
+            <motion.div
+              initial={{ opacity: 0, y: 20, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.96 }}
+              transition={{ duration: 0.25, type: 'spring', damping: 25, stiffness: 300 }}
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[71] w-[92vw] max-w-lg"
+            >
+              <div className="rounded-3xl border border-bet62-border bg-bet62-surface/95 backdrop-blur-xl shadow-glass p-6">
+                <div className="flex items-center justify-between mb-5">
+                  <div>
+                    <h3 className="text-xl font-bold tracking-tight">Depósito Rápido</h3>
+                    <p className="text-xs text-white/50 mt-0.5">Escolhe o método e valor</p>
+                  </div>
+                  <button
+                    onClick={() => setDepositOpen(false)}
+                    className="p-2 rounded-xl hover:bg-white/5 text-white/60 hover:text-white transition"
+                    aria-label="Fechar"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="space-y-2.5 mb-5">
+                  <button
+                    onClick={() => setSelectedMethod('mbway')}
+                    className={cn(
+                      'w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all',
+                      selectedMethod === 'mbway'
+                        ? 'border-[#009688]/60 bg-[#009688]/10 shadow-[0_0_0_1px_rgba(0,150,136,0.25)]'
+                        : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
+                    )}
+                  >
+                    <div className="h-11 w-11 rounded-xl bg-[#009688] flex items-center justify-center text-white shrink-0">
+                      <Smartphone size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm">MB WAY</p>
+                      <p className="text-xs text-white/50">Instantâneo · mín. €10</p>
+                    </div>
+                    {selectedMethod === 'mbway' ? (
+                      <div className="h-5 w-5 rounded-full bg-[#009688] flex items-center justify-center shrink-0">
+                        <div className="h-2 w-2 rounded-full bg-white" />
+                      </div>
+                    ) : (
+                      <div className="h-5 w-5 rounded-full border-2 border-white/20 shrink-0" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedMethod('multibanco')}
+                    className={cn(
+                      'w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all',
+                      selectedMethod === 'multibanco'
+                        ? 'border-[#0070c9]/60 bg-[#0070c9]/10 shadow-[0_0_0_1px_rgba(0,112,201,0.25)]'
+                        : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
+                    )}
+                  >
+                    <div className="h-11 w-11 rounded-xl bg-[#0070c9] flex items-center justify-center text-white shrink-0">
+                      <Banknote size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm">Multibanco</p>
+                      <p className="text-xs text-white/50">Referência · mín. €10</p>
+                    </div>
+                    {selectedMethod === 'multibanco' ? (
+                      <div className="h-5 w-5 rounded-full bg-[#0070c9] flex items-center justify-center shrink-0">
+                        <div className="h-2 w-2 rounded-full bg-white" />
+                      </div>
+                    ) : (
+                      <div className="h-5 w-5 rounded-full border-2 border-white/20 shrink-0" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedMethod('card')}
+                    className={cn(
+                      'w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all',
+                      selectedMethod === 'card'
+                        ? 'border-white/30 bg-white/5 shadow-[0_0_0_1px_rgba(255,255,255,0.1)]'
+                        : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
+                    )}
+                  >
+                    <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-white shrink-0">
+                      <CreditCard size={20} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm">Cartão Crédito / Débito</p>
+                      <p className="text-xs text-white/50">Visa / Mastercard · mín. €10</p>
+                    </div>
+                    {selectedMethod === 'card' ? (
+                      <div className="h-5 w-5 rounded-full bg-slate-600 flex items-center justify-center shrink-0">
+                        <div className="h-2 w-2 rounded-full bg-white" />
+                      </div>
+                    ) : (
+                      <div className="h-5 w-5 rounded-full border-2 border-white/20 shrink-0" />
+                    )}
+                  </button>
+                </div>
+
+                <div className="mb-5">
+                  <label className="block text-xs font-semibold text-white/60 uppercase tracking-wider mb-2">
+                    Valor (mín. €10)
+                  </label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/40 font-mono font-bold text-lg">€</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={10}
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(parseFloat(e.target.value) || 0)}
+                      className="flex h-14 w-full rounded-2xl border border-bet62-border bg-bet62-bg/60 pl-10 pr-4 text-2xl font-mono font-bold text-white placeholder:text-white/30 transition-all focus-visible:outline-none focus-visible:border-bet62-primary focus-visible:ring-2 focus-visible:ring-bet62-primary/30"
+                    />
+                  </div>
+                  <div className="flex gap-2 mt-2.5">
+                    {[10, 20, 50, 100].map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => setDepositAmount(v)}
+                        className={cn(
+                          'flex-1 py-1.5 rounded-lg text-xs font-semibold border transition-all',
+                          depositAmount === v
+                            ? 'border-bet62-primary bg-bet62-primary/10 text-bet62-primary'
+                            : 'border-bet62-border text-white/60 hover:text-white hover:border-white/20',
+                        )}
+                      >
+                        €{v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <Button
+                  variant="primary"
+                  size="lg"
+                  className="w-full uppercase font-bold tracking-wider h-14 text-base"
+                  disabled={depositAmount < 10 || depositLoading}
+                  loading={depositLoading}
+                  loadingText="A processar..."
+                  onClick={handleDeposit}
+                >
+                  CONTINUAR
+                </Button>
+              </div>
+            </motion.div>
           </>
         ) : null}
       </AnimatePresence>

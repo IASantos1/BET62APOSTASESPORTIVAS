@@ -53,6 +53,10 @@ export class CreateDepositDto {
   paymentMethodId?: string;
 
   @IsOptional()
+  @IsEnum(["card", "mbway", "multibanco"])
+  paymentMethod?: "card" | "mbway" | "multibanco";
+
+  @IsOptional()
   @IsString()
   promoCode?: string;
 

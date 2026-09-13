@@ -171,8 +171,8 @@ export class GameplayService {
       stakeAmount: stake,
       payoutAmount: payout,
       netResult,
-      reelsResult: (result as never).reels ?? undefined,
-      winningLines: (result as never).winningLines ?? undefined,
+      reelsResult: (result as any).reels ?? undefined,
+      winningLines: (result as any).winningLines ?? undefined,
       extra: result.extra,
     };
   }

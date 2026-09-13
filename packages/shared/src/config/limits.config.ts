@@ -1,3 +1,24 @@
+export type AutoExclusionPeriod = "24h" | "7d" | "1m" | "6m" | "1y" | "SELF_EXCLUDE_PERMANENT";
+
+export interface PlayerDepositLimits {
+  daily: number;
+  weekly: number;
+  monthly: number;
+  minDaily: number;
+}
+
+export interface PlayerBetLimits {
+  MIN_BET: number;
+  MAX_DEFAULT: number;
+  dynamic: boolean;
+}
+
+export interface PlayerLossLimits {
+  session?: number;
+  daily?: number;
+  weekly?: number;
+}
+
 export interface BET62LimitsConfig {
   user: {
     deposits: {
@@ -48,6 +69,10 @@ export interface BET62LimitsConfig {
       maxSessionsPerUser: number;
     };
   };
+  PlayerDepositLimits: PlayerDepositLimits;
+  PlayerBetLimits: PlayerBetLimits;
+  PlayerLossLimits: PlayerLossLimits;
+  AutoExclusionOptions: AutoExclusionPeriod[];
   system: {
     maxWinSingle: number;
     maxWinMultiple: number;
@@ -129,6 +154,23 @@ export const DEFAULT_LIMITS_CONFIG: BET62LimitsConfig = {
       maxSessionsPerUser: 10,
     },
   },
+  PlayerDepositLimits: {
+    daily: 5000,
+    weekly: 15000,
+    monthly: 50000,
+    minDaily: 10,
+  },
+  PlayerBetLimits: {
+    MIN_BET: 0.5,
+    MAX_DEFAULT: 2000,
+    dynamic: true,
+  },
+  PlayerLossLimits: {
+    session: undefined,
+    daily: undefined,
+    weekly: undefined,
+  },
+  AutoExclusionOptions: ["24h", "7d", "1m", "6m", "1y", "SELF_EXCLUDE_PERMANENT"],
   system: {
     maxWinSingle: 100000,
     maxWinMultiple: 250000,

@@ -286,10 +286,10 @@ export default function HomePage() {
                               <button
                                 key={k}
                                 onClick={() => addOdd(m, k, v)}
-                                className="group rounded-xl py-2.5 border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/8 transition-all text-center"
+                                className="group h-14 w-full flex flex-col items-center justify-center gap-0.5 px-1 rounded-xl border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/8 transition-all text-center"
                               >
-                                <p className="text-[10px] uppercase text-white/50">{k}</p>
-                                <p className="font-mono font-bold text-bet62-primary group-hover:text-bet62-bg group-hover:bg-bet62-primary inline-block px-2 mt-1 rounded-md transition-all">
+                                <p className="text-[9px] uppercase tracking-wider text-white/50 leading-none">{k}</p>
+                                <p className="font-mono font-bold text-sm text-bet62-primary group-hover:bg-bet62-primary group-hover:text-bet62-bg inline-block px-2 mt-0.5 rounded-md transition-all leading-none">
                                   {formatOdds(v)}
                                 </p>
                               </button>
@@ -365,7 +365,7 @@ export default function HomePage() {
                         <div className="grid grid-cols-3 gap-1.5 pt-1">
                           {(['1', 'X', '2'] as const).map((k, idx) => {
                             const v = [m.odds.h, m.odds.d, m.odds.a][idx];
-                            if (!v) return <div key={k} className="opacity-30" />;
+                            if (!v) return <div key={k} className="h-14 opacity-30 rounded-xl border border-dashed border-bet62-border/50" />;
                             return (
                               <button
                                 key={k}
@@ -386,10 +386,10 @@ export default function HomePage() {
                                   addSelection(sel);
                                   setBetslipOpen(true);
                                 }}
-                                className="rounded-lg py-1.5 border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/8 text-xs transition"
+                                className="group h-14 w-full flex flex-col items-center justify-center gap-0.5 px-1 rounded-lg border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/8 transition-all text-center"
                               >
-                                <p className="text-[9px] uppercase text-white/50">{k}</p>
-                                <p className="font-mono font-bold text-bet62-primary">{formatOdds(v)}</p>
+                                <p className="text-[9px] uppercase tracking-wider text-white/50 leading-none">{k}</p>
+                                <p className="font-mono font-bold text-sm text-bet62-primary leading-none mt-0.5">{formatOdds(v)}</p>
                               </button>
                             );
                           })}
@@ -440,7 +440,7 @@ export default function HomePage() {
                               </div>
                             </div>
                           </div>
-                          <div className="hidden sm:flex gap-1.5 shrink-0">
+                          <div className="hidden sm:grid grid-cols-3 gap-1.5 shrink-0 w-[180px]">
                             {([
                               ['1', m.odds.h],
                               ['X', m.odds.d],
@@ -449,10 +449,10 @@ export default function HomePage() {
                               <button
                                 key={`${m.id}-big-${k}`}
                                 onClick={() => addOdd(m, k, v)}
-                                className="w-16 rounded-xl py-2 border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/10 transition text-center"
+                                className="group h-14 w-full flex flex-col items-center justify-center gap-0.5 px-1 rounded-xl border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/10 transition-all text-center"
                               >
-                                <p className="text-[10px] uppercase text-white/50">{k}</p>
-                                <p className="font-mono font-bold text-sm text-bet62-primary">{formatOdds(v)}</p>
+                                <p className="text-[9px] uppercase tracking-wider text-white/50 leading-none">{k}</p>
+                                <p className="font-mono font-bold text-sm text-bet62-primary leading-none mt-0.5">{formatOdds(v)}</p>
                               </button>
                             ))}
                           </div>

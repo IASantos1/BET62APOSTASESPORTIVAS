@@ -7,9 +7,7 @@
     "dev": "nest start --watch",
     "start": "nest start",
     "start:prod": "node dist/main",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix"
   },
   "dependencies": {
     "@nestjs/common": "^10.3.0",
@@ -21,7 +19,6 @@
     "@nestjs/swagger": "^7.2.0",
     "@nestjs/terminus": "^10.2.0",
     "@nestjs/bullmq": "^10.0.1",
-    "@prisma/client": "^5.8.0",
     "argon2": "^0.31.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
@@ -36,7 +33,6 @@
     "@nestjs/testing": "^10.3.0",
     "@types/express": "^4.17.21",
     "@types/node": "^20.11.0",
-    "prisma": "^5.8.0",
     "ts-loader": "^9.5.1",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",

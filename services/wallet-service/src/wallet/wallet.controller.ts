@@ -79,14 +79,91 @@ export class WalletController {
     }
   }
 
-  @Post('withdraw/request')
+  @Post('withdraw')
+  @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Solicita saque da carteira' })
-  async requestWithdrawal(
-    @Request() req: { user: { sub: string } },
+  @ApiOperation({ summary: 'Solicita saque (com Risk Engine) - endpoint principal' })
+  async withdraw(
+    @Request() req: { user: { sub: string; email?: string }; ip?: string; headers?: Record<string, string> },
     @Body() dto: RequestWithdrawalDto,
   ) {
-    return this.walletService.requestWithdrawal(req.user.sub, dto);
+    const ipAddress =
+      (req.headers?.['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      (req.headers?.['x-real-ip'] as string) ||
+      req.ip;
+    const userAgent = req.headers?.['user-agent'] as string | undefined;
+    const deviceFingerprint = req.headers?.['x-device-fingerprint'] as string | undefined;
+
+    try {
+      const result = await this.walletService.requestWithdrawal(req.user.sub, dto, {
+        ipAddress,
+        userAgent,
+        deviceFingerprint,
+        email: req.user.email,
+      });
+
+      if (result.pendingReview) {
+        return {
+          status: 'PENDING_REVIEW',
+          message: 'Saque em revisão manual. Será processado em até 24h.',
+          withdrawalId: (result.withdrawal as { id: string }).id,
+          riskScore: result.riskResult.score,
+          riskFactors: result.riskResult.factors,
+          withdrawal: result.withdrawal,
+        };
+      }
+
+      if (result.riskResult.status === 'ALLOWED') {
+        return {
+          status: 'PROCESSING',
+          message: result.payoutInitiated
+            ? 'Saque autorizado e pagamento iniciado.'
+            : 'Saque autorizado. Aguardando processamento do provedor.',
+          withdrawalId: (result.withdrawal as { id: string }).id,
+          payoutInitiated: result.payoutInitiated,
+          riskScore: result.riskResult.score,
+          withdrawal: result.withdrawal,
+        };
+      }
+
+      return {
+        status: 'ERROR',
+        message: 'Erro ao processar saque',
+      };
+    } catch (err: unknown) {
+      if (err instanceof BadRequestException) {
+        const resp = err.getResponse() as Record<string, unknown>;
+        if (resp && typeof resp === 'object' && (resp as { riskFactors?: unknown[] }).riskFactors) {
+          return {
+            statusCode: HttpStatus.BAD_REQUEST,
+            status: 'BLOCKED',
+            message: (resp as { message: string }).message || 'Saque bloqueado',
+            riskScore: (resp as { riskScore?: number }).riskScore,
+            riskFactors: (resp as { riskFactors?: string[] }).riskFactors ?? [],
+          };
+        }
+      }
+      throw err;
+    }
+  }
+
+  @Post('withdraw/request')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Solicita saque da carteira (legado)' })
+  async requestWithdrawal(
+    @Request() req: { user: { sub: string; email?: string }; ip?: string; headers?: Record<string, string> },
+    @Body() dto: RequestWithdrawalDto,
+  ) {
+    const ipAddress =
+      (req.headers?.['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      (req.headers?.['x-real-ip'] as string) ||
+      req.ip;
+    const userAgent = req.headers?.['user-agent'] as string | undefined;
+    return this.walletService.requestWithdrawal(req.user.sub, dto, {
+      ipAddress,
+      userAgent,
+      email: req.user.email,
+    });
   }
 
   @Get('withdraw/list')

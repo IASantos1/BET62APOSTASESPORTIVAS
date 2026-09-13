@@ -15,6 +15,7 @@ import {
   Boxes,
   Gamepad2,
   BadgePercent,
+  Gift,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Badge } from '../ui/Badge';
@@ -54,6 +55,28 @@ export function Sidebar({ compact = false, className }: SidebarProps) {
         className,
       )}
     >
+      <div className="p-4 border-b border-bet62-border/60">
+        <Link
+          href="/promocoes"
+          className={cn(
+            'group w-full flex items-center gap-3 px-3 py-3 rounded-2xl border border-bet62-border transition-all bg-gradient-to-br from-bet62-primary/12 via-transparent to-bet62-bg',
+            pathname.startsWith('/promocoes')
+              ? 'border-bet62-primary/60 bg-bet62-primary/15 text-bet62-primary'
+              : 'hover:border-bet62-primary/40 hover:bg-bet62-primary/10',
+          )}
+        >
+          <Gift size={20} className={cn(pathname.startsWith('/promocoes') ? 'text-bet62-primary' : 'text-bet62-secondary group-hover:text-bet62-primary')} />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <p className="font-bold text-sm leading-none">Promoções</p>
+              <Badge variant="pink" className="py-0 text-[10px]">5 NOVAS</Badge>
+            </div>
+            <p className="mt-1 text-[11px] text-white/55 leading-tight truncate">
+              Welcome 100% até €20 · Freebets · Cashback
+            </p>
+          </div>
+        </Link>
+      </div>
       <div className="p-4 flex items-center justify-between border-b border-bet62-border/60">
         <div className="flex items-center gap-2">
           <BadgePercent size={16} className="text-bet62-secondary" />

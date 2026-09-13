@@ -8,6 +8,7 @@ import {
   CampaignStatus,
   RolloverStatus,
   CasinoContributionCategory,
+  DEFAULT_BONUS_CONFIG,
 } from '@bet62/shared';
 import {
   CreateCampaignDto,
@@ -17,16 +18,19 @@ import {
   RolloverProgressResponse,
 } from '@bet62/shared';
 import { BET62_EVENTS, createEnvelope } from '@bet62/shared';
+import { PromotionEngineService, BonusGrantResult, FreeBetGrantResult, CashbackGrantResult, WageringProgressUpdate } from './promotion-engine.service';
 
 type SourceTypeBet = 'SPORTS_BET' | 'CASINO_BET' | 'LIVE_BET';
 
 @Injectable()
 export class BonusService {
   private readonly logger = new Logger(BonusService.name);
+  private readonly config = DEFAULT_BONUS_CONFIG;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly promotionEngine: PromotionEngineService,
   ) {}
 
   async listAvailable(query: BonusQueryDto) {
@@ -565,5 +569,148 @@ export class BonusService {
       },
       orderBy: [{ grantedAt: 'asc' }],
     });
+  }
+
+  async evaluateAndGrantDepositPromotions(
+    userId: string,
+    depositId: string,
+    depositAmount: number,
+    country?: string,
+  ): Promise<{ welcomeBonus: unknown | null; freeBet: unknown | null }> {
+    const user = { userId, country };
+
+    const isFirst = await this.promotionEngine.isFirstDeposit(userId);
+    const activeWelcomeCount = await this.prisma.userBonus.count({
+      where: { userId, bonusType: BonusType.WELCOME_MATCH },
+    });
+    const userBonusContext = {
+      hasActiveWelcome: activeWelcomeCount > 0,
+      depositCount: isFirst ? 0 : 1,
+    };
+
+    let welcomeBonus: unknown | null = null;
+    let freeBet: unknown | null = null;
+
+    const welcomeResult = this.promotionEngine.evaluateDepositWelcome(
+      user,
+      depositAmount,
+      userBonusContext,
+    );
+    if (welcomeResult) {
+      welcomeBonus = await this.promotionEngine.createUserBonusRecord(
+        userId,
+        welcomeResult,
+        depositId,
+      );
+      this.emitBonusGranted(welcomeBonus as never, (welcomeBonus as { campaignId?: string }).campaignId);
+      this.logger.log(`WELCOME BONUS granted user=${userId} amount=${welcomeResult.grantedAmount}`);
+    }
+
+    const freeBetResult = this.promotionEngine.evaluateDepositFreeBetTier(user, depositAmount);
+    if (freeBetResult) {
+      freeBet = await this.promotionEngine.createFreeBetRecord(userId, freeBetResult);
+      this.logger.log(`FREEBET deposit tier granted user=${userId} amount=${freeBetResult.amount}`);
+      this.eventEmitter.emit(
+        BET62_EVENTS.BONUS.GRANTED,
+        createEnvelope({
+          event: BET62_EVENTS.BONUS.GRANTED,
+          aggregateType: 'FreeBet',
+          aggregateId: (freeBet as { id: string }).id,
+          producer: 'bonus-service',
+          payload: {
+            freeBetId: (freeBet as { id: string }).id,
+            userId,
+            bonusType: BonusType.FREEBET,
+            sourceTrigger: freeBetResult.trigger,
+            originalAmount: freeBetResult.amount,
+            expiresAt: freeBetResult.expiresAt.toISOString(),
+          },
+        }),
+      );
+    }
+
+    return { welcomeBonus, freeBet };
+  }
+
+  async evaluateAndGrantFirstBetFreeBet(
+    userId: string,
+    firstBet: { stakeAmount: number; totalOdds: number; betId: string; status: string },
+  ): Promise<unknown | null> {
+    const alreadyClaimed = await this.promotionEngine.hasUserClaimedFirstBetFreeBet(userId);
+    if (alreadyClaimed) return null;
+
+    const betCount = await this.prisma.userBonus.count({
+      where: { userId },
+    });
+    if (betCount > 0) {
+      const freeBetsCount = await this.prisma.freeBet.count({ where: { userId } });
+      if (freeBetsCount > 0) return null;
+    }
+
+    const user = { userId };
+    const result = this.promotionEngine.evaluateFirstBetFreeBet(user, firstBet);
+    if (!result) return null;
+
+    const freeBet = await this.promotionEngine.createFreeBetRecord(userId, result);
+    this.logger.log(`FREEBET first bet granted user=${userId} amount=${result.amount}`);
+    this.eventEmitter.emit(
+      BET62_EVENTS.BONUS.GRANTED,
+      createEnvelope({
+        event: BET62_EVENTS.BONUS.GRANTED,
+        aggregateType: 'FreeBet',
+        aggregateId: (freeBet as { id: string }).id,
+        producer: 'bonus-service',
+        payload: {
+          freeBetId: (freeBet as { id: string }).id,
+          userId,
+          bonusType: BonusType.FREEBET,
+          sourceTrigger: result.trigger,
+          originalAmount: result.amount,
+          expiresAt: result.expiresAt.toISOString(),
+          relatedBetId: firstBet.betId,
+        },
+      }),
+    );
+    return freeBet;
+  }
+
+  async processWeeklyScheduledPromotions(userId: string, depositAmountWeek: number, netLossWeek: number, vipLevel = 0): Promise<{ reload: BonusGrantResult | null; cashback: CashbackGrantResult | null }> {
+    const reload = await this.promotionEngine.evaluateWeeklyReload(userId, depositAmountWeek);
+    let reloadRecord: unknown | null = null;
+    if (reload) {
+      reloadRecord = await this.promotionEngine.createUserBonusRecord(userId, reload);
+      this.emitBonusGranted(reloadRecord as never, (reloadRecord as { campaignId?: string }).campaignId);
+      this.logger.log(`WEEKLY RELOAD granted user=${userId} amount=${reload.grantedAmount}`);
+    }
+
+    const cashback = this.promotionEngine.evaluateWeeklyCashback(userId, netLossWeek, vipLevel);
+    let cashbackRecord: unknown | null = null;
+    if (cashback) {
+      const cashbackBonusResult: BonusGrantResult = {
+        bonusType: BonusType.CASHBACK_LOSS,
+        grantedAmount: cashback.grantedAmount,
+        maxAmount: cashback.maxAmount,
+        bonusPercentage: cashback.cashbackPercentage,
+        rolloverMultiplier: cashback.rolloverMultiplier,
+        description: cashback.description,
+        validityDays: 14,
+        trigger: BonusTrigger.WEEKLY_SCHEDULED,
+      };
+      cashbackRecord = await this.promotionEngine.createUserBonusRecord(userId, cashbackBonusResult);
+      this.emitBonusGranted(cashbackRecord as never, (cashbackRecord as { campaignId?: string }).campaignId);
+      this.logger.log(`WEEKLY CASHBACK granted user=${userId} amount=${cashback.grantedAmount} loss=${cashback.netLossConsidered}`);
+    }
+
+    return { reload, cashback };
+  }
+
+  async updateWageringProgress(userId: string, betTurnover: number): Promise<WageringProgressUpdate[]> {
+    const results = await this.promotionEngine.updateWageringProgress(userId, betTurnover);
+    for (const r of results) {
+      if (r.bonusReleased) {
+        this.logger.log(`BONUS RELEASED user=${userId} bonusId=${r.userBonusId}`);
+      }
+    }
+    return results;
   }
 }
