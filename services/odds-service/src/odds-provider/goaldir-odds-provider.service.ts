@@ -243,7 +243,7 @@ export class GoaldirOddsProviderService
           ? new Date(frame.updated_at * 1000)
           : new Date(String(frame.updated_at))
         : new Date();
-      const markets = mapOddsBySport(frame as unknown as Record<string, unknown>, sportType, { eventCompositeId: eventComposite });
+      const markets = mapOddsBySport(frame as unknown as Record<string, unknown>, sportType, eventComposite);
       if (markets.length === 0) return;
       const notifications: OddsChangeNotification[] = [];
       for (const market of markets) {

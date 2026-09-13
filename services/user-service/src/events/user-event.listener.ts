@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
-import { LimitsService } from '../modules\limits/limits.service';
+import { LimitsService } from '../modules/limits/limits.service';
 import {
   BET62_EVENTS,
   type UserCreatedPayload,

@@ -13,7 +13,7 @@ import {
   KycLevelUpdatedPayload,
 } from '@bet62/shared';
 
-interface VerificationSessionResult {
+export interface VerificationSessionResult {
   sessionId: string;
   url: string;
   sessionToken: string;

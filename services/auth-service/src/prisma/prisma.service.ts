@@ -1,11 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-// ========= TEMP WORKAROUND PRISMA GENERATE BLOQUEADO SANDBOX =========
-// Após rodar 'npx prisma generate --schema services/{nome}/prisma/schema.prisma' x10 FORA do sandbox,
-// remover este bloco e voltar para o import original './generated/client' para ter tipagem real dos models.
-import { PrismaClient as _PrismaClientGlobal } from '@prisma/client';
-type T = any;
-const PrismaClient: T = _PrismaClientGlobal;
-// =====================================================================
+import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService
