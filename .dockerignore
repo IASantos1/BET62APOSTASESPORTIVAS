@@ -1,0 +1,44 @@
+# =============================================================
+# BET62 - Railway / Docker build exclusions (.dockerignore)
+# =============================================================
+# Nixpacks copia a pasta toda para /app/.  Ignoramos tudo o que
+# for gerado localmente para evitar conflitos EBUSY,
+# acelerar upload e nao corromper node_modules Linux vs Windows.
+# =============================================================
+
+# --- Node / npm local ---
+node_modules
+package-lock.json.bak
+.npm
+.cache
+
+# --- Build outputs auto-gerados ---
+dist
+.next
+out
+build
+
+# --- Prisma auto-generated clients (regenerados no build) ---
+services/*/src/prisma/generated
+apps/*/src/prisma/generated
+packages/*/src/prisma/generated
+
+# --- IDE / OS cruft ---
+.git
+.github
+.vscode
+.idea
+*.log
+.DS_Store
+Thumbs.db
+.trae
+.tmp
+coverage
+
+# --- Envs NUNCA enviar ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+.secret
