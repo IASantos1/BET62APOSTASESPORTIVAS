@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
+import { requireEnv } from '@bet62/shared';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -9,7 +10,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get('JWT_SECRET', 'bet62-dev-secret-change-me'),
+      secretOrKey: requireEnv(configService.get<string>('JWT_SECRET'), 'JWT_SECRET'),
     });
   }
 

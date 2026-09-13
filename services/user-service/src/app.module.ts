@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { requireEnv } from '@bet62/shared';
 import { TerminusModule } from '@nestjs/terminus';
 import { BullModule } from '@nestjs/bullmq';
 import { JwtModule } from '@nestjs/jwt';
@@ -36,7 +37,7 @@ import { UserEventsListener } from './events/user-event.listener';
     JwtModule.registerAsync({
       global: true,
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_ACCESS_SECRET') || 'bet62-dev-secret-change-me',
+        secret: requireEnv(config.get<string>('JWT_ACCESS_SECRET'), 'JWT_ACCESS_SECRET'),
         signOptions: { expiresIn: '15m' },
       }),
       inject: [ConfigService],

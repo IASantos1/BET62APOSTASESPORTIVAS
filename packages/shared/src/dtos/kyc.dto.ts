@@ -26,7 +26,7 @@ export class InitKYCDto {
   applicantData?: Record<string, unknown>;
 }
 
-export class GenerateKycSdkTokenDto {
+export class CreateKycSessionDto {
   @IsEnum({ L0: 0, L1: 1, L2: 2, L3: 3 })
   targetLevel!: KYCLevel;
 
@@ -36,11 +36,7 @@ export class GenerateKycSdkTokenDto {
 
   @IsOptional()
   @IsUrl()
-  successRedirectUrl?: string;
-
-  @IsOptional()
-  @IsUrl()
-  failureRedirectUrl?: string;
+  callbackUrl?: string;
 }
 
 export class KYCSumbitDocumentDto {
@@ -75,11 +71,7 @@ export class KYCSumbitDocumentDto {
 
 export class KYCWebhookHeadersDto {
   @IsString()
-  "x-sumsub-signature"!: string;
-
-  @IsOptional()
-  @IsString()
-  "x-request-id"?: string;
+  "x-signature-v2"!: string;
 }
 
 export class KYCAdminUpdateLevelDto {

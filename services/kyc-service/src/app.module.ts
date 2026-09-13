@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { requireEnv } from '@bet62/shared';
 import { TerminusModule } from '@nestjs/terminus';
 import { BullModule } from '@nestjs/bullmq';
 import { JwtModule } from '@nestjs/jwt';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthController } from './health.controller';
 import { KYCModule } from './kyc/kyc.module';
@@ -40,7 +42,7 @@ import { KYCModule } from './kyc/kyc.module';
       global: true,
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get('JWT_ACCESS_SECRET', 'bet62-dev-secret-change-me'),
+        secret: requireEnv(configService.get<string>('JWT_ACCESS_SECRET'), 'JWT_ACCESS_SECRET'),
         signOptions: {
           expiresIn: configService.get('JWT_ACCESS_EXPIRES', '15m'),
         },
@@ -52,6 +54,7 @@ import { KYCModule } from './kyc/kyc.module';
       delimiter: '.',
       verboseMemoryLeak: true,
     }),
+    ScheduleModule.forRoot(),
     TerminusModule,
     PrismaModule,
     KYCModule,

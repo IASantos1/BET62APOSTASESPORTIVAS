@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { requireEnv } from '@bet62/shared';
 import { BullModule } from '@nestjs/bullmq';
 import { TerminusModule } from '@nestjs/terminus';
 import { JwtModule } from '@nestjs/jwt';
@@ -56,7 +57,7 @@ import {
       global: true,
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get('JWT_SECRET', 'bet62-dev-secret-change-me'),
+        secret: requireEnv(configService.get<string>('JWT_SECRET'), 'JWT_SECRET'),
         signOptions: { expiresIn: '15m' },
       }),
       inject: [ConfigService],

@@ -73,6 +73,14 @@ export interface UserLoggedInPayload {
   twoFactorUsed: boolean;
 }
 
+export interface KycAmlHitDetectedPayload {
+  userId: string;
+  requestId?: string;
+  totalHits: number;
+  score?: number;
+  timestamp: string;
+}
+
 export interface KycLevelUpdatedPayload {
   userId: string;
   oldLevel: KYCLevel;

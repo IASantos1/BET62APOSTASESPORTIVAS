@@ -1,8 +1,7 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
-import { SumsubClient, SumsubWebhookPayload } from './sumsub/sumsub.client';
+import { DiditClient, DiditDecision, DiditWebhookPayload } from './didit/didit.client';
 import {
   KYCLevel,
   KYCStatus,
@@ -14,12 +13,11 @@ import {
   KycLevelUpdatedPayload,
 } from '@bet62/shared';
 
-interface SDKTokenResult {
-  token: string;
-  applicantId: string;
-  levelName: string;
-  ttlInSecs: number;
-  apiUrl: string;
+interface VerificationSessionResult {
+  sessionId: string;
+  url: string;
+  sessionToken: string;
+  level: KYCLevel;
 }
 
 @Injectable()
@@ -28,8 +26,7 @@ export class KYCService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly sumsubClient: SumsubClient,
-    private readonly configService: ConfigService,
+    private readonly diditClient: DiditClient,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -59,19 +56,10 @@ export class KYCService {
     };
   }
 
-  async initLevel1(userId: string, callbackUrl?: string, applicantData?: Record<string, unknown>) {
-    return this.initLevel(userId, KYCLevel.L1, callbackUrl, applicantData);
-  }
-
-  async initLevel2(userId: string, callbackUrl?: string, applicantData?: Record<string, unknown>) {
-    return this.initLevel(userId, KYCLevel.L2, callbackUrl, applicantData);
-  }
-
   private async initLevel(
     userId: string,
     targetLevel: KYCLevel,
     callbackUrl?: string,
-    applicantData?: Record<string, unknown>,
   ) {
     let userKyc = await this.prisma.userKYC.findUnique({ where: { userId } });
     if (!userKyc) {
@@ -86,53 +74,61 @@ export class KYCService {
     if (userKyc.level >= targetLevel && userKyc.status === KYCStatus.VERIFIED) {
       throw new BadRequestException(`User already verified at level ${userKyc.level}`);
     }
-    const applicant = await this.sumsubClient.createApplicant(userId, targetLevel, applicantData);
+    const session = await this.diditClient.createSession(userId, targetLevel, callbackUrl);
     userKyc = await this.prisma.userKYC.update({
       where: { userId },
       data: {
         level: targetLevel,
         status: KYCStatus.INITIATED,
-        externalApplicantId: applicant.id,
+        externalApplicantId: session.sessionId,
         lastSubmittedAt: new Date(),
         firstSubmittedAt: userKyc.firstSubmittedAt ?? new Date(),
       },
     });
-    this.logger.log(`KYC level ${targetLevel} initiated for user=${userId} applicant=${applicant.id}`);
-    return { userKyc, applicant, callbackUrl };
+    this.logger.log(`KYC level ${targetLevel} initiated for user=${userId} session=${session.sessionId}`);
+    return { userKyc, session };
   }
 
-  async generateSDKToken(userId: string, targetLevel: KYCLevel): Promise<SDKTokenResult> {
-    let userKyc = await this.prisma.userKYC.findUnique({ where: { userId } });
-    if (!userKyc?.externalApplicantId) {
-      const initResult = await this.initLevel(userId, targetLevel);
-      userKyc = initResult.userKyc;
-    }
-    const applicantId = userKyc!.externalApplicantId!;
-    const access = await this.sumsubClient.getAccessToken(userId, applicantId, targetLevel);
+  async createVerificationSession(
+    userId: string,
+    targetLevel: KYCLevel,
+    callbackUrl?: string,
+  ): Promise<VerificationSessionResult> {
+    const { session } = await this.initLevel(userId, targetLevel, callbackUrl);
     return {
-      token: access.token,
-      applicantId,
-      levelName: access.levelName,
-      ttlInSecs: access.ttlInSecs,
-      apiUrl: this.configService.get('SUMSUB_BASE_URL', 'https://api.sumsub.com'),
+      sessionId: session.sessionId,
+      url: session.url,
+      sessionToken: session.sessionToken,
+      level: targetLevel,
     };
   }
 
   validateWebhookHMAC(payload: Buffer, signature: string): boolean {
-    return this.sumsubClient.validateWebhookHMAC(payload, signature);
+    return this.diditClient.validateWebhookHMAC(payload, signature);
   }
 
   async updateStatusViaWebhook(
     provider: string,
     eventType: string,
     headers: Record<string, string>,
-    payload: SumsubWebhookPayload,
-    rawBody: Buffer,
+    payload: DiditWebhookPayload,
     signatureValid: boolean,
   ) {
-    const externalApplicantId = payload.applicantId;
-    const correlationId = payload.correlationId ?? headers['x-request-id'];
-    const userId = payload.externalUserId ?? (
+    const externalApplicantId = payload.session_id;
+    const eventId = payload.event_id ?? payload.id;
+
+    if (eventId) {
+      const existing = await this.prisma.kYCWebhookLog.findFirst({
+        where: { provider, correlationId: eventId },
+        select: { id: true },
+      });
+      if (existing) {
+        this.logger.debug(`Duplicate Didit webhook event_id=${eventId}, skipping reprocessing`);
+        return { processed: true, deduped: true };
+      }
+    }
+
+    const userId = payload.vendor_data ?? (
       await this.prisma.userKYC.findFirst({
         where: { externalApplicantId },
         select: { userId: true },
@@ -144,7 +140,7 @@ export class KYCService {
         provider,
         eventType,
         externalApplicantId,
-        correlationId,
+        correlationId: eventId,
         headersJson: headers as unknown as object,
         payloadJson: payload as unknown as object,
         signatureValid,
@@ -157,39 +153,45 @@ export class KYCService {
       return { processed: false, reason: 'invalid_signature' };
     }
     if (!userId) {
-      await this.markProcessed(log.id, false, `User not found for applicant ${externalApplicantId}`);
+      await this.markProcessed(log.id, false, `User not found for session ${externalApplicantId}`);
       return { processed: false, reason: 'user_not_found' };
     }
 
     try {
-      const reviewAnswer = payload.reviewResult?.reviewAnswer;
-      let newStatus: KYCStatus | null = null;
-      let rejectionReason: KYCRejectionReason | null = null;
+      const newStatus = this.mapDiditStatus(payload.status);
+      let decision: DiditDecision | undefined;
 
-      if (reviewAnswer === 'GREEN') {
-        newStatus = KYCStatus.VERIFIED;
-      } else if (reviewAnswer === 'RED') {
-        newStatus = KYCStatus.REJECTED;
-        const firstLabel = payload.reviewResult?.rejectLabels?.[0];
-        rejectionReason = this.mapRejectionReason(firstLabel);
-      } else if (eventType.includes('pending') || eventType.includes('review')) {
-        newStatus = KYCStatus.PENDING;
+      if (newStatus === KYCStatus.VERIFIED || newStatus === KYCStatus.REJECTED) {
+        decision = await this.diditClient.getDecision(externalApplicantId).catch((err) => {
+          this.logger.warn(
+            `Failed to fetch Didit decision for session=${externalApplicantId}: ${err instanceof Error ? err.message : err}`,
+          );
+          return undefined;
+        });
       }
 
       if (newStatus) {
         const before = await this.prisma.userKYC.findUnique({ where: { userId } });
         const oldLevel = before?.level ?? KYCLevel.L0;
+        const rejectionReason =
+          newStatus === KYCStatus.REJECTED ? this.mapRejectionReason(decision) : null;
         const updated = await this.prisma.userKYC.update({
           where: { userId },
           data: {
             status: newStatus,
-            reviewedAt: newStatus === KYCStatus.VERIFIED || newStatus === KYCStatus.REJECTED ? new Date() : undefined,
+            reviewedAt:
+              newStatus === KYCStatus.VERIFIED || newStatus === KYCStatus.REJECTED
+                ? new Date()
+                : undefined,
             rejectionReason: rejectionReason ?? undefined,
-            rejectionDetails: payload.reviewResult?.moderationComment,
-            externalInspectionId: payload.inspectionId,
+            providerRawResponse: decision ? (decision as unknown as object) : undefined,
           },
         });
         await this.emitLevelUpdated(userId, oldLevel, updated.level, updated.status, externalApplicantId);
+      } else {
+        this.logger.warn(
+          `Unmapped Didit status "${payload.status}" for session=${externalApplicantId}; no state change applied`,
+        );
       }
 
       await this.markProcessed(log.id, true);
@@ -199,6 +201,21 @@ export class KYCService {
       await this.markProcessed(log.id, false, message);
       throw err;
     }
+  }
+
+  // TODO: confirm the exact Didit status strings via the console's webhook test tool
+  // (Settings > API & Webhooks > "test webhooks") before relying on this in production.
+  private mapDiditStatus(status?: string): KYCStatus | null {
+    if (!status) return null;
+    const normalized = status.toLowerCase();
+    if (['approved', 'verified', 'success'].includes(normalized)) return KYCStatus.VERIFIED;
+    if (['declined', 'rejected', 'failed'].includes(normalized)) return KYCStatus.REJECTED;
+    if (['pending', 'in_review', 'in_progress', 'processing'].includes(normalized)) {
+      return KYCStatus.PENDING;
+    }
+    if (normalized === 'expired') return KYCStatus.EXPIRED;
+    if (normalized === 'not_started') return KYCStatus.NOT_STARTED;
+    return null;
   }
 
   async createUserKycIfNotExists(userId: string) {
@@ -249,7 +266,14 @@ export class KYCService {
     this.logger.log(`Emitted KYC_LEVEL_UPDATED userId=${userId} level=${newLevel} status=${status}`);
   }
 
-  private mapRejectionReason(label?: string): KYCRejectionReason {
+  // TODO: confirm the exact rejection/warning codes in the decision payload
+  // (id_verifications[].warnings[].code) via a real Didit test session before relying
+  // on this mapping in production; unrecognized codes fall back to OTHER.
+  private mapRejectionReason(decision?: DiditDecision): KYCRejectionReason {
+    const idVerification = decision?.id_verifications?.[0] as
+      | { status?: string; warnings?: Array<{ code?: string }> }
+      | undefined;
+    const code = idVerification?.warnings?.[0]?.code ?? idVerification?.status;
     const map: Record<string, KYCRejectionReason> = {
       DOCUMENT_UNREADABLE: KYCRejectionReason.POOR_IMAGE_QUALITY,
       DOCUMENT_EXPIRED: KYCRejectionReason.EXPIRED_DOCUMENT,
@@ -260,7 +284,7 @@ export class KYCService {
       AGE_RESTRICTION: KYCRejectionReason.AGE_RESTRICTION,
       JURISDICTION: KYCRejectionReason.JURISDICTION_RESTRICTION,
     };
-    return label ? map[label] ?? KYCRejectionReason.OTHER : KYCRejectionReason.OTHER;
+    return code ? map[code] ?? KYCRejectionReason.OTHER : KYCRejectionReason.OTHER;
   }
 
   private async markProcessed(logId: string, success: boolean, error?: string) {
