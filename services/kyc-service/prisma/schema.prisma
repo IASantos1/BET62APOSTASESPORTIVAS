@@ -1,0 +1,156 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["kyc"]
+}
+
+enum KYCStatus {
+  NOT_STARTED
+  INITIATED
+  PENDING
+  VERIFIED
+  REJECTED
+  EXPIRED
+  RETRY
+  @@schema("kyc")
+}
+
+enum KYCRejectionReason {
+  INVALID_DOCUMENT
+  EXPIRED_DOCUMENT
+  POOR_IMAGE_QUALITY
+  SELFIE_MISMATCH
+  MISMATCH_NAME
+  MISMATCH_ADDRESS
+  AGE_RESTRICTION
+  JURISDICTION_RESTRICTION
+  OTHER
+  @@schema("kyc")
+}
+
+enum KYCDocumentType {
+  ID_CARD_FRONT
+  ID_CARD_BACK
+  PASSPORT
+  DRIVER_LICENSE_FRONT
+  DRIVER_LICENSE_BACK
+  SELFIE
+  PROOF_OF_ADDRESS
+  BANK_STATEMENT
+  UTILITY_BILL
+  @@schema("kyc")
+}
+
+enum KYCDocumentStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+  @@schema("kyc")
+}
+
+model UserKYC {
+  userId                 String             @id
+  level                  Int                @default(0)
+  status                 KYCStatus          @default(NOT_STARTED)
+  externalApplicantId    String?
+  externalInspectionId   String?
+  firstSubmittedAt       DateTime?
+  lastSubmittedAt        DateTime?
+  reviewedAt             DateTime?
+  reviewerNote           String?
+  rejectionReason        KYCRejectionReason?
+  rejectionDetails       String?
+  providerRawResponse    Json?
+  isActive               Boolean            @default(true)
+  expiresAt              DateTime?
+  riskScore              Float?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  deletedAt              DateTime?
+
+  documents              KYCDocument[]
+  webhookLogs            KYCWebhookLog[]
+
+  @@schema("kyc")
+  @@map("user_kyc")
+}
+
+model KYCWebhookLog {
+  id                     String             @id @default(uuid())
+  provider               String
+  eventType              String
+  externalApplicantId    String?
+  correlationId          String?
+  headersJson            Json?
+  payloadJson            Json
+  signatureValid         Boolean            @default(false)
+  processed              Boolean            @default(false)
+  processedAt            DateTime?
+  processingError        String?
+  userId                 String?
+
+  userKYC                UserKYC?           @relation(fields: [userId], references: [userId])
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  @@index([userId])
+  @@index([externalApplicantId])
+  @@schema("kyc")
+  @@map("kyc_webhook_log")
+}
+
+model KYCDocument {
+  id                     String             @id @default(uuid())
+  userId                 String
+  kycLevel               Int
+  documentType           KYCDocumentType
+  fileName               String?
+  fileHash               String?
+  fileSizeKb             Int?
+  documentStatus         KYCDocumentStatus  @default(PENDING)
+  submittedAt            DateTime?
+  verifiedAt             DateTime?
+  rejectedReason         String?
+  countryOfIssue         String?
+  numberMasked           String?
+  expiresAt              DateTime?
+
+  userKYC                UserKYC            @relation(fields: [userId], references: [userId])
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  deletedAt DateTime? @db.Timestamptz
+
+  @@index([userId])
+  @@schema("kyc")
+  @@map("kyc_document")
+}
+
+model KYCLevelPolicy {
+  level                  Int                @id
+  label                  String
+  description            String
+  depositDaily           Float
+  depositWeekly          Float
+  depositMonthly         Float
+  withdrawalDaily        Float
+  withdrawalMonthly      Float
+  stakePerBetMax         Float
+  cumulativeBalanceMax   Float
+  withdrawalAllowed      Boolean
+  liveBetAllowed         Boolean
+  casinoAllowed          Boolean
+  requiredChecks         String[]           @default([])
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  @@schema("kyc")
+  @@map("kyc_level_policy")
+}

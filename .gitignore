@@ -1,0 +1,56 @@
+# ============ BET62 Platform ============
+node_modules/
+dist/
+.next/
+.cache/
+coverage/
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+.turbo/
+
+# ============ Data ============
+data/
+postgres/
+redis/
+uploads/
+
+# ============ Build ============
+build/
+out/
+*.tsbuildinfo
+packages/shared/dist/
+packages/*/dist/
+services/*/dist/
+apps/*/dist/
+services/*/prisma/generated/
+prisma/generated/
+checkpoint-nodejs/
+
+# ============ Docker ============
+docker-compose.override.yml
+
+# ============ Secrets / Keys ============
+*.pem
+*.key
+*.crt
+certs/
+
+# ============ Test ============
+junit.xml
+cypress/screenshots/
+cypress/videos/
+
+# ============ Staging / Prod ============
+.staging
+.production
+.deploy

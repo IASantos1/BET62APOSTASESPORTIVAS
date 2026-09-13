@@ -1,0 +1,300 @@
+'use client';
+
+import * as React from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Trophy,
+  Radio,
+  CalendarDays,
+  Dices,
+  User,
+  Menu,
+  X,
+  Wallet,
+  ArrowRightLeft,
+  History,
+  LogOut,
+  ChevronDown,
+  Sparkles,
+  LogIn,
+} from 'lucide-react';
+import { Button } from '../ui/Button';
+import { Badge } from '../ui/Badge';
+import { Avatar, AvatarFallback } from '../ui/Avatar';
+import { cn } from '../../lib/utils';
+import { useAuthStore } from '../../stores/auth.store';
+import { formatCurrencyEUR } from '../../lib/utils';
+
+const NAV = [
+  { href: '/', label: 'Destaques', icon: Trophy },
+  { href: '/live', label: 'Ao Vivo', icon: Radio, badge: '24' },
+  { href: '/events', label: 'Próximos', icon: CalendarDays },
+  { href: '/casino', label: 'Cassino', icon: Dices },
+];
+
+export function Bet62Logo({ className }: { className?: string }) {
+  return (
+    <Link href="/" className={cn('flex items-center gap-2 group', className)}>
+      <svg viewBox="0 0 128 48" width="140" height="52" className="h-9 w-auto">
+        <text x="14" y="34" fontFamily="'Space Grotesk',sans-serif"
+              fontSize="32" fontWeight="900" letterSpacing="-1.2">
+          <tspan fill="#e11d48">BET</tspan>
+          <tspan fill="#ffffff">62</tspan>
+        </text>
+      </svg>
+    </Link>
+  );
+}
+
+export function Header() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [mobileOpen, setMobileOpen] = React.useState(false);
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const { user, isAuthenticated, logout, isLoading } = useAuthStore();
+  const balance = 0;
+
+  return (
+    <>
+      <header className="sticky top-0 z-40 border-b border-bet62-border bg-bet62-bg/80 backdrop-blur-xl">
+        <div className="mx-auto max-w-[1600px] px-4 lg:px-8 h-16 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-6">
+            <button
+              className="lg:hidden p-2 rounded-lg text-white/70 hover:text-bet62-primary hover:bg-white/5 transition"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Menu"
+            >
+              <Menu size={20} />
+            </button>
+            <Bet62Logo />
+            <nav className="hidden lg:flex items-center gap-1">
+              {NAV.map((item) => {
+                const active = pathname === item.href;
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={cn(
+                      'relative group inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all',
+                      active
+                        ? 'text-bet62-bg bg-bet62-primary'
+                        : 'text-white/70 hover:text-white hover:bg-white/5',
+                    )}
+                  >
+                    <Icon size={16} />
+                    {item.label}
+                    {item.badge ? (
+                      <Badge variant="pink" className="py-0 px-1.5 text-[10px] ml-0">
+                        {item.badge}
+                      </Badge>
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+
+          <div className="flex items-center gap-2 lg:gap-3">
+            {!isAuthenticated || !user ? (
+              <>
+                <Button variant="primary" size="sm" className="px-5 font-bold uppercase tracking-wider" asChild>
+                  <Link href="/login">LOGIN</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="hidden md:flex items-center gap-2 pl-2 border-l border-bet62-border">
+                  <Button variant="primary" size="sm" className="gap-1.5">
+                    <Wallet size={16} />
+                    <span className="font-mono font-bold">{formatCurrencyEUR(balance)}</span>
+                  </Button>
+                  <div className="relative">
+                    <button
+                      onClick={() => setMenuOpen((v) => !v)}
+                      className="flex items-center gap-2 p-1.5 pr-3 rounded-full border border-bet62-border hover:border-bet62-primary/50 transition bg-bet62-surface/60"
+                    >
+                      <Avatar className="h-8 w-8 ring-1 ring-bet62-primary/40">
+                        <AvatarFallback>{(user.firstName?.[0] ?? user.email[0] ?? 'U').toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <ChevronDown size={14} className="text-white/60" />
+                    </button>
+                    <AnimatePresence>
+                      {menuOpen ? (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                          transition={{ duration: 0.18 }}
+                          onMouseLeave={() => setMenuOpen(false)}
+                          className="absolute right-0 top-full mt-2 w-60 rounded-2xl border border-bet62-border bg-bet62-surface/95 backdrop-blur-xl shadow-glass p-2 z-50"
+                        >
+                          <div className="px-3 py-2 border-b border-bet62-border/60 mb-1">
+                            <p className="font-semibold truncate">{user.firstName ? `${user.firstName} ${user.lastName ?? ''}` : user.email}</p>
+                            <p className="text-xs text-white/50 truncate">{user.email}</p>
+                          </div>
+                          {[
+                            { label: 'Perfil', icon: User, href: '/conta' },
+                            { label: 'Depósito', icon: ArrowRightLeft, href: '/carteira/deposito' },
+                            { label: 'Levantamento', icon: Wallet, href: '/carteira/levantamento' },
+                            { label: 'Minhas Apostas', icon: History, href: '/apostas' },
+                          ].map((m) => (
+                            <button
+                              key={m.label}
+                              onClick={() => {
+                                setMenuOpen(false);
+                                router.push(m.href);
+                              }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 hover:text-bet62-primary text-white/85 text-sm transition"
+                            >
+                              <m.icon size={16} />
+                              {m.label}
+                            </button>
+                          ))}
+                          <button
+                            disabled={isLoading}
+                            onClick={async () => {
+                              setMenuOpen(false);
+                              await logout();
+                              router.push('/');
+                            }}
+                            className="mt-1 w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-bet62-danger hover:bg-bet62-danger/10 text-sm transition"
+                          >
+                            <LogOut size={16} />
+                            Sair
+                          </button>
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+                  </div>
+                </div>
+                <div className="md:hidden flex items-center gap-2">
+                  <div className="hidden">
+                    <span className="font-mono text-sm text-bet62-primary font-bold">
+                      {formatCurrencyEUR(balance)}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <button
+                      onClick={() => setMenuOpen((v) => !v)}
+                      className="flex items-center gap-1.5 p-1 pr-2 rounded-full border border-bet62-border hover:border-bet62-primary/50 transition bg-bet62-surface/60"
+                    >
+                      <Avatar className="h-9 w-9 ring-1 ring-bet62-primary/40">
+                        <AvatarFallback>{(user.firstName?.[0] ?? user.email[0] ?? 'U').toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                    </button>
+                    <AnimatePresence>
+                      {menuOpen ? (
+                        <motion.div
+                          initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                          transition={{ duration: 0.18 }}
+                          className="absolute right-0 top-full mt-2 w-60 rounded-2xl border border-bet62-border bg-bet62-surface/95 backdrop-blur-xl shadow-glass p-2 z-50"
+                        >
+                          <div className="px-3 py-2 border-b border-bet62-border/60 mb-1">
+                            <p className="font-semibold truncate">{user.firstName ? `${user.firstName} ${user.lastName ?? ''}` : user.email}</p>
+                            <p className="text-xs text-white/50 truncate">{user.email}</p>
+                          </div>
+                          {[
+                            { label: 'Perfil', icon: User, href: '/conta' },
+                            { label: 'Depósito', icon: ArrowRightLeft, href: '/carteira/deposito' },
+                            { label: 'Levantamento', icon: Wallet, href: '/carteira/levantamento' },
+                            { label: 'Minhas Apostas', icon: History, href: '/apostas' },
+                          ].map((m) => (
+                            <button
+                              key={m.label}
+                              onClick={() => {
+                                setMenuOpen(false);
+                                router.push(m.href);
+                              }}
+                              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 hover:text-bet62-primary text-white/85 text-sm transition"
+                            >
+                              <m.icon size={16} />
+                              {m.label}
+                            </button>
+                          ))}
+                          <button
+                            disabled={isLoading}
+                            onClick={async () => {
+                              setMenuOpen(false);
+                              await logout();
+                              router.push('/');
+                            }}
+                            className="mt-1 w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-bet62-danger hover:bg-bet62-danger/10 text-sm transition"
+                          >
+                            <LogOut size={16} />
+                            Sair
+                          </button>
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <AnimatePresence>
+        {mobileOpen ? (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileOpen(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 lg:hidden"
+            />
+            <motion.aside
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 320 }}
+              className="fixed top-0 left-0 h-full w-[82vw] max-w-sm z-[60] bg-bet62-bg border-r border-bet62-border shadow-glass flex flex-col lg:hidden"
+            >
+              <div className="h-16 flex items-center justify-between px-4 border-b border-bet62-border">
+                <Bet62Logo />
+                <button
+                  onClick={() => setMobileOpen(false)}
+                  className="p-2 rounded-lg hover:bg-white/5 text-white/70"
+                  aria-label="Fechar menu"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <nav className="flex-1 p-3 flex flex-col gap-1">
+                {NAV.map((n) => (
+                  <Link
+                    key={n.href}
+                    href={n.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={cn(
+                      'flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium',
+                      pathname === n.href
+                        ? 'bg-bet62-primary/10 text-bet62-primary border border-bet62-primary/20'
+                        : 'text-white/80 hover:bg-white/5',
+                    )}
+                  >
+                    <n.icon size={18} /> {n.label}
+                    {n.badge ? <Badge variant="pink" className="ml-auto py-0 text-[10px]">{n.badge}</Badge> : null}
+                  </Link>
+                ))}
+              </nav>
+              <div className="p-4 border-t border-bet62-border space-y-2">
+                <Button variant="primary" size="lg" className="w-full uppercase font-bold tracking-wider" asChild>
+                  <Link href="/login" onClick={() => setMobileOpen(false)}>
+                    LOGIN
+                  </Link>
+                </Button>
+              </div>
+            </motion.aside>
+          </>
+        ) : null}
+      </AnimatePresence>
+    </>
+  );
+}

@@ -1,0 +1,62 @@
+{
+  "name": "BET62 Apostas",
+  "short_name": "BET62",
+  "description": "Plataforma Futurista de Apostas Esportivas",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0e17",
+  "theme_color": "#0a0e17",
+  "orientation": "portrait-primary",
+  "lang": "pt-BR",
+  "categories": ["entertainment", "sports", "gambling"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/desktop.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    },
+    {
+      "src": "/screenshots/mobile.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Apostar agora",
+      "short_name": "Apostar",
+      "description": "Ir para página de apostas",
+      "url": "/bets",
+      "icons": [{ "src": "/icons/shortcut-bet.png", "sizes": "96x96" }]
+    },
+    {
+      "name": "Cassino",
+      "short_name": "Cassino",
+      "description": "Ir para cassino",
+      "url": "/casino",
+      "icons": [{ "src": "/icons/shortcut-casino.png", "sizes": "96x96" }]
+    }
+  ]
+}

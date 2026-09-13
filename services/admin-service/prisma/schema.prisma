@@ -1,0 +1,183 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["admins"]
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  FINANCE
+  FINANCE_MANAGER
+  RISK
+  RISK_MANAGER
+  OPERATOR
+  SUPPORT
+  SUPPORT_MANAGER
+  MARKETING
+  COMPLIANCE
+  KYC_OFFICER
+  AUDITOR
+  ODD_TRADER
+  VIEW_ONLY
+  @@schema("admins")
+}
+
+enum TwoFactorType {
+  NONE
+  TOTP
+  SMS
+  EMAIL
+  @@schema("admins")
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  DELETED
+  APPROVED
+  REJECTED
+  SUSPENDED
+  BANNED
+  UNBANNED
+  LOCKED
+  UNLOCKED
+  RESET
+  EXPORTED
+  VIEWED
+  SIGNED_IN
+  SIGNED_OUT
+  IMPERSONATED
+  FORCE_PASSWORD
+  LIQUIDATED
+  OVERRIDDEN
+  MANUAL_ADJUSTMENT
+  MANUAL_BONUS_GRANT
+  @@schema("admins")
+}
+
+enum AuditEntityType {
+  ADMIN_USER
+  USER
+  BET
+  EVENT
+  MARKET
+  SELECTION
+  WITHDRAWAL
+  DEPOSIT
+  KYC_SUBMISSION
+  BONUS
+  CAMPAIGN
+  USER_LIMITS
+  WALLET_ADJUSTMENT
+  CASINO_GAME
+  ROLE_PERMISSION
+  CONFIG_SETTING
+  SELF_EXCLUSION
+  @@schema("admins")
+}
+
+enum AuditLogSeverity {
+  INFO
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+  @@schema("admins")
+}
+
+model AdminUser {
+  id                      String              @id @default(uuid())
+  email                   String              @unique
+  passwordHash            String
+  name                    String
+  role                    AdminRole
+  twoFactorType           TwoFactorType       @default(NONE)
+  twoFactorSecret         String?
+  twoFactorRecoveryCodes  String[]
+  lastLoginAt             DateTime?
+  lastLoginIp             String?
+  mustChangePassword      Boolean             @default(true)
+  disabled                Boolean             @default(false)
+  disabledReason          String?
+  disabledBy              String?
+  disabledAt              DateTime?
+  passwordChangedAt       DateTime?
+  createdBy               String?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+  deletedAt               DateTime?
+
+  sessions                AdminSession[]
+  auditLogs               AdminAuditLog[]
+
+  @@index([role, disabled])
+  @@index([email])
+  @@schema("admins")
+}
+
+model AdminSession {
+  id                  String        @id @default(uuid())
+  adminUserId         String
+  tokenHash           String        @unique
+  ipAddress           String?
+  userAgent           String?
+  location            Json?
+  deviceFingerprint   String?
+  createdAt           DateTime      @default(now())
+  expiresAt           DateTime
+  revokedAt           DateTime?
+  revokedReason       String?
+  lastActivityAt      DateTime      @default(now())
+
+  adminUser           AdminUser     @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId, createdAt])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@schema("admins")
+}
+
+model AdminAuditLog {
+  id                  String              @id @default(uuid())
+  adminUserId         String?
+  userAffectedId      String?
+  action              AuditAction
+  entityType          AuditEntityType
+  entityId            String?
+  severity            AuditLogSeverity   @default(INFO)
+  details             Json?
+  ipAddress           String?
+  userAgent           String?
+  requestId           String              @unique
+  correlationId       String?
+  metadata            Json?
+  createdAt           DateTime            @default(now())
+
+  adminUser           AdminUser?          @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([adminUserId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action, severity, createdAt])
+  @@index([userAffectedId])
+  @@schema("admins")
+}
+
+model RolePermission {
+  id            String      @id @default(uuid())
+  role          AdminRole
+  permissionKey String
+  allowed       Boolean     @default(true)
+  scope         String?
+  conditions    Json?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([role, permissionKey])
+  @@index([role])
+  @@schema("admins")
+}

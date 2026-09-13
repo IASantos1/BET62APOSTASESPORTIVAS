@@ -1,0 +1,18 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "composite": true,
+    "declaration": true,
+    "paths": {
+      "@/*": ["src/*"],
+      "@bet62/shared": ["../../packages/shared/src/index.ts"]
+    }
+  },
+  "include": ["src/**/*", "prisma/**/*", "../../packages/shared/src/**/*"],
+  "exclude": ["node_modules", "dist"],
+  "references": [
+    { "path": "../../packages/shared" }
+  ]
+}

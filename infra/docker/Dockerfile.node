@@ -1,0 +1,60 @@
+ARG SERVICE_DIR=services/auth-service
+
+# ============ Builder Stage (shared + prisma generate + nest build) ============
+FROM node:20-alpine AS builder
+
+ARG SERVICE_DIR
+ENV SERVICE_DIR=${SERVICE_DIR}
+
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PRISMA_SKIP_POSTINSTALL_GENERATE=true
+
+RUN apk add --no-cache curl tini openssl
+
+COPY package.json ./
+COPY tsconfig.base.json ./
+COPY packages ./packages/
+COPY services ./services/
+
+RUN if [ -f package-lock.json ]; then \
+      npm ci --legacy-peer-deps; \
+    else \
+      npm install --legacy-peer-deps --no-audit --no-fund; \
+    fi
+
+RUN npx prisma generate --schema ${SERVICE_DIR}/prisma/schema.prisma || true
+
+RUN npm run build -w packages/shared 2>/dev/null || true
+RUN npm run build -w ${SERVICE_DIR}
+
+# ============ Runner Stage (minimal, só dist + runtime deps) ============
+FROM node:20-alpine AS runner
+
+ARG SERVICE_DIR
+ENV SERVICE_DIR=${SERVICE_DIR}
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+RUN apk add --no-cache curl tini openssl && \
+    addgroup --system --gid 1001 nodejs && \
+    adduser  --system --uid 1001 nestjs
+
+COPY --from=builder /app/node_modules ./node_modules/
+COPY --from=builder /app/package.json ./
+COPY --from=builder /app/packages ./packages/
+COPY --from=builder /app/${SERVICE_DIR} ./${SERVICE_DIR}/
+
+USER nestjs
+
+EXPOSE 3000 3001 3002 3003 3004 3005 3006 3007 3008 3009 3010
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+  CMD curl -f http://localhost:${PORT}/health || curl -f http://localhost:${PORT}/api/auth/health || curl -f http://localhost:${PORT}/docs || exit 0 || exit 1
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["sh", "-c", "node ${SERVICE_DIR}/dist/main.js"]

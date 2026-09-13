@@ -1,0 +1,311 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/prisma/generated/client"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["wallet"]
+}
+
+enum LedgerEntryType {
+  DEBIT
+  CREDIT
+  @@schema("wallet")
+}
+
+enum LedgerAccountType {
+  USER_REAL_BALANCE
+  USER_BONUS_BALANCE
+  HOUSE_BALANCE
+  HOUSE_RESERVE
+  PENDING_DEPOSITS
+  PENDING_WITHDRAWALS
+  PENDING_BETS
+  BONUS_EXPENSE
+  CASINO_WINS_EXPENSE
+  FEES_INCOME
+  CASHOUT_PAYMENTS
+  @@schema("wallet")
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  BET_PLACED
+  BET_SETTLED_WON
+  BET_SETTLED_LOST
+  BET_SETTLED_HALF_WON
+  BET_SETTLED_HALF_LOST
+  BET_SETTLED_VOID
+  BET_CASHOUT
+  BONUS_GRANTED
+  BONUS_RELEASED
+  BONUS_EXPIRED
+  FREEBET_GRANTED
+  CASHOUT_FEE
+  WITHDRAWAL_FEE
+  CASINO_BET
+  CASINO_WIN
+  MANUAL_ADJUSTMENT
+  AFFILIATE_PAYMENT
+  @@schema("wallet")
+}
+
+enum PaymentProvider {
+  STRIPE
+  SKRILL
+  NETELLER
+  BANK_TRANSFER
+  PAYPAL
+  PAYSAFE_CARD
+  APPLE_PAY
+  GOOGLE_PAY
+  MB_WAY
+  MULTIBANCO
+  @@schema("wallet")
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+  REQUIRES_ACTION
+  UNDER_REVIEW
+  @@schema("wallet")
+}
+
+enum PendingOperationType {
+  DEBIT
+  CREDIT
+  LOCK
+  UNLOCK
+  @@schema("wallet")
+}
+
+enum ReservationType {
+  BET_PLACEMENT
+  CASHOUT
+  WITHDRAWAL_HOLD
+  BONUS_HOLD
+  @@schema("wallet")
+}
+
+model Wallet {
+  userId                 String
+  currency               String             @default("EUR")
+  realBalance            Float              @default(0)
+  bonusBalance           Float              @default(0)
+  pendingDeposits        Float              @default(0)
+  pendingWithdrawals     Float              @default(0)
+  reservedBets           Float              @default(0)
+  reservedCashouts       Float              @default(0)
+  totalDeposited         Float              @default(0)
+  totalWithdrawn         Float              @default(0)
+  totalWagered           Float              @default(0)
+  totalWon               Float              @default(0)
+  totalLost              Float              @default(0)
+  totalBonusGranted      Float              @default(0)
+  totalBonusWagered      Float              @default(0)
+  totalBonusReleased     Float              @default(0)
+  isFrozen               Boolean            @default(false)
+  frozenReason           String?
+  frozenAt               DateTime?
+  frozenBy               String?
+  kycLevelApplied        Int                @default(0)
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  deletedAt              DateTime?
+
+  ledgerEntries          WalletLedgerEntry[]
+  transactions           Transaction[]
+  deposits               Deposit[]
+  withdrawals            Withdrawal[]
+  pendingOperations      PendingWalletOperation[]
+
+  @@id([userId, currency])
+  @@schema("wallet")
+  @@map("wallet")
+}
+
+model WalletLedgerEntry {
+  id                     String             @id @default(uuid())
+  userId                 String
+  walletId               String
+  walletCurrency         String
+  entryType              LedgerEntryType
+  accountType            LedgerAccountType
+  amount                 Float
+  currency               String
+  runningBalanceAfter    Float
+  transactionType        TransactionType
+  referenceId            String
+  referenceType          String
+  externalReferenceId    String?
+  note                   String?
+  metadata               Json?
+  operatedBy             String?
+  correlationId          String?
+
+  wallet                 Wallet             @relation(fields: [walletId, walletCurrency], references: [userId, currency])
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  @@index([userId, transactionType, referenceId])
+  @@index([walletId, walletCurrency])
+  @@index([correlationId])
+  @@schema("wallet")
+  @@map("wallet_ledger_entry")
+}
+
+model Transaction {
+  id                     String             @id @default(uuid())
+  userId                 String
+  walletId               String
+  walletCurrency         String
+  type                   TransactionType
+  amountAmount           Float
+  amountCurrency         String
+  feeAmount              Float?
+  feeCurrency            String?
+  netAmountAmount        Float?
+  netAmountCurrency      String?
+  status                 PaymentStatus      @default(PENDING)
+  provider               PaymentProvider?
+  externalId             String?
+  referenceId            String?
+  referenceType          String?
+  initiatedBy            String?
+  processedAt            DateTime?
+  failureReason          String?
+  note                   String?
+  metadata               Json?
+  riskScore              Float?
+  kycLevelAtTime         Int                @default(0)
+
+  wallet                 Wallet             @relation(fields: [walletId, walletCurrency], references: [userId, currency])
+  deposit                Deposit?
+  withdrawal             Withdrawal?
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  @@index([userId, type])
+  @@index([status])
+  @@index([referenceId])
+  @@schema("wallet")
+  @@map("transaction")
+}
+
+model Deposit {
+  id                     String             @id @default(uuid())
+  userId                 String
+  walletId               String
+  walletCurrency         String
+  transactionId          String             @unique
+  amountAmount           Float
+  amountCurrency         String
+  feeAmount              Float?
+  feeCurrency            String?
+  netAmountAmount        Float?
+  netAmountCurrency      String?
+  provider               PaymentProvider    @default(STRIPE)
+  providerTransactionId  String?
+  status                 PaymentStatus      @default(PENDING)
+  paymentMethodType      String?
+  paymentMethodLast4     String?
+  paymentMethodBrand     String?
+  returnUrl              String?
+  providerRawRequest     Json?
+  providerRawResponse    Json?
+  confirmedAt            DateTime?
+  failedAt               DateTime?
+  failureReason          String?
+  ipAddress              String?
+  riskCheckBypassed      Boolean            @default(false)
+  appliedBonusId         String?
+
+  wallet                 Wallet             @relation(fields: [walletId, walletCurrency], references: [userId, currency])
+  transaction            Transaction        @relation(fields: [transactionId], references: [id])
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  deletedAt DateTime? @db.Timestamptz
+
+  @@index([userId, status])
+  @@index([providerTransactionId])
+  @@schema("wallet")
+  @@map("deposit")
+}
+
+model Withdrawal {
+  id                     String             @id @default(uuid())
+  userId                 String
+  walletId               String
+  walletCurrency         String
+  transactionId          String             @unique
+  amountAmount           Float
+  amountCurrency         String
+  provider               PaymentProvider
+  providerPayoutId       String?
+  status                 PaymentStatus      @default(PENDING)
+  beneficiaryAccountJson Json
+  requestedAt            DateTime           @default(now())
+  approvedAt             DateTime?
+  approvedBy             String?
+  rejectedAt             DateTime?
+  rejectedBy             String?
+  rejectionReason        String?
+  processedAt            DateTime?
+  failedAt               DateTime?
+  kycLevelAtRequest      Int                @default(0)
+  pendingDocumentIds     String[]
+  riskScore              Float?
+  correlationId          String?
+
+  wallet                 Wallet             @relation(fields: [walletId, walletCurrency], references: [userId, currency])
+  transaction            Transaction        @relation(fields: [transactionId], references: [id])
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  deletedAt DateTime? @db.Timestamptz
+
+  @@index([userId, status])
+  @@index([requestedAt])
+  @@schema("wallet")
+  @@map("withdrawal")
+}
+
+model PendingWalletOperation {
+  id                     String             @id @default(uuid())
+  walletId               String
+  walletCurrency         String
+  userId                 String
+  operationType          PendingOperationType
+  amountAmount           Float
+  amountCurrency         String
+  reservationType        ReservationType    @default(BET_PLACEMENT)
+  lockedAt               DateTime?
+  lockExpiresAt          DateTime?
+  releasedAt             DateTime?
+  appliedAt              DateTime?
+  referenceId            String?
+  referenceType          String?
+  correlationId          String?
+
+  wallet                 Wallet             @relation(fields: [walletId, walletCurrency], references: [userId, currency])
+
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  @@index([walletId, walletCurrency, lockExpiresAt])
+  @@index([referenceId])
+  @@schema("wallet")
+  @@map("pending_wallet_operation")
+}
