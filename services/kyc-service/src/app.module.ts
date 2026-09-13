@@ -5,6 +5,7 @@ import { TerminusModule } from '@nestjs/terminus';
 import { BullModule } from '@nestjs/bullmq';
 import { JwtModule } from '@nestjs/jwt';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
 import { HealthController } from './health.controller';
 import { KYCModule } from './kyc/kyc.module';
@@ -53,6 +54,7 @@ import { KYCModule } from './kyc/kyc.module';
       delimiter: '.',
       verboseMemoryLeak: true,
     }),
+    ScheduleModule.forRoot(),
     TerminusModule,
     PrismaModule,
     KYCModule,

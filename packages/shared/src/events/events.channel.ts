@@ -25,6 +25,7 @@ export const BET62_EVENTS = {
     VERIFICATION_APPROVED: "kyc.verification.approved",
     VERIFICATION_REJECTED: "kyc.verification.rejected",
     VERIFICATION_EXPIRED: "kyc.verification.expired",
+    AML_HIT_DETECTED: "kyc.aml.hit_detected",
   },
   WALLET: {
     DEPOSIT_CREATED: "wallet.deposit.created",

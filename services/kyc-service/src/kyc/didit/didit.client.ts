@@ -31,6 +31,27 @@ export interface DiditDecision {
   [key: string]: unknown;
 }
 
+export interface DiditAmlScreeningInput {
+  fullName: string;
+  entityType?: 'person' | 'company';
+  dateOfBirth?: string;
+  nationality?: string;
+  documentNumber?: string;
+  includeAdverseMedia?: boolean;
+  includeOngoingMonitoring?: boolean;
+}
+
+export interface DiditAmlResult {
+  request_id: string;
+  aml: {
+    status: string;
+    total_hits: number;
+    score?: number;
+    hits?: Array<Record<string, unknown>>;
+    entity_type?: string;
+  };
+}
+
 export class DiditApiError extends Error {
   constructor(
     message: string,
@@ -133,6 +154,22 @@ export class DiditClient {
 
   async getDecision(sessionId: string): Promise<DiditDecision> {
     return this.request<DiditDecision>('GET', `/v3/session/${sessionId}/decision/`);
+  }
+
+  async screenAml(input: DiditAmlScreeningInput): Promise<DiditAmlResult> {
+    return this.request<DiditAmlResult>('POST', '/v3/aml/', {
+      full_name: input.fullName,
+      entity_type: input.entityType ?? 'person',
+      ...(input.dateOfBirth ? { date_of_birth: input.dateOfBirth } : {}),
+      ...(input.nationality ? { nationality: input.nationality } : {}),
+      ...(input.documentNumber ? { document_number: input.documentNumber } : {}),
+      ...(input.includeAdverseMedia !== undefined
+        ? { include_adverse_media: input.includeAdverseMedia }
+        : {}),
+      ...(input.includeOngoingMonitoring !== undefined
+        ? { include_ongoing_monitoring: input.includeOngoingMonitoring }
+        : {}),
+    });
   }
 
   validateWebhookHMAC(payload: Buffer, signature: string): boolean {

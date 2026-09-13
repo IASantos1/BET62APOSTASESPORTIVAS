@@ -75,9 +75,27 @@ model UserKYC {
 
   documents              KYCDocument[]
   webhookLogs            KYCWebhookLog[]
+  amlScreenings          KYCAmlScreening[]
 
   @@schema("kyc")
   @@map("user_kyc")
+}
+
+model KYCAmlScreening {
+  id                     String             @id @default(uuid())
+  userId                 String
+  requestId              String?
+  status                 String
+  totalHits              Int                @default(0)
+  score                  Float?
+  hitsJson               Json?
+  screenedAt             DateTime           @default(now())
+
+  userKYC                UserKYC            @relation(fields: [userId], references: [userId])
+
+  @@index([userId])
+  @@schema("kyc")
+  @@map("kyc_aml_screening")
 }
 
 model KYCWebhookLog {
