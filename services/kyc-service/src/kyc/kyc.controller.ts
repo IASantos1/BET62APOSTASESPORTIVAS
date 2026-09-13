@@ -17,7 +17,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiHeader } from '@nestjs/swagger
 import { Request as ExpressRequest, Response } from 'express';
 import { KYCService } from './kyc.service';
 import {
-  GenerateKycSdkTokenDto,
+  CreateKycSessionDto,
   KYCLevel,
 } from '@bet62/shared';
 
@@ -35,49 +35,38 @@ export class KYCController {
 
   @Post('init-level1')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Inicia verificação KYC nível 1' })
+  @ApiOperation({ summary: 'Cria sessão de verificação hospedada no Didit para o nível 1' })
   async initLevel1(
     @Request() req: { user: { sub: string } },
-    @Body() body: { callbackUrl?: string; applicantData?: Record<string, unknown> },
+    @Body() body?: CreateKycSessionDto,
   ) {
-    return this.kycService.initLevel1(req.user.sub, body.callbackUrl, body.applicantData);
+    return this.kycService.createVerificationSession(req.user.sub, KYCLevel.L1, body?.callbackUrl);
   }
 
   @Post('init-level2')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Inicia verificação KYC nível 2' })
+  @ApiOperation({ summary: 'Cria sessão de verificação hospedada no Didit para o nível 2' })
   async initLevel2(
     @Request() req: { user: { sub: string } },
-    @Body() body: { callbackUrl?: string; applicantData?: Record<string, unknown> },
+    @Body() body?: CreateKycSessionDto,
   ) {
-    return this.kycService.initLevel2(req.user.sub, body.callbackUrl, body.applicantData);
-  }
-
-  @Get('sdk-token')
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Gera token do SDK Sumsub para o frontend' })
-  async getSdkToken(
-    @Request() req: { user: { sub: string } },
-    @Body() body?: GenerateKycSdkTokenDto,
-  ): Promise<any> {
-    const targetLevel = (body?.targetLevel as KYCLevel) ?? KYCLevel.L1;
-    return this.kycService.generateSDKToken(req.user.sub, targetLevel);
+    return this.kycService.createVerificationSession(req.user.sub, KYCLevel.L2, body?.callbackUrl);
   }
 
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
-  @ApiHeader({ name: 'x-sumsub-signature', required: true })
-  @ApiOperation({ summary: 'Webhook do provedor KYC (Sumsub)' })
+  @ApiHeader({ name: 'x-signature-v2', required: true })
+  @ApiOperation({ summary: 'Webhook do provedor KYC (Didit)' })
   async handleWebhook(
     @Req() req: ExpressRequest,
     @Res() res: Response,
-    @Headers('x-sumsub-signature') signature?: string,
+    @Headers('x-signature-v2') signature?: string,
   ) {
-    const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody ??
-      (req.body instanceof Buffer
-        ? req.body
-        : Buffer.from(JSON.stringify(req.body ?? {})));
+    const rawBody = (req as unknown as { rawBody?: Buffer }).rawBody;
 
+    if (!rawBody) {
+      throw new BadRequestException('Raw body not captured; check bootstrap rawBody config');
+    }
     if (!signature) {
       throw new UnauthorizedException('Missing signature header');
     }
@@ -94,15 +83,14 @@ export class KYCController {
       throw new BadRequestException('Invalid JSON payload');
     }
 
-    const provider = 'SUMSUB';
-    const eventType = (payload.type as string) ?? 'UNKNOWN';
+    const provider = 'DIDIT';
+    const eventType = (payload.event as string) ?? 'UNKNOWN';
 
     const result = await this.kycService.updateStatusViaWebhook(
       provider,
       eventType,
       req.headers as unknown as Record<string, string>,
       payload as unknown as Parameters<KYCService['updateStatusViaWebhook']>[3],
-      rawBody,
       signatureValid,
     );
 
