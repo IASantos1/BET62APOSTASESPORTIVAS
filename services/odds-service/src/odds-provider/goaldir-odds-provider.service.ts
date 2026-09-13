@@ -1,7 +1,8 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SportType } from '@bet62/shared';
+import { MarketType, SelectionOutcome, SportType } from '@bet62/shared';
 import type { League, Sport, SportType as SportTypeEnum } from '@bet62/shared';
+import type { OddsChangeNotification } from './odds-provider.interface';
 import {
   AbstractOddsProvider,
   LiveOddsEvent,
@@ -31,10 +32,21 @@ import {
   GoaldirUnauthorizedError,
 } from './goaldir/goaldir.http-client';
 import {
+  GoaldirWsClient,
+  type GoaldirWsClientConfig,
+  type GoaldirWsOddsFrame,
+  type GoaldirWsSport,
+} from './goaldir/goaldir.ws-client';
+import {
+  FOOTBALL,
+  TENNIS,
+  BASKETBALL,
+  HOCKEY,
   GOALDIR_SPORT_API_PREFIX,
   buildCompositeId,
   mapGoaldirEvent,
   mapGoaldirLeague,
+  mapMarketStatus,
   mapOddsBySport,
   parseCompositeId,
   providerLeagueToSharedLeague,
@@ -107,6 +119,8 @@ export class GoaldirOddsProviderService
   override readonly providerName = 'GOALDIR';
 
   private readonly http: GoaldirHttpClient;
+  private readonly ws: GoaldirWsClient;
+  private readonly wsEnabled: boolean;
   private readonly supportedSports = new Set<GoaldirSupportedSport>();
   private initialized = false;
   private fatalAuthFailed = false;
@@ -117,16 +131,23 @@ export class GoaldirOddsProviderService
     let baseUrl = DEFAULT_BASE_URL;
     let apiKey = '';
     let timeoutMs = DEFAULT_TIMEOUT_MS;
+    let wsEnabled = false;
     if (configService && typeof configService.get === 'function') {
       baseUrl = configService.get<string>('ODDS_PROVIDER_BASE_URL') || process.env.ODDS_PROVIDER_BASE_URL || DEFAULT_BASE_URL;
       apiKey = configService.get<string>('ODDS_PROVIDER_API_KEY') || process.env.ODDS_PROVIDER_API_KEY || '';
       timeoutMs = Number(configService.get<string>('ODDS_PROVIDER_TIMEOUT_MS') || process.env.ODDS_PROVIDER_TIMEOUT_MS || String(DEFAULT_TIMEOUT_MS));
+      const wsRaw = configService.get<string>('GOALDIR_WS_ENABLED') ?? process.env.GOALDIR_WS_ENABLED;
+      wsEnabled = wsRaw === 'true' || wsRaw === '1' || wsRaw === 'on';
     } else {
       baseUrl = process.env.ODDS_PROVIDER_BASE_URL || DEFAULT_BASE_URL;
       apiKey = process.env.ODDS_PROVIDER_API_KEY || '';
       timeoutMs = Number(process.env.ODDS_PROVIDER_TIMEOUT_MS || String(DEFAULT_TIMEOUT_MS));
+      const wsRaw = process.env.GOALDIR_WS_ENABLED;
+      wsEnabled = wsRaw === 'true' || wsRaw === '1' || wsRaw === 'on';
     }
     this.http = new GoaldirHttpClient({ baseUrl, apiKey, timeoutMs });
+    this.wsEnabled = wsEnabled;
+    this.ws = new GoaldirWsClient({ apiKey });
     for (const s of SUPPORTED_GOALDIR_SPORTS) {
       this.supportedSports.add(s);
     }
@@ -174,6 +195,79 @@ export class GoaldirOddsProviderService
     }
     this.logger.log(`Goaldir supportedSports apos coverage check: [${Array.from(this.supportedSports).join(', ')}]`);
     this.http.reset402Warnings();
+
+    if (this.wsEnabled && !this.fatalAuthFailed) {
+      try {
+        this.ws.onFrame((sport, frame) => this.handleWsFrame(sport, frame));
+        const hasFootball = this.supportedSports.has(FOOTBALL);
+        const hasTennis = this.supportedSports.has(TENNIS);
+        if (hasFootball) this.ws.connect('football');
+        if (hasTennis) this.ws.connect('tennis');
+        this.logger.log(`Goaldir WebSocket ativado. Conectados: football=${hasFootball}, tennis=${hasTennis}.`);
+      } catch (err) {
+        this.logger.warn(`Goaldir WS falhou ao iniciar (falta Addon WS 3€?), continuando apenas com polling REST: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    } else if (this.wsEnabled && this.fatalAuthFailed) {
+      this.logger.warn('Goaldir WS desativado porque fatalAuthFailed=true (chave invalida).');
+    }
+  }
+
+  private readonly lastSelectionOdds = new Map<string, number>();
+
+  private emitOddsChanges(changes: OddsChangeNotification[]): void {
+    if (changes.length === 0) return;
+    for (const cb of this.oddsChangeCallbacks) {
+      try {
+        const result = cb(changes);
+        if (result && typeof (result as Promise<unknown>).catch === 'function') {
+          (result as Promise<unknown>).catch((err) => this.logger.verbose(`Goaldir odds cb erro: ${err instanceof Error ? err.message : String(err)}`));
+        }
+      } catch (err) {
+        this.logger.verbose(`Goaldir odds cb sync erro: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+
+  private handleWsFrame(sport: GoaldirWsSport, frame: GoaldirWsOddsFrame): void {
+    try {
+      const frameType = String(frame.type || '').toLowerCase();
+      if (frameType === 'heartbeat' || frameType === 'ping' || frameType === 'pong') return;
+      const rawId = frame.event_id ?? frame.match_id;
+      if (rawId === null || rawId === undefined || rawId === '') return;
+      const numericId = typeof rawId === 'number' ? rawId : String(rawId);
+      const sportType: SportType | null = sport === 'football' ? SportType.FOOTBALL : sport === 'tennis' ? SportType.TENNIS : null;
+      if (!sportType) return;
+      const eventComposite = buildCompositeId(sportType, numericId);
+      const updatedAt = frame.updated_at
+        ? typeof frame.updated_at === 'number'
+          ? new Date(frame.updated_at * 1000)
+          : new Date(String(frame.updated_at))
+        : new Date();
+      const markets = mapOddsBySport(frame as unknown as Record<string, unknown>, sportType, { eventCompositeId: eventComposite });
+      if (markets.length === 0) return;
+      const notifications: OddsChangeNotification[] = [];
+      for (const market of markets) {
+        for (const sel of market.selections) {
+          if (!sel || !sel.id || sel.odds === null || sel.odds === undefined) continue;
+          const old = this.lastSelectionOdds.get(sel.id);
+          if (old === sel.odds) continue;
+          const notification: OddsChangeNotification = {
+            selectionId: sel.id,
+            marketId: market.id,
+            eventId: eventComposite,
+            oldOdds: old ?? sel.odds,
+            newOdds: sel.odds,
+            changedAt: updatedAt,
+            status: market.status,
+          };
+          notifications.push(notification);
+          this.lastSelectionOdds.set(sel.id, sel.odds);
+        }
+      }
+      if (notifications.length > 0) this.emitOddsChanges(notifications);
+    } catch (err) {
+      this.logger.debug(`Goaldir WS frame ignorado: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private async safeGet<T>(path: string, params?: Record<string, string | number | boolean | undefined | null>): Promise<T[]> {

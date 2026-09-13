@@ -12,6 +12,11 @@ import type {
 } from '../odds-provider.interface';
 import type { League, Sport } from '@bet62/shared';
 
+export const FOOTBALL: SportType.FOOTBALL = SportType.FOOTBALL;
+export const TENNIS: SportType.TENNIS = SportType.TENNIS;
+export const BASKETBALL: SportType.BASKETBALL = SportType.BASKETBALL;
+export const HOCKEY: SportType.HOCKEY = SportType.HOCKEY;
+
 export const GOALDIR_SPORT_PREFIX: Record<SportType, string> = {
   [SportType.FOOTBALL]: 'football',
   [SportType.TENNIS]: 'tennis',
