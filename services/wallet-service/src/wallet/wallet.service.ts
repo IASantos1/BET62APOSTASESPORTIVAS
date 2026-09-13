@@ -556,6 +556,7 @@ export class WalletService {
             userId,
             amountCents,
             dto.currency,
+            dto.beneficiary.stripeConnectId as string,
             { withdrawalId: result.withdrawal.id },
           ).catch((err) => {
             this.logger.error(`Failed to initiate stripe payout withdrawal=${result.withdrawal.id}`, err as Error);
