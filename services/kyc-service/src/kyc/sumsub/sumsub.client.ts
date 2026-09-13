@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { KYCLevel } from '@bet62/shared';
 
 export interface SumsubApplicant {
@@ -88,10 +89,29 @@ export class SumsubClient {
   }
 
   validateWebhookHMAC(payload: Buffer, signature: string): boolean {
+    if (!signature) {
+      return false;
+    }
+
     if (!this.secretKey || this.secretKey.startsWith('mock-')) {
-      this.logger.debug('[MOCK] validateWebhookHMAC skipped (mock secret)');
+      if (process.env.NODE_ENV === 'production') {
+        this.logger.error(
+          'SUMSUB_SECRET_KEY is not configured; refusing to accept webhook in production',
+        );
+        return false;
+      }
+      this.logger.warn('[MOCK] validateWebhookHMAC skipped (mock secret, non-production only)');
       return true;
     }
-    return signature.length > 0;
+
+    const expectedDigest = createHmac('sha256', this.secretKey).update(payload).digest('hex');
+    const expectedBuffer = Buffer.from(expectedDigest, 'utf-8');
+    const signatureBuffer = Buffer.from(signature, 'utf-8');
+
+    if (expectedBuffer.length !== signatureBuffer.length) {
+      return false;
+    }
+
+    return timingSafeEqual(expectedBuffer, signatureBuffer);
   }
 }
