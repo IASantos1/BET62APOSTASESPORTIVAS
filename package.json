@@ -18,8 +18,8 @@
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "format": "prettier --write \"**/*.{ts,tsx,js,md,json}\"",
-    "prisma:generate:all": "powershell -ExecutionPolicy Bypass -File infra/scripts/prisma-generate-all.ps1",
-    "prisma:migrate:deploy:all": "powershell -ExecutionPolicy Bypass -File infra/scripts/prisma-migrate-deploy-all.ps1",
+    "prisma:generate:all": "bash infra/scripts/prisma-generate-all.sh",
+    "prisma:migrate:deploy:all": "bash infra/scripts/prisma-migrate-deploy-all.sh",
     "docker:up": "docker-compose -f infra/docker-compose.yaml up -d",
     "docker:down": "docker-compose -f infra/docker-compose.yaml down",
     "docker:logs": "docker-compose -f infra/docker-compose.yaml logs -f"
