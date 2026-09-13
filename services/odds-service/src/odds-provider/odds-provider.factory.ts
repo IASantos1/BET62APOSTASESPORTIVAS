@@ -7,8 +7,9 @@ import {
   CustomOddsProviderConfig,
   CustomOddsProviderService,
 } from './custom-odds-provider.service';
+import { GoaldirOddsProviderService } from './goaldir-odds-provider.service';
 
-export const SUPPORTED_PROVIDERS = ['mock', 'sportsdb', 'custom'] as const;
+export const SUPPORTED_PROVIDERS = ['mock', 'sportsdb', 'custom', 'goaldir'] as const;
 export type SupportedOddsProviderName = (typeof SUPPORTED_PROVIDERS)[number];
 
 export interface OddsProviderFactoryConfig {
@@ -16,6 +17,7 @@ export interface OddsProviderFactoryConfig {
   custom?: CustomOddsProviderConfig;
   schedulerRegistry?: SchedulerRegistry;
   mockInstance?: MockOddsProviderService;
+  goaldirInstance?: GoaldirOddsProviderService;
 }
 
 const logger = new Logger('OddsProviderFactory');
@@ -24,6 +26,7 @@ export function normalizeProviderName(name?: string | null): SupportedOddsProvid
   const n = (name ?? '').trim().toLowerCase();
   if (n === 'sportsdb' || n === 'thesportsdb' || n === 'tsdb') return 'sportsdb';
   if (n === 'custom' || n === 'generic' || n === 'rest' || n === 'api') return 'custom';
+  if (n === 'goaldir' || n === 'bsd' || n === 'bzzoiro' || n === 'goaldirbsd' || n === 'goaldir-bsd') return 'goaldir';
   if (n === 'mock' || n === '' || n === 'default') return 'mock';
   logger.warn(`Provider desconhecido "${name}", usando fallback "mock"`);
   return 'mock';
@@ -57,6 +60,21 @@ export function createOddsProvider(
 
   if (normalized === 'custom') {
     const instance = new CustomOddsProviderService(config.custom ?? {});
+    return instance;
+  }
+
+  if (normalized === 'goaldir') {
+    if (config.goaldirInstance) return config.goaldirInstance;
+    const instance = new GoaldirOddsProviderService();
+    if (typeof instance.onModuleInit === 'function') {
+      try {
+        Promise.resolve(instance.onModuleInit()).catch((err) => {
+          logger.warn(`GoaldirOddsProvider onModuleInit warning: ${err instanceof Error ? err.message : String(err)}`);
+        });
+      } catch (err) {
+        logger.warn(`GoaldirOddsProvider onModuleInit sync warning: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     return instance;
   }
 

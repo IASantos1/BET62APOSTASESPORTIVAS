@@ -3,10 +3,14 @@
   "build": {
     "builder": "NIXPACKS",
     "buildCommand": "npm run prisma:generate:all && npm run build",
+    "buildEnvironmentVariables": {
+      "NODE_ENV": "development",
+      "NPM_CONFIG_PRODUCTION": "false"
+    },
     "nixpacksPlan": {
       "phases": {
         "install": {
-          "cmds": ["npm ci --ignore-scripts=false --foreground-scripts"]
+          "cmds": ["npm ci --include=dev --ignore-scripts=false --foreground-scripts"]
         }
       }
     }

@@ -5,6 +5,7 @@ import type { OddsProvider } from './odds-provider.interface';
 import { MockOddsProviderService } from './mock-odds-provider.service';
 import { SportsDbOddsProviderService } from './sportsdb-odds-provider.service';
 import { CustomOddsProviderService } from './custom-odds-provider.service';
+import { GoaldirOddsProviderService } from './goaldir-odds-provider.service';
 import { AbstractOddsProvider } from './abstract-odds-provider.service';
 import { createOddsProvider, normalizeProviderName } from './odds-provider.factory';
 
@@ -18,6 +19,7 @@ export const ABSTRACT_ODDS_PROVIDER_TOKEN = Symbol('ABSTRACT_ODDS_PROVIDER');
     MockOddsProviderService,
     SportsDbOddsProviderService,
     CustomOddsProviderService,
+    GoaldirOddsProviderService,
     SchedulerRegistry,
     {
       provide: ODDS_PROVIDER_TOKEN,
@@ -27,11 +29,15 @@ export const ABSTRACT_ODDS_PROVIDER_TOKEN = Symbol('ABSTRACT_ODDS_PROVIDER');
         mockProvider: MockOddsProviderService,
         sportsDbProvider: SportsDbOddsProviderService,
         customProvider: CustomOddsProviderService,
+        goaldirProvider: GoaldirOddsProviderService,
       ): OddsProvider => {
         const logger = new Logger('OddsProviderModule');
         const name = configService.get<string>('ODDS_PROVIDER_NAME', 'mock');
         const normalized = normalizeProviderName(name);
         logger.log(`ODDS_PROVIDER_NAME="${name}" -> resolved="${normalized}" para token ODDS_PROVIDER (interface legada)`);
+        if (normalized === 'goaldir') {
+          return goaldirProvider as unknown as OddsProvider;
+        }
         if (normalized === 'sportsdb') {
           return sportsDbProvider as unknown as OddsProvider;
         }
@@ -46,6 +52,7 @@ export const ABSTRACT_ODDS_PROVIDER_TOKEN = Symbol('ABSTRACT_ODDS_PROVIDER');
         MockOddsProviderService,
         SportsDbOddsProviderService,
         CustomOddsProviderService,
+        GoaldirOddsProviderService,
       ],
     },
     {
@@ -56,11 +63,15 @@ export const ABSTRACT_ODDS_PROVIDER_TOKEN = Symbol('ABSTRACT_ODDS_PROVIDER');
         mockProvider: MockOddsProviderService,
         sportsDbProvider: SportsDbOddsProviderService,
         customProvider: CustomOddsProviderService,
+        goaldirProvider: GoaldirOddsProviderService,
       ): AbstractOddsProvider => {
         const logger = new Logger('OddsProviderModule');
         const name = configService.get<string>('ODDS_PROVIDER_NAME', 'mock');
         const normalized = normalizeProviderName(name);
         logger.log(`ODDS_PROVIDER_NAME="${name}" -> resolved="${normalized}" para AbstractOddsProvider`);
+        if (normalized === 'goaldir') {
+          return goaldirProvider;
+        }
         if (normalized === 'sportsdb') {
           return sportsDbProvider;
         }
@@ -75,6 +86,7 @@ export const ABSTRACT_ODDS_PROVIDER_TOKEN = Symbol('ABSTRACT_ODDS_PROVIDER');
           return createOddsProvider(name, {
             schedulerRegistry,
             mockInstance: mockProvider,
+            goaldirInstance: goaldirProvider,
             custom: {
               baseUrl: configService.get<string>('ODDS_PROVIDER_BASE_URL'),
               apiKey: configService.get<string>('ODDS_PROVIDER_API_KEY'),
@@ -92,6 +104,7 @@ export const ABSTRACT_ODDS_PROVIDER_TOKEN = Symbol('ABSTRACT_ODDS_PROVIDER');
         MockOddsProviderService,
         SportsDbOddsProviderService,
         CustomOddsProviderService,
+        GoaldirOddsProviderService,
       ],
     },
     {
@@ -106,6 +119,7 @@ export const ABSTRACT_ODDS_PROVIDER_TOKEN = Symbol('ABSTRACT_ODDS_PROVIDER');
     MockOddsProviderService,
     SportsDbOddsProviderService,
     CustomOddsProviderService,
+    GoaldirOddsProviderService,
   ],
 })
 export class OddsProviderModule {
