@@ -2,7 +2,6 @@
 import { MiddlewareConsumer, Module, NestModule, RequestMethod } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TerminusModule } from '@nestjs/terminus';
-import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { z } from 'zod';
@@ -19,18 +18,17 @@ const envSchema = z.object({
     .optional()
     .nullable()
     .transform((v) => {
-      if (v === null || v === undefined) return 'redis://localhost:6379';
+      if (v === null || v === undefined) return '';
       const trimmed = String(v).trim();
-      if (trimmed.length === 0) return 'redis://localhost:6379';
       try {
         const parsed = new URL(trimmed);
         if (parsed.protocol === 'redis:' || parsed.protocol === 'rediss:') return parsed.href;
       } catch {
         /* fallthrough */
       }
-      return 'redis://localhost:6379';
+      return '';
     })
-    .pipe(z.string().url().default('redis://localhost:6379')),
+    .pipe(z.string().default('')),
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   RAILWAY_PUBLIC_DOMAIN: z.string().trim().optional(),
   RAILWAY_STATIC_URL: z.string().trim().optional(),
@@ -58,7 +56,6 @@ const envSchema = z.object({
         return envSchema.parse(normalized);
       },
     }),
-    // TODO: instalar nestjs-throttler-storage-redis para multi-replica Redis storage
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (cfg: ConfigService) => ({
@@ -68,11 +65,6 @@ const envSchema = z.object({
       }),
     }),
     TerminusModule,
-    BullModule.forRoot({
-      connection: {
-        url: process.env.REDIS_URL ?? 'redis://localhost:6379',
-      },
-    }),
   ],
   providers: [
     {
