@@ -166,7 +166,7 @@ export class BonusService {
       },
     });
 
-    this.emitBonusGranted(userBonus, campaign.id);
+    this.emitBonusGranted(userBonus as never, campaign.id);
     return userBonus;
   }
 
@@ -274,7 +274,7 @@ export class BonusService {
         createdByAdminId: grantedByAdminId,
       },
     });
-    this.emitBonusGranted(userBonus, dto.campaignId);
+    this.emitBonusGranted(userBonus as never, dto.campaignId);
     return userBonus;
   }
 
@@ -351,7 +351,8 @@ export class BonusService {
     const rawPercent = this.getContributionPercent(
       params.sourceType,
       params.casinoCategory,
-      userBonus.rolloverContributionCategory ?? CasinoContributionCategory.STANDARD_MIX,
+      (userBonus.rolloverContributionCategory as unknown as CasinoContributionCategory) ??
+        CasinoContributionCategory.STANDARD_MIX,
     );
     const contributionPercent = oddsCheckPassed ? rawPercent : 0;
     const weighted = (params.wagered * contributionPercent) / 100;
@@ -495,7 +496,7 @@ export class BonusService {
             : camp.expiresAt ?? undefined,
         },
       });
-      this.emitBonusGranted(ub, camp.id);
+      this.emitBonusGranted(ub as never, camp.id);
     }
   }
 
@@ -555,7 +556,7 @@ export class BonusService {
             : camp.expiresAt ?? undefined,
         },
       });
-      this.emitBonusGranted(ub, camp.id);
+      this.emitBonusGranted(ub as never, camp.id);
       if (isFirst) break;
     }
   }

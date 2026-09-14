@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { Prisma } from '../../prisma/generated/client';
 import {
   NotificationChannel,
   NotificationCategory,
@@ -99,15 +100,24 @@ export class NotificationsService {
       const key = [p.scope, p.category ?? '_', p.channel ?? '_', p.eventKey ?? '_'].join('::');
       asMap[key] = p.enabled;
     }
+    // O client Prisma deste serviço gera seu próprio enum NotificationPreferenceScope
+    // (estruturalmente idêntico ao de @bet62/shared, mas nominalmente distinto).
+    const typedPrefs = prefs as unknown as Array<{
+      scope: NotificationPreferenceScope;
+      category?: NotificationCategory | null;
+      channel?: NotificationChannel | null;
+      eventKey?: string | null;
+      enabled: boolean;
+    }>;
     const defaults: NotificationsPreferencesUpdateDto = {
-      emailMarketing: this.getPref(prefs, NotificationPreferenceScope.CATEGORY, NotificationCategory.PROMOTIONAL, NotificationChannel.EMAIL),
-      emailTransactional: this.getPref(prefs, NotificationPreferenceScope.CHANNEL, undefined, NotificationChannel.EMAIL, undefined, true),
-      pushMarketing: this.getPref(prefs, NotificationPreferenceScope.CATEGORY, NotificationCategory.PROMOTIONAL, NotificationChannel.PUSH_WEB),
-      pushTransactional: this.getPref(prefs, NotificationPreferenceScope.CHANNEL, undefined, NotificationChannel.PUSH_WEB, undefined, true),
-      pushLive: this.getPref(prefs, NotificationPreferenceScope.CATEGORY, NotificationCategory.LIVE_EVENT_STARTED, NotificationChannel.PUSH_WEB, undefined, true),
-      inAppPromotional: this.getPref(prefs, NotificationPreferenceScope.CATEGORY, NotificationCategory.PROMOTIONAL, NotificationChannel.IN_APP, undefined, true),
-      smsPromotional: this.getPref(prefs, NotificationPreferenceScope.CATEGORY, NotificationCategory.PROMOTIONAL, NotificationChannel.SMS, undefined, false),
-      smsFinancial: this.getPref(prefs, NotificationPreferenceScope.CATEGORY, NotificationCategory.DEPOSIT_COMPLETED, NotificationChannel.SMS, undefined, true),
+      emailMarketing: this.getPref(typedPrefs, NotificationPreferenceScope.CATEGORY, NotificationCategory.PROMOTIONAL, NotificationChannel.EMAIL),
+      emailTransactional: this.getPref(typedPrefs, NotificationPreferenceScope.CHANNEL, undefined, NotificationChannel.EMAIL, undefined, true),
+      pushMarketing: this.getPref(typedPrefs, NotificationPreferenceScope.CATEGORY, NotificationCategory.PROMOTIONAL, NotificationChannel.PUSH_WEB),
+      pushTransactional: this.getPref(typedPrefs, NotificationPreferenceScope.CHANNEL, undefined, NotificationChannel.PUSH_WEB, undefined, true),
+      pushLive: this.getPref(typedPrefs, NotificationPreferenceScope.CATEGORY, NotificationCategory.LIVE_EVENT_STARTED, NotificationChannel.PUSH_WEB, undefined, true),
+      inAppPromotional: this.getPref(typedPrefs, NotificationPreferenceScope.CATEGORY, NotificationCategory.PROMOTIONAL, NotificationChannel.IN_APP, undefined, true),
+      smsPromotional: this.getPref(typedPrefs, NotificationPreferenceScope.CATEGORY, NotificationCategory.PROMOTIONAL, NotificationChannel.SMS, undefined, false),
+      smsFinancial: this.getPref(typedPrefs, NotificationPreferenceScope.CATEGORY, NotificationCategory.DEPOSIT_COMPLETED, NotificationChannel.SMS, undefined, true),
     };
     return { defaults, raw: prefs };
   }
@@ -290,7 +300,7 @@ export class NotificationsService {
         htmlBody: data.htmlBody,
         imageUrl: data.imageUrl,
         deepLink: data.deepLink,
-        payload: data.payload,
+        payload: data.payload as Prisma.InputJsonValue | undefined,
         language: data.language,
         priority: data.priority,
         status: data.status ?? NotificationStatus.PENDING,

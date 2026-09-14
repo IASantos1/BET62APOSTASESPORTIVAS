@@ -103,7 +103,7 @@ export class GameplayService {
       }),
     );
 
-    const result = this.resolveOutcome(game.category, stake, {
+    const result = this.resolveOutcome(game.category as unknown as CasinoGameCategory, stake, {
       lines: dto.lines ?? 1,
       betType: dto.betType,
       extra: dto.extraParameters,

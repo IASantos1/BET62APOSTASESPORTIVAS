@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { Prisma } from '../../prisma/generated/client';
 import { NotificationStatus } from '@bet62/shared';
 
 export interface SendEmailInput {
@@ -29,7 +30,7 @@ export class EmailProvider {
         subject: input.subject,
         textBody: input.textBody,
         htmlBody: input.htmlBody,
-        templateVars: input.templateVars,
+        templateVars: input.templateVars as Prisma.InputJsonValue | undefined,
         attachmentUrls: input.attachmentUrls ?? [],
         status: NotificationStatus.QUEUED,
       },
