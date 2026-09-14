@@ -58,7 +58,7 @@ interface WagerProgressBonus {
   status: string;
 }
 
-interface BalanceResponse {
+export interface BalanceResponse {
   real: number;
   bonus: number;
   withdrawable: number;
