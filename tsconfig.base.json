@@ -17,9 +17,6 @@
     "strictNullChecks": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
-    "baseUrl": ".",
-    "paths": {
-      "@bet62/shared": ["packages/shared/src/index.ts"]
-    }
+    "baseUrl": "."
   }
 }
