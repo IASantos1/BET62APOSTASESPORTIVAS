@@ -861,12 +861,20 @@ export function mapGoaldirEvent(
   return baseEvent;
 }
 
+interface MapOddsContext {
+  eventCompositeId: string;
+}
+
 export function mapOddsBySport(
   odds: unknown,
   sportType: SportType,
-  eventCompositeId: string,
+  ctxOrEventId: string | MapOddsContext,
 ): ProviderMarket[] {
   if (!odds || typeof odds !== 'object') return [];
+  const eventCompositeId: string = typeof ctxOrEventId === 'string'
+    ? ctxOrEventId
+    : ctxOrEventId?.eventCompositeId ?? '';
+  if (!eventCompositeId) return [];
   switch (sportType) {
     case SportType.FOOTBALL:
       return mapFootballOddsToMarkets(odds as FootballOddsShape, { eventCompositeId });

@@ -11,7 +11,23 @@ import { HealthController } from './health.controller';
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().default(3000),
-  REDIS_URL: z.string().url().default('redis://localhost:6379'),
+  REDIS_URL: z
+    .union([z.string().url(), z.string().trim().max(0), z.undefined(), z.null()])
+    .optional()
+    .nullable()
+    .transform((v) => {
+      if (v === null || v === undefined) return 'redis://localhost:6379';
+      const trimmed = String(v).trim();
+      if (trimmed.length === 0) return 'redis://localhost:6379';
+      try {
+        const parsed = new URL(trimmed);
+        if (parsed.protocol === 'redis:' || parsed.protocol === 'rediss:') return parsed.href;
+      } catch {
+        /* fallthrough */
+      }
+      return 'redis://localhost:6379';
+    })
+    .pipe(z.string().url().default('redis://localhost:6379')),
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   CORS_ORIGINS: z.string().optional(),
 });
