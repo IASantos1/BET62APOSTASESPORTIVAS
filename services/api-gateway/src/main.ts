@@ -28,7 +28,7 @@ async function bootstrap() {
     }),
   );
 
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix('api', { exclude: ['health'] });
 
   const config = new DocumentBuilder()
     .setTitle('BET62 API Gateway')
