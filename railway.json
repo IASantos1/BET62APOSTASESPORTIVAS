@@ -16,7 +16,7 @@
     }
   },
   "deploy": {
-    "startCommand": "npm run prisma:migrate:deploy:all && npm run start",
+    "startCommand": "npm run prisma:migrate:deploy:all && npx concurrently --names api,web -c blue,magenta --kill-others-on-fail -m 0 \"npm:start\" \"npm:start:web:railway\"",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
