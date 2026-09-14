@@ -187,7 +187,13 @@ export class KYCService {
             providerRawResponse: decision ? (decision as unknown as object) : undefined,
           },
         });
-        await this.emitLevelUpdated(userId, oldLevel, updated.level, updated.status, externalApplicantId);
+        await this.emitLevelUpdated(
+          userId,
+          oldLevel,
+          updated.level,
+          updated.status as unknown as KYCStatus,
+          externalApplicantId,
+        );
       } else {
         this.logger.warn(
           `Unmapped Didit status "${payload.status}" for session=${externalApplicantId}; no state change applied`,
