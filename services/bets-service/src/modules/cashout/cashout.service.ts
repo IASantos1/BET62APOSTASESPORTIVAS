@@ -162,7 +162,7 @@ export class CashoutService {
           settledAt: newBetStatus === 'CASHOUT' ? now : bet.settledAt,
           actualReturn: newBetStatus === 'CASHOUT' ? record.amountNetToUser : bet.actualReturn,
           actualWinNet: newBetStatus === 'CASHOUT'
-            ? roundAmount(Math.max(0, record.amountNetToUser - toNum(bet.stakeAmount)))
+            ? roundAmount(Math.max(0, toNum(record.amountNetToUser) - toNum(bet.stakeAmount)))
             : bet.actualWinNet,
         },
       });

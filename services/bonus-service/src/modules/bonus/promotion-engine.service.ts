@@ -373,6 +373,9 @@ export class PromotionEngineService {
         rolloverMultiplier: result.rolloverMultiplier,
         expiresAt: result.expiresAt,
         remainingAmount: result.amount,
+        // FreeBet não tem coluna de descrição/tipo; usamos correlationId para
+        // marcar o trigger de origem e permitir consultas como a de baixo.
+        correlationId: result.trigger,
       },
     });
   }
@@ -381,7 +384,7 @@ export class PromotionEngineService {
     const count = await this.prisma.freeBet.count({
       where: {
         userId,
-        description: { contains: 'Primeira Aposta' },
+        correlationId: BonusTrigger.BET_LOST,
       },
     });
     return count > 0;

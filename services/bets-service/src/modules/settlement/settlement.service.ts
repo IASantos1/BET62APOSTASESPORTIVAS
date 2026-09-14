@@ -160,11 +160,15 @@ export class SettlementService {
         if (override) {
           outcomeAfter = override.outcome;
         } else {
-          outcomeAfter = this.resolveSelectionOutcome(bs.marketType, bs.outcome, results);
+          outcomeAfter = this.resolveSelectionOutcome(
+            bs.marketType,
+            bs.outcome as unknown as SelectionOutcome,
+            results,
+          );
         }
         selectionsResults.push({
           selectionId: bs.id,
-          outcomeBefore: bs.status,
+          outcomeBefore: bs.status as unknown as SelectionOutcome,
           outcomeAfter,
         });
         betSelectionUpdateData.push({
