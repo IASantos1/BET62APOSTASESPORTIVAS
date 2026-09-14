@@ -6,6 +6,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { z } from 'zod';
 import { HealthController } from './health.controller';
+import { ApiReverseProxyMiddlewareController } from './api-reverse-proxy.middleware';
 import { WebReverseProxyMiddlewareController } from './web-reverse-proxy.middleware';
 
 const envSchema = z.object({
@@ -76,6 +77,14 @@ const envSchema = z.object({
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
+    consumer
+      .apply(ApiReverseProxyMiddlewareController)
+      .exclude(
+        { path: '/health', method: RequestMethod.ALL },
+        { path: '/health/(.*)', method: RequestMethod.ALL },
+      )
+      .forRoutes('*');
+
     consumer
       .apply(WebReverseProxyMiddlewareController)
       .exclude(

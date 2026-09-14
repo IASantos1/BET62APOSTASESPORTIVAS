@@ -2,7 +2,7 @@
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "npm run prisma:generate:all && npm run build",
+    "buildCommand": "node infra/scripts/prisma-generate-all.mjs && npm run build",
     "buildEnvironmentVariables": {
       "NODE_ENV": "development",
       "NPM_CONFIG_PRODUCTION": "false"
@@ -16,7 +16,7 @@
     }
   },
   "deploy": {
-    "startCommand": "npm run prisma:migrate:deploy:all && npx concurrently --names api,web -c blue,magenta --kill-others-on-fail -m 0 \"npm:start\" \"npm:start:web:railway\"",
+    "startCommand": "npm run start:railway",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",

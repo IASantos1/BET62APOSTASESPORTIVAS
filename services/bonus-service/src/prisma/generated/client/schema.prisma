@@ -1,0 +1,259 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/prisma/generated/client"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["bonus"]
+}
+
+enum BonusType {
+  WELCOME_MATCH
+  RELOAD_MATCH
+  FREEBET
+  FREE_SPINS
+  CASHBACK_LOSS
+  CASHBACK_DEPOSIT
+  RISK_FREE_BET
+  REFERRAL
+  LOYALTY
+  COMP_POINTS
+  NO_DEPOSIT
+  PERSONALIZED
+
+  @@schema("bonus")
+}
+
+enum BonusStatus {
+  AVAILABLE
+  ACTIVE
+  LOCKED
+  ROLLOVER_COMPLETE
+  RELEASED
+  EXPIRED
+  CANCELLED
+  USED
+  VOID
+
+  @@schema("bonus")
+}
+
+enum BonusTrigger {
+  MANUAL
+  FIRST_DEPOSIT
+  DEPOSIT
+  SIGNUP
+  BET_WON
+  BET_LOST
+  LOYALTY_LEVEL
+  REFERRAL_SIGNUP
+  REFERRAL_DEPOSIT
+  WEEKLY_SCHEDULED
+  MONTHLY_SCHEDULED
+  CAMPAIGN_CODE
+  BIRTHDAY
+
+  @@schema("bonus")
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  EXPIRED
+  ARCHIVED
+
+  @@schema("bonus")
+}
+
+enum CasinoContributionCategory {
+  SLOTS_ONLY
+  STANDARD_MIX
+  TABLES_ONLY
+  LIVE_DEALER_EXCLUDED
+  SPORTS_ONLY
+
+  @@schema("bonus")
+}
+
+enum RolloverStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+  EXPIRED
+  FORFEITED
+  RELEASED
+
+  @@schema("bonus")
+}
+
+model BonusCampaign {
+  id                           String                      @id @default(uuid())
+  name                         String                      @unique @db.VarChar(128)
+  code                         String?                     @unique
+  bonusType                    BonusType
+  trigger                      BonusTrigger
+  status                       CampaignStatus              @default(DRAFT)
+  matchPercent                 Decimal?                    @db.Decimal(5, 2)
+  maxAmount                    Decimal?                    @db.Decimal(14, 2)
+  minDepositAmount             Decimal?                    @db.Decimal(14, 2)
+  minOddsRequirement           Decimal?                    @db.Decimal(5, 2)
+  rolloverMultiplier           Decimal?                    @default(1) @db.Decimal(5, 2)
+  rolloverContributionCategory CasinoContributionCategory?
+  startsAt                     DateTime?
+  expiresAt                    DateTime?
+  validityDays                 Int?
+  freeSpinsCount               Int?
+  freeSpinsGameId              String?
+  eligibleCountries            String[]                    @default([])
+  eligibleSports               String[]                    @default([])
+  sportMinOdds                 Decimal?                    @db.Decimal(5, 2)
+  maxBonusPerUser              Decimal?                    @db.Decimal(14, 2)
+  wageringSportAllowed         Boolean                     @default(true)
+  wageringCasinoAllowed        Boolean                     @default(true)
+  description                  String?
+  termsHtml                    String?                     @db.Text
+  metadata                     Json?
+  isPromo                      Boolean                     @default(false)
+  createdBy                    String?
+  createdAt                    DateTime                    @default(now())
+  updatedAt                    DateTime                    @updatedAt
+  deletedAt                    DateTime?
+
+  userBonuses     UserBonus[]
+  freeBets        FreeBet[]
+  casinoFreeSpins CasinoFreeSpin[]
+
+  @@index([status, trigger, bonusType])
+  @@index([code])
+  @@index([expiresAt])
+  @@map("bonus_campaign")
+  @@schema("bonus")
+}
+
+model UserBonus {
+  id                           String                      @id @default(uuid())
+  userId                       String
+  campaignId                   String?
+  bonusType                    BonusType
+  status                       BonusStatus                 @default(ACTIVE)
+  grantedAmount                Decimal                     @db.Decimal(14, 2)
+  grantedCurrency              String                      @default("EUR") @db.VarChar(8)
+  maxAmount                    Decimal?                    @db.Decimal(14, 2)
+  usedAmount                   Decimal?                    @default(0) @db.Decimal(14, 2)
+  releasedAmount               Decimal?                    @default(0) @db.Decimal(14, 2)
+  minOddsRequirement           Decimal?                    @db.Decimal(5, 2)
+  rolloverMultiplier           Decimal?                    @default(1) @db.Decimal(5, 2)
+  rolloverContributionCategory CasinoContributionCategory?
+  rolloverRequiredTotal        Decimal                     @db.Decimal(14, 2)
+  rolloverCompletedReal        Decimal                     @default(0) @db.Decimal(14, 2)
+  rolloverCompletedWeighted    Decimal                     @default(0) @db.Decimal(14, 2)
+  rolloverPercent              Decimal?                    @db.Decimal(5, 2)
+  rolloverStatus               RolloverStatus              @default(NOT_STARTED)
+  grantedAt                    DateTime                    @default(now())
+  activatedAt                  DateTime?
+  expiresAt                    DateTime?
+  lastContributionAt           DateTime?
+  releasedAt                   DateTime?
+  cancelledAt                  DateTime?
+  cancelledReason              String?
+  referenceDepositId           String?
+  promocodeUsed                String?
+  freebetIdExternal            String?
+  description                  String?
+  noteAdmin                    String?
+  createdByAdminId             String?
+  metadata                     Json?
+  walletId                     String?
+
+  campaign              BonusCampaign?        @relation(fields: [campaignId], references: [id])
+  rolloverLedgerEntries RolloverLedgerEntry[]
+
+  @@index([userId, status])
+  @@index([userId, campaignId])
+  @@index([userId, expiresAt])
+  @@index([rolloverStatus])
+  @@map("user_bonus")
+  @@schema("bonus")
+}
+
+model RolloverLedgerEntry {
+  id                         String   @id @default(uuid())
+  userBonusId                String
+  transactionDate            DateTime @default(now())
+  betId                      String?
+  casinoRoundId              String?
+  wageredAmount              Decimal  @db.Decimal(12, 2)
+  sourceType                 String   @db.VarChar(32)
+  sportType                  String?
+  casinoCategory             String?
+  contributionPercent        Decimal? @db.Decimal(5, 2)
+  weightedContributionAmount Decimal? @db.Decimal(12, 2)
+  oddsAtBet                  Decimal? @db.Decimal(7, 3)
+  winningAmount              Decimal? @db.Decimal(12, 2)
+  selectionCount             Int?
+  referenceCorrelationId     String?
+
+  userBonus UserBonus @relation(fields: [userBonusId], references: [id], onDelete: Cascade)
+
+  @@index([userBonusId, transactionDate])
+  @@index([betId])
+  @@index([casinoRoundId])
+  @@map("rollover_ledger_entry")
+  @@schema("bonus")
+}
+
+model FreeBet {
+  id                   String      @id @default(uuid())
+  userId               String
+  campaignId           String?
+  bonusId              String?
+  status               BonusStatus @default(ACTIVE)
+  amount               Decimal     @db.Decimal(14, 2)
+  minOddsRequirement   Decimal     @default(1.5) @db.Decimal(5, 2)
+  rolloverMultiplier   Decimal?    @default(1) @db.Decimal(5, 2)
+  sportTypeRestriction String?
+  leagueRestriction    String?
+  startsAt             DateTime?
+  expiresAt            DateTime?
+  usedAt               DateTime?
+  usedBetId            String?
+  remainingAmount      Decimal?    @db.Decimal(14, 2)
+  grantedBy            String?
+  correlationId        String?
+  deletedAt            DateTime?   @db.Timestamptz
+
+  campaign BonusCampaign? @relation(fields: [campaignId], references: [id])
+
+  @@index([userId, status])
+  @@index([userId, expiresAt])
+  @@map("free_bet")
+  @@schema("bonus")
+}
+
+model CasinoFreeSpin {
+  id               String      @id @default(uuid())
+  userId           String
+  campaignId       String?
+  bonusId          String?
+  gameId           String
+  gameProvider     String      @db.VarChar(64)
+  countTotal       Int
+  countUsed        Int         @default(0)
+  status           BonusStatus @default(ACTIVE)
+  betAmountPerSpin Decimal?    @db.Decimal(10, 4)
+  expiresAt        DateTime?
+  usedAt           DateTime?
+  correlationId    String?
+
+  campaign BonusCampaign? @relation(fields: [campaignId], references: [id])
+
+  @@index([userId, status])
+  @@index([userId, expiresAt])
+  @@index([userId, gameId])
+  @@map("casino_free_spin")
+  @@schema("bonus")
+}

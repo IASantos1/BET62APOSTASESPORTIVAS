@@ -1,0 +1,371 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/prisma/generated/client"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["odds"]
+}
+
+enum EventStatus {
+  PRE_MATCH
+  PRE_LIVE
+  LIVE
+  HALF_TIME
+  ENDED
+  FINISHED
+  SUSPENDED
+  POSTPONED
+  CANCELLED
+  ABANDONED
+  INTERRUPTED
+  WALKOVER
+
+  @@schema("odds")
+}
+
+enum MarketType {
+  MATCH_WINNER_1X2
+  MATCH_WINNER_12
+  OVER_UNDER_TOTAL
+  OVER_UNDER_HOME
+  OVER_UNDER_AWAY
+  BTTS_YES_NO
+  CORRECT_SCORE
+  HALF_TIME_RESULT
+  HALF_TIME_FULL_TIME
+  DOUBLE_CHANCE
+  ASIAN_HANDICAP
+  EUROPEAN_HANDICAP
+  FIRST_GOAL_SCORER
+  ANYTIME_GOAL_SCORER
+  EXACT_GOALS
+  MATCH_RESULT_BOTH_TEAMS_TO_SCORE
+  DRAW_NO_BET
+  TOTAL_CORNERS
+  TOTAL_CARDS
+  NEXT_GOAL
+  WINNING_MARGIN
+  SET_WINNER
+  GAME_WINNER
+  TIE_NO_BET
+  TOTAL_POINTS
+  MONEYLINE
+  SPREAD
+  TOTAL
+
+  @@schema("odds")
+}
+
+enum MarketStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+  SETTLED
+
+  @@schema("odds")
+}
+
+enum SelectionOutcome {
+  HOME
+  DRAW
+  AWAY
+  OVER
+  UNDER
+  YES
+  NO
+  WON
+  LOST
+  VOID
+  PENDING
+  HALF_WON
+  HALF_LOST
+
+  @@schema("odds")
+}
+
+enum LiveEventType {
+  GOAL_HOME
+  GOAL_AWAY
+  OWN_GOAL_HOME
+  OWN_GOAL_AWAY
+  YELLOW_CARD
+  RED_CARD
+  SECOND_YELLOW
+  SUBSTITUTION
+  PENALTY_MISSED
+  PENALTY_SCORED
+  KICK_OFF
+  HALF_TIME_BEGIN
+  HALF_TIME_END
+  END_OF_REGULATION
+  EXTRA_TIME_BEGIN
+  PENALTY_SHOOTOUT_BEGIN
+  MATCH_ENDED
+  MATCH_SUSPENDED
+  MATCH_POSTPONED
+  INJURY
+  VAR_REVIEW
+  GAME_SCORE
+  SET_WON
+  MATCH_WON
+  TIMEOUT
+
+  @@schema("odds")
+}
+
+model Sport {
+  id         String  @id @default(uuid())
+  code       String  @unique
+  name       String
+  active     Boolean @default(true)
+  orderIndex Int     @default(0)
+  iconUrl    String?
+
+  leagues League[]
+  teams   Team[]
+  events  Event[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @db.Timestamptz
+
+  @@index([code])
+  @@index([active, orderIndex])
+  @@map("sport")
+  @@schema("odds")
+}
+
+model Country {
+  id   String  @id @default(uuid())
+  code String  @unique
+  name String
+  flag String?
+
+  leagues League[]
+  teams   Team[]
+
+  @@map("country")
+  @@schema("odds")
+}
+
+model League {
+  id               String  @id @default(uuid())
+  providerLeagueId String  @unique
+  name             String
+  sportId          String
+  countryId        String?
+  tier             Int?
+  active           Boolean @default(true)
+  isTop            Boolean @default(false)
+
+  sport   Sport    @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  country Country? @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  events  Event[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([sportId])
+  @@index([countryId])
+  @@index([sportId, active, isTop])
+  @@map("league")
+  @@schema("odds")
+}
+
+model Team {
+  id             String   @id @default(uuid())
+  providerTeamId String   @unique
+  name           String
+  shortName      String?
+  logoUrl        String?
+  sportId        String
+  countryId      String?
+  aliases        String[]
+
+  sport   Sport    @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  country Country? @relation(fields: [countryId], references: [id], onDelete: SetNull)
+
+  homeEvents Event[] @relation("HomeTeam")
+  awayEvents Event[] @relation("AwayTeam")
+
+  @@index([sportId])
+  @@map("team")
+  @@schema("odds")
+}
+
+model Event {
+  id                    String      @id @default(uuid())
+  providerEventId       String      @unique
+  name                  String
+  sportId               String
+  leagueId              String
+  homeTeamId            String?
+  awayTeamId            String?
+  homeTeamName          String?
+  awayTeamName          String?
+  homeScore             Int?
+  awayScore             Int?
+  homeHalfScore         Int?
+  awayHalfScore         Int?
+  extraTimeScore        String?
+  penaltyScore          String?
+  status                EventStatus @default(PRE_MATCH)
+  kickoffAt             DateTime
+  liveStartedAt         DateTime?
+  liveUpdatedAt         DateTime?
+  firstHalfStart        DateTime?
+  secondHalfStart       DateTime?
+  minuteOfMatch         Int?
+  injuryMinutes         Int?
+  liveCoverageAvailable Boolean?    @default(false)
+  liveStreamAvailable   Boolean?    @default(false)
+  streamUrl             String?
+  eventMeta             Json?
+  isTop                 Boolean?    @default(false)
+  isFeatured            Boolean?    @default(false)
+  oddsLastCheckedAt     DateTime?
+  marketsCount          Int         @default(0)
+  activeBetCount        Int         @default(0)
+  settledAt             DateTime?
+  winner                String?
+  slug                  String?     @unique
+
+  sport    Sport  @relation(fields: [sportId], references: [id], onDelete: Cascade)
+  league   League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  homeTeam Team?  @relation("HomeTeam", fields: [homeTeamId], references: [id], onDelete: SetNull)
+  awayTeam Team?  @relation("AwayTeam", fields: [awayTeamId], references: [id], onDelete: SetNull)
+
+  markets     Market[]
+  liveUpdates LiveMatchUpdate[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([sportId])
+  @@index([leagueId])
+  @@index([status])
+  @@index([kickoffAt])
+  @@index([providerEventId])
+  @@index([sportId, status, kickoffAt])
+  @@index([status, kickoffAt])
+  @@map("event")
+  @@schema("odds")
+}
+
+model Market {
+  id               String       @id @default(uuid())
+  providerMarketId String       @unique
+  eventId          String
+  type             MarketType
+  name             String
+  specifiers       Json?
+  handicapValue    Decimal?
+  totalLineValue   Decimal?
+  period           String?
+  status           MarketStatus @default(ACTIVE)
+  displayedName    String?
+  cashoutAvailable Boolean      @default(true)
+  firstCashoutAt   DateTime?
+  lastSuspendedAt  DateTime?
+  suspendedReason  String?
+  source           String?
+  openDate         DateTime?
+  closeDate        DateTime?
+
+  event      Event             @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  selections MarketSelection[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([eventId])
+  @@index([eventId, status])
+  @@index([eventId, type])
+  @@map("market")
+  @@schema("odds")
+}
+
+model MarketSelection {
+  id                  String           @id @default(uuid())
+  providerSelectionId String           @unique
+  marketId            String
+  name                String
+  outcome             SelectionOutcome
+  odds                Decimal
+  oddsDisplay         String?
+  status              MarketStatus     @default(ACTIVE)
+  probabilityPercent  Decimal?
+  handicapValue       Decimal?
+  totalLineValue      Decimal?
+  originalOdds        Decimal?
+  lastChangedAt       DateTime?
+  lastChangedBy       String?
+  isTrendingUp        Boolean          @default(false)
+  isBestOffered       Boolean          @default(true)
+  meta                Json?
+
+  market Market @relation(fields: [marketId], references: [id], onDelete: Cascade)
+
+  @@index([marketId])
+  @@index([marketId, status])
+  @@index([providerSelectionId])
+  @@map("market_selection")
+  @@schema("odds")
+}
+
+model LiveMatchUpdate {
+  id               String        @id @default(uuid())
+  eventId          String
+  type             LiveEventType
+  minute           Int?
+  homeScore        Int?
+  awayScore        Int?
+  homeHalfScore    Int?
+  awayHalfScore    Int?
+  period           String?
+  incidentData     Json?
+  playerName       String?
+  teamSide         String?
+  clockMinutes     Int?
+  stoppageMinutes  Int?
+  extraTime        Boolean?
+  matchStatusAfter EventStatus?
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@index([eventId])
+  @@index([eventId, createdAt])
+  @@index([type])
+  @@map("live_match_update")
+  @@schema("odds")
+}
+
+model ProviderSyncState {
+  id                    String    @id @default(uuid())
+  provider              String    @unique
+  lastFullSyncAt        DateTime?
+  lastIncrementalSyncAt DateTime?
+  nextSyncAt            DateTime?
+  eventsCreated         Int       @default(0)
+  marketsCreated        Int       @default(0)
+  oddsUpdatedCount      Int       @default(0)
+  lastEventId           String?
+  lastChangeId          String?
+  state                 Json?
+  syncErrors            Int       @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("provider_sync_state")
+  @@schema("odds")
+}
