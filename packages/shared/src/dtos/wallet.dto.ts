@@ -70,6 +70,32 @@ export class CreateDepositDto {
   metadata?: Record<string, unknown>;
 }
 
+export class WithdrawalBeneficiaryDto {
+  @IsOptional()
+  @IsString()
+  accountHolderName?: string;
+
+  @IsOptional()
+  @IsString()
+  iban?: string;
+
+  @IsOptional()
+  @IsString()
+  bicSwift?: string;
+
+  @IsOptional()
+  @IsString()
+  bankName?: string;
+
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @IsOptional()
+  @IsObject()
+  stripeConnectId?: unknown;
+}
+
 export class RequestWithdrawalDto {
   @IsEnum({
     STRIPE: "STRIPE",
@@ -100,32 +126,6 @@ export class RequestWithdrawalDto {
 
   @IsOptional()
   tfaCode?: string;
-}
-
-export class WithdrawalBeneficiaryDto {
-  @IsOptional()
-  @IsString()
-  accountHolderName?: string;
-
-  @IsOptional()
-  @IsString()
-  iban?: string;
-
-  @IsOptional()
-  @IsString()
-  bicSwift?: string;
-
-  @IsOptional()
-  @IsString()
-  bankName?: string;
-
-  @IsOptional()
-  @IsString()
-  country?: string;
-
-  @IsOptional()
-  @IsObject()
-  stripeConnectId?: unknown;
 }
 
 export class WalletTransactionsQueryDto {

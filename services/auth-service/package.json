@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "postbuild": "node -e \"try{const fs=require('fs');const p=require('path');const s=p.join(__dirname,'src','prisma','generated');const d=p.join(__dirname,'dist','prisma','generated');fs.existsSync(s)&&fs.cpSync(s,d,{recursive:true,force:true});console.log('[postbuild] prisma/generated copiado para dist/prisma/generated')}catch(e){console.warn('[postbuild] skip copy prisma:', e.message)}\"",
     "dev": "nest start --watch",
     "start": "nest start",
     "start:prod": "node dist/main",
