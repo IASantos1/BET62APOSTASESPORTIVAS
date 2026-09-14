@@ -13,6 +13,7 @@ import * as otplib from 'otplib';
 const authenticator: any = (otplib as any).authenticator ?? (otplib as any).TOTP ?? (otplib as any).totp ?? otplib;
 import * as qrcode from 'qrcode';
 import { PrismaService } from '../prisma/prisma.service';
+import type { Prisma } from '../prisma/generated/client';
 import { RedisEventService } from '../events/redis-event.service';
 import { JwtBlacklistService } from './jwt-blacklist.service';
 import type {
@@ -240,7 +241,7 @@ export class AuthService {
         tokenHash,
         ipAddress: opts?.ipAddress ?? undefined,
         userAgent: opts?.userAgent ?? undefined,
-        location: opts?.location ?? undefined,
+        location: opts?.location as Prisma.InputJsonValue | undefined,
         expiresAt,
         isActive: true,
       },
@@ -248,7 +249,7 @@ export class AuthService {
         tokenHash,
         ipAddress: opts?.ipAddress ?? undefined,
         userAgent: opts?.userAgent ?? undefined,
-        location: opts?.location ?? undefined,
+        location: opts?.location as Prisma.InputJsonValue | undefined,
         expiresAt,
         isActive: true,
         revokedAt: null,
@@ -375,7 +376,7 @@ export class AuthService {
     if (!valid) {
       return null;
     }
-    return user;
+    return { ...user, twoFactorType: user.twoFactorType as unknown as TwoFactorType };
   }
 
   async login(
@@ -443,7 +444,7 @@ export class AuthService {
             userId: user.userId,
             email: user.email,
             roles: user.roles,
-            twoFactorType: user.twoFactorType,
+            twoFactorType: user.twoFactorType as unknown as TwoFactorType,
           },
           tokens: {
             accessToken: '',
@@ -498,7 +499,7 @@ export class AuthService {
         userId: user.userId,
         email: user.email,
         roles: user.roles,
-        twoFactorType: user.twoFactorType,
+        twoFactorType: user.twoFactorType as unknown as TwoFactorType,
       },
       tokens,
       twoFactorRequired: false,
@@ -820,7 +821,7 @@ export class AuthService {
     if (!user) {
       throw new NotFoundException('Usuário não encontrado');
     }
-    return user;
+    return { ...user, twoFactorType: user.twoFactorType as unknown as TwoFactorType };
   }
 
   async twoFactorEnable(userId: string): Promise<{
