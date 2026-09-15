@@ -33,6 +33,8 @@ packages/*/dist/
 services/*/dist/
 apps/*/dist/
 services/*/prisma/generated/
+services/*/src/prisma/generated/
+packages/*/src/prisma/generated/
 prisma/generated/
 checkpoint-nodejs/
 
