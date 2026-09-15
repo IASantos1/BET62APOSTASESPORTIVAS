@@ -33,6 +33,12 @@
 
   html {
     scroll-behavior: smooth;
+    /* Varias paginas usam "orbs" decorativos com w-[Npx] absolutamente
+       posicionados (ex: w-[620px] a left-1/4) que ultrapassam a largura do
+       ecra em mobile. overflow-x aqui (na raiz, nao no body) corta o bleed
+       sem criar um novo contexto de scroll entre o header sticky e a
+       viewport, entao position: sticky continua a funcionar normalmente. */
+    overflow-x: hidden;
   }
 
   body {
@@ -40,6 +46,7 @@
     color: white;
     margin: 0;
     padding: 0;
+    max-width: 100vw;
   }
 
   ::selection {

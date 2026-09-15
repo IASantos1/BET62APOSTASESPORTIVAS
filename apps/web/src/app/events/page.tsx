@@ -307,9 +307,9 @@ export default function EventsPage() {
             </motion.div>
 
             <Tabs value={sport} onValueChange={(v) => setSport(v as SportId)} className="mb-4">
-              <TabsList>
+              <TabsList className="max-w-full overflow-x-auto whitespace-nowrap justify-start">
                 {SPORT_TABS.map((s) => (
-                  <TabsTrigger key={s.id} value={s.id} className="!py-2 !px-4">
+                  <TabsTrigger key={s.id} value={s.id} className="!py-2 !px-4 shrink-0">
                     <span className="inline-flex items-center gap-2">
                       <s.icon size={16} />
                       {s.label}
@@ -381,9 +381,9 @@ export default function EventsPage() {
                         {open ? (
                           <div className="border-t border-bet62-border/70 divide-y divide-bet62-border/50">
                             {matches.map((m, idx) => (
-                              <div key={m.id} className="p-4 md:px-5 md:py-4 grid lg:grid-cols-[1.1fr_minmax(0,2fr)] items-center gap-4">
-                                <div>
-                                  <div className="flex items-center gap-2 text-[11px] text-white/50 mb-2">
+                              <div key={m.id} className="p-4 md:px-5 md:py-4 grid grid-cols-1 lg:grid-cols-[1.1fr_minmax(0,2fr)] items-center gap-4">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2 text-[11px] text-white/50 mb-2 flex-wrap">
                                     <Clock size={11} />
                                     <Countdown target={m.kickoffAt} size="sm" variant="minimal" />
                                     <span className="mx-1">·</span>
@@ -453,9 +453,9 @@ export default function EventsPage() {
                       .filter((m) => applyDate(m.kickoffAt))
                       .filter((m) => searchOk(`${m.home} ${m.away} ${m.league}`))
                       .map((m, i) => (
-                        <div key={m.id} className="p-4 grid lg:grid-cols-[1.2fr_minmax(0,2fr)] gap-4 items-center">
-                          <div>
-                            <div className="flex items-center gap-2 text-[11px] text-white/50 mb-2">
+                        <div key={m.id} className="p-4 grid grid-cols-1 lg:grid-cols-[1.2fr_minmax(0,2fr)] gap-4 items-center">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 text-[11px] text-white/50 mb-2 flex-wrap">
                               <span className="text-base">{m.flag}</span>
                               {m.league} ·
                               <Countdown target={m.kickoffAt} size="sm" variant="minimal" />
@@ -465,7 +465,7 @@ export default function EventsPage() {
                                 <span className="ml-auto"><Badge variant="pink" dot className="py-0">HOT</Badge></span>
                               ) : null}
                             </div>
-                            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                            <div className="min-w-0 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
                               <div className="flex items-center gap-2 min-w-0">
                                 <TeamInitials color="accent" name={m.home} />
                                 <p className="font-semibold truncate">{m.home}</p>
@@ -511,8 +511,8 @@ export default function EventsPage() {
                       .filter((m) => applyDate(m.kickoffAt))
                       .filter((m) => searchOk(`${m.p1} ${m.p2} ${m.tour} ${m.round}`))
                       .map((m) => (
-                        <div key={m.id} className="p-4 grid lg:grid-cols-[1.2fr_minmax(0,2fr)] gap-4 items-center">
-                          <div>
+                        <div key={m.id} className="p-4 grid grid-cols-1 lg:grid-cols-[1.2fr_minmax(0,2fr)] gap-4 items-center">
+                          <div className="min-w-0">
                             <div className="flex items-center gap-2 text-[11px] text-white/50 mb-2 flex-wrap">
                               <span className="text-base">{m.flag}</span>
                               <span className="font-semibold text-bet62-secondary">{m.tour}</span>
@@ -521,7 +521,7 @@ export default function EventsPage() {
                               <span className="mx-1">·</span>
                               {m.marketsCount} mercados
                             </div>
-                            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                            <div className="min-w-0 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
                               <div className="flex items-center gap-2 min-w-0">
                                 <TeamInitials color="primary" name={m.p1} />
                                 <p className="font-semibold truncate">{m.p1}</p>

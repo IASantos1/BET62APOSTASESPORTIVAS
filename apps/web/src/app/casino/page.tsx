@@ -157,12 +157,12 @@ export default function CasinoPage() {
           >
             <div className={`absolute inset-0 bg-gradient-to-br from-bet62-secondary/20 via-bet62-bg to-bet62-primary/10`} />
             <div className="absolute -left-24 -bottom-24 w-[520px] h-[520px] rounded-full bg-bet62-gradient opacity-20 blur-3xl animate-pulse-slow" />
-            <div className="relative grid lg:grid-cols-[1.3fr_1fr] gap-8 items-center p-8 md:p-12">
-              <div>
+            <div className="relative grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-8 items-center p-5 md:p-12">
+              <div className="min-w-0">
                 <Badge variant="pink" className="mb-4 py-1 px-3">
                   <Dices size={13} className="mr-1" /> Cassino BET62
                 </Badge>
-                <h1 className="text-5xl md:text-6xl font-black tracking-tight leading-[1.05]">
+                <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-[1.05]">
                   <span className="block">
                     <span className="text-bet62-primary">Cassino</span>{' '}
                     <span className="text-bet62-white">BET62</span>
@@ -186,7 +186,7 @@ export default function CasinoPage() {
                   </Button>
                 </div>
               </div>
-              <div>
+              <div className="min-w-0">
                 <Card glow="secondary">
                   <CardContent className="p-6 space-y-5">
                     <div className="flex items-center justify-between">
@@ -197,7 +197,7 @@ export default function CasinoPage() {
                     </div>
                     <div className="text-center">
                       <p className="text-[10px] uppercase tracking-[0.25em] text-white/50">Total da Rede</p>
-                      <p className="font-mono font-black text-4xl md:text-5xl text-bet62-secondary mt-1">
+                      <p className="font-mono font-black text-2xl sm:text-3xl md:text-5xl text-bet62-secondary mt-1">
                         {formatCurrencyEUR(jpTotal)}
                       </p>
                       <Progress value={Math.min(100, (jpTotal / 25_000_000) * 100)} variant="secondary" className="mt-5" size="md" />
@@ -215,7 +215,7 @@ export default function CasinoPage() {
                               <p className="text-[11px] text-white/50">{g.provider}</p>
                             </div>
                           </div>
-                          <p className="font-mono font-bold text-bet62-secondary">{formatCurrencyEUR(g.jackpotValue ?? 0)}</p>
+                          <p className="font-mono font-bold text-bet62-secondary text-xs sm:text-sm shrink-0 ml-2">{formatCurrencyEUR(g.jackpotValue ?? 0)}</p>
                         </div>
                       ))}
                     </div>
@@ -340,9 +340,9 @@ export default function CasinoPage() {
                             <span className="font-mono text-bet62-primary shrink-0">RTP {g.rtp}%</span>
                           </div>
                           {g.jackpot && g.jackpotValue ? (
-                            <div className="mt-2 rounded-lg bg-bet62-secondary/10 border border-bet62-secondary/25 px-2 py-1.5 flex items-center justify-between">
+                            <div className="mt-2 rounded-lg bg-bet62-secondary/10 border border-bet62-secondary/25 px-2 py-1.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-0.5">
                               <span className="text-[10px] uppercase tracking-widest text-bet62-secondary font-bold">Jackpot</span>
-                              <span className="font-mono font-bold text-xs text-bet62-secondary">
+                              <span className="font-mono font-bold text-[10px] sm:text-xs text-bet62-secondary">
                                 {formatCurrencyEUR(g.jackpotValue)}
                               </span>
                             </div>

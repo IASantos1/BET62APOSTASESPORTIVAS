@@ -242,8 +242,8 @@ export default function CarteiraPage() {
                     </TabsList>
 
                     <TabsContent value="depositos">
-                      <div className="rounded-2xl border border-bet62-border overflow-hidden">
-                        <table className="w-full text-sm">
+                      <div className="rounded-2xl border border-bet62-border overflow-x-auto">
+                        <table className="w-full min-w-[480px] text-sm">
                           <thead>
                             <tr className="bg-bet62-surface/60 border-b border-bet62-border">
                               <th className="text-left px-3 md:px-4 py-3 text-white/50 font-semibold uppercase tracking-wider text-[11px]">Data</th>
@@ -280,8 +280,8 @@ export default function CarteiraPage() {
                     </TabsContent>
 
                     <TabsContent value="levantamentos">
-                      <div className="rounded-2xl border border-bet62-border overflow-hidden">
-                        <table className="w-full text-sm">
+                      <div className="rounded-2xl border border-bet62-border overflow-x-auto">
+                        <table className="w-full min-w-[480px] text-sm">
                           <thead>
                             <tr className="bg-bet62-surface/60 border-b border-bet62-border">
                               <th className="text-left px-3 md:px-4 py-3 text-white/50 font-semibold uppercase tracking-wider text-[11px]">Data</th>
@@ -318,8 +318,8 @@ export default function CarteiraPage() {
                     </TabsContent>
 
                     <TabsContent value="apostas">
-                      <div className="rounded-2xl border border-bet62-border overflow-hidden">
-                        <table className="w-full text-sm">
+                      <div className="rounded-2xl border border-bet62-border overflow-x-auto">
+                        <table className="w-full min-w-[480px] text-sm">
                           <thead>
                             <tr className="bg-bet62-surface/60 border-b border-bet62-border">
                               <th className="text-left px-3 md:px-4 py-3 text-white/50 font-semibold uppercase tracking-wider text-[11px]">Data</th>

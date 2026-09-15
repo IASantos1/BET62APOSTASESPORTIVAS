@@ -225,10 +225,10 @@ export default function LivePage() {
           <Tabs defaultValue={sport} onValueChange={setSport} className="mb-6">
             <TabsList className="h-auto p-1.5 overflow-x-auto whitespace-nowrap w-full max-w-full justify-start">
               {SPORTS.map((s) => (
-                <TabsTrigger key={s.id} value={s.id} className="!py-2 !px-3">
+                <TabsTrigger key={s.id} value={s.id} className="!py-2 !px-3 shrink-0">
                   <span className="inline-flex items-center gap-2">
                     <s.icon size={14} />
-                    <span className="hidden sm:inline">{s.label}</span>
+                    <span>{s.label}</span>
                     <Badge variant="green" dot className="py-0 px-1.5 text-[10px]">
                       {s.live}
                     </Badge>
