@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import type { Sport, League } from '@bet62/shared';
 import { SportType } from '@bet62/shared';
 import {
@@ -131,7 +131,7 @@ export class CustomOddsProviderService extends AbstractOddsProvider {
   readonly timeoutMs: number;
   readonly customHeaders: Record<string, string>;
 
-  constructor(config: CustomOddsProviderConfig = {}) {
+  constructor(@Optional() config: CustomOddsProviderConfig = {}) {
     super();
     this.baseUrl = (config.baseUrl ?? process.env.ODDS_PROVIDER_BASE_URL ?? '').replace(/\/+$/, '');
     this.apiKey = config.apiKey ?? process.env.ODDS_PROVIDER_API_KEY ?? '';

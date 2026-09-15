@@ -370,6 +370,9 @@ export class MockOddsProviderService extends AbstractOddsProvider implements Odd
   }
 
   private startLiveSimulatorJob() {
+    if (this.schedulerRegistry.doesExist('cron', 'mock-live-simulator')) {
+      return;
+    }
     const job = CronJob.from({
       cronTime: '*/10 * * * * *',
       onTick: () => this.tickLiveSimulator(),
