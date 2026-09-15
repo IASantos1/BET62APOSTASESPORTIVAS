@@ -7,7 +7,9 @@
 # nas camadas da imagem), e o comportamento do npm que omite devDependencies quando
 # NODE_ENV=production esta setado no ambiente de build.
 
-FROM node:22-bookworm-slim AS base
+# Versao fixada (ver .nvmrc / .node-version) em vez da tag flutuante "22-bookworm-slim":
+# evita que uma atualizacao de patch do Node quebre o build silenciosamente.
+FROM node:22.23.2-bookworm-slim AS base
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
