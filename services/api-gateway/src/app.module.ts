@@ -60,8 +60,12 @@ const envSchema = z.object({
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: async (cfg: ConfigService) => ({
-        ttl: 60,
-        limit: 120,
+        throttlers: [
+          {
+            ttl: 60000,
+            limit: 120,
+          },
+        ],
         ignoreUserAgents: [/googlebot/, /bingbot/],
       }),
     }),
