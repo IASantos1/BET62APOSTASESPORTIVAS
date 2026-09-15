@@ -14,7 +14,11 @@ RUN apt-get update \
 WORKDIR /app
 
 FROM base AS build
-ENV NODE_ENV=development
+# NODE_ENV fica DESLIGADO aqui de proposito: "npm ci --include=dev" ja garante as
+# devDependencies independente do NODE_ENV, e o `next build` do apps/web precisa
+# controlar o proprio NODE_ENV internamente (ele mesmo o forca para "production").
+# Fixar NODE_ENV=development aqui quebra o build do Next (bundles React dev/prod
+# misturados, causando "useContext" nulo e erros de prerender em todas as paginas).
 COPY . .
 RUN npm ci --include=dev
 RUN npm run build
