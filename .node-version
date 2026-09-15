@@ -1,0 +1,4 @@
+# BET62 — versao do Node.js fixada (mesma do Dockerfile).
+# Prefira .nvmrc (nvm, fnm, volta, asdf); .node-version fica aqui para hosts
+# que leem esse arquivo especificamente.
+22.23.2
