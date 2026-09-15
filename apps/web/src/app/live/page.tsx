@@ -1,7 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
   Radio,
@@ -24,6 +23,7 @@ import {
 import { Header } from '../../components/layout/Header';
 import { Footer } from '../../components/layout/Footer';
 import { Betslip, FloatingBetslipToggle } from '../../components/layout/Betslip';
+import { EventMarketsModal } from '../../components/layout/EventMarketsModal';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -126,6 +126,7 @@ const STATS_META: Array<{ key: 'possession' | 'attacks' | 'dangerous' | 'shotsOn
 
 export default function LivePage() {
   const [betslipOpen, setBetslipOpen] = React.useState(false);
+  const [marketsMatch, setMarketsMatch] = React.useState<LiveMatch | null>(null);
   const [sport, setSport] = React.useState('all');
   const [scores, setScores] = React.useState(() => Object.fromEntries(MATCHES.map((m) => [m.id, [...m.score]])) as Record<string, [number, number]>);
   const addSelection = useBetslipStore((s) => s.addSelection);
@@ -258,12 +259,13 @@ export default function LivePage() {
                               LIVE · {match.period || `${match.minute}'`}
                             </Badge>
                           </div>
-                          <Link
-                            href={`/evento/${match.id}`}
+                          <button
+                            type="button"
+                            onClick={() => setMarketsMatch(match)}
                             className="inline-flex items-center gap-1 text-bet62-primary hover:underline underline-offset-2"
                           >
                             Ver todos mercados <ChevronRight size={12} />
-                          </Link>
+                          </button>
                         </div>
                         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
                           <div className="space-y-2 min-w-0">
@@ -434,6 +436,19 @@ export default function LivePage() {
       </main>
       <Betslip open={betslipOpen} onClose={() => setBetslipOpen(false)} />
       <FloatingBetslipToggle onClick={() => setBetslipOpen(true)} open={betslipOpen} />
+      <EventMarketsModal
+        event={
+          marketsMatch
+            ? { id: marketsMatch.id, home: marketsMatch.home, away: marketsMatch.away, league: marketsMatch.league, minute: marketsMatch.minute, period: marketsMatch.period, live: true, odds: marketsMatch.odds }
+            : null
+        }
+        score={marketsMatch ? scores[marketsMatch.id] ?? marketsMatch.score : undefined}
+        onClose={() => setMarketsMatch(null)}
+        onSelect={({ market, sel, odds, selName, marketName }) => {
+          if (marketsMatch) addOdd(marketsMatch, market, sel, odds, selName, marketName);
+          setMarketsMatch(null);
+        }}
+      />
     </div>
   );
 }

@@ -204,7 +204,7 @@ export default function HomePage() {
                         </div>
                         <div className="text-center">
                           <p className="text-white/60 text-xs uppercase tracking-widest">Prémio Acumulado</p>
-                          <p className="mt-1 font-mono font-black text-4xl md:text-5xl text-bet62-primary">
+                          <p className="mt-1 font-mono font-black text-2xl sm:text-3xl md:text-5xl text-bet62-primary">
                             {formatCurrencyEUR(jackpot)}
                           </p>
                           <Progress value={(jackpot / 200000) * 100} variant="primary" size="md" className="mt-5" />
