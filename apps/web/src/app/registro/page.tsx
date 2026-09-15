@@ -191,11 +191,11 @@ export default function RegistroPage() {
           <ArrowLeft size={14} /> Voltar
         </Link>
 
-        <div className="grid lg:grid-cols-5 gap-8 lg:gap-12 items-start flex-1">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-12 items-start flex-1">
           <motion.div
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            className="lg:col-span-2 space-y-6 sticky top-24"
+            className="min-w-0 lg:col-span-2 space-y-6 lg:sticky lg:top-24"
           >
             <div>
               <Badge variant="pink" dot className="mb-4 py-1 px-3">
@@ -279,7 +279,7 @@ export default function RegistroPage() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="lg:col-span-3"
+            className="min-w-0 lg:col-span-3"
           >
             <Card className="relative overflow-hidden">
               <div className="absolute top-0 inset-x-0 h-1 bg-bet62-primary" />

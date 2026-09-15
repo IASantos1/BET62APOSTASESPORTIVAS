@@ -129,8 +129,8 @@ export default function HomePage() {
               <div className="relative rounded-3xl overflow-hidden border border-bet62-border p-8 md:p-12 bg-gradient-to-br from-bet62-surface via-bet62-bg to-bet62-surface-2">
                 <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full bg-bet62-gradient opacity-20 blur-3xl animate-pulse-slow" />
                 <div className="absolute inset-0 bg-bet62-gradient-soft opacity-40 pointer-events-none" />
-                <div className="relative grid lg:grid-cols-2 gap-8 items-center">
-                  <div>
+                <div className="relative grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+                  <div className="min-w-0">
                     <motion.div
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -191,7 +191,7 @@ export default function HomePage() {
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     transition={{ duration: 0.7, delay: 0.25 }}
-                    className="relative"
+                    className="relative min-w-0"
                   >
                     <Card glow="primary" className="overflow-hidden">
                       <CardContent className="p-6 md:p-8 space-y-6">

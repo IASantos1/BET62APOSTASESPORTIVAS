@@ -146,11 +146,11 @@ export default function LoginPage() {
           <ArrowLeft size={14} /> Voltar para a página inicial
         </Link>
 
-        <div className="grid lg:grid-cols-5 gap-10 lg:gap-16 items-center flex-1">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-10 lg:gap-16 items-center flex-1">
           <motion.div
             initial={{ opacity: 0, x: -24 }}
             animate={{ opacity: 1, x: 0 }}
-            className="lg:col-span-2 space-y-6"
+            className="min-w-0 lg:col-span-2 space-y-6"
           >
             <div>
               <Badge variant="green" dot className="mb-4 py-1 px-3">
@@ -202,7 +202,7 @@ export default function LoginPage() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.08 }}
-            className="lg:col-span-3"
+            className="min-w-0 lg:col-span-3"
           >
             <Card className="relative overflow-hidden">
               <div className="absolute top-0 inset-x-0 h-1 bg-bet62-primary" />
