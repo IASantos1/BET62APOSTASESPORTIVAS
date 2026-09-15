@@ -107,7 +107,7 @@ export function Betslip({ open = true, onClose, floating = true }: BetslipProps)
             floating ? 'fixed right-0 top-0 h-screen w-[min(92vw,380px)] z-[70] shadow-[-12px_0_40px_rgba(0,0,0,0.4)]' : 'w-full h-full',
           )}
         >
-          <header className="h-16 px-4 flex items-center justify-between border-b border-bet62-border shrink-0">
+          <header className="h-16 px-4 flex items-center justify-between border-b border-bet62-border shrink-0 pt-[env(safe-area-inset-top)]">
             <div className="flex items-center gap-2">
               <Ticket className="text-bet62-primary" size={18} />
               <h3 className="font-bold">Apostas</h3>

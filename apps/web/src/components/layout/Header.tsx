@@ -95,7 +95,7 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-bet62-border bg-bet62-bg/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-40 border-b border-bet62-border bg-bet62-bg/80 backdrop-blur-xl pt-[env(safe-area-inset-top)]">
         <div className="mx-auto max-w-[1600px] px-4 lg:px-8 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-6">
             <button
@@ -307,7 +307,7 @@ export function Header() {
               transition={{ type: 'spring', damping: 30, stiffness: 320 }}
               className="fixed top-0 left-0 h-full w-[82vw] max-w-sm z-[60] bg-bet62-bg border-r border-bet62-border shadow-glass flex flex-col lg:hidden"
             >
-              <div className="h-16 flex items-center justify-between px-4 border-b border-bet62-border">
+              <div className="h-16 flex items-center justify-between px-4 border-b border-bet62-border pt-[env(safe-area-inset-top)]">
                 <Bet62Logo />
                 <button
                   onClick={() => setMobileOpen(false)}

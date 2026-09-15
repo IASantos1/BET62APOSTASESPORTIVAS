@@ -4,15 +4,20 @@ import * as React from 'react';
 import { cn } from '../../lib/utils';
 
 export function useCountdown(targetDate: Date | string | number | null) {
-  const [now, setNow] = React.useState(() => Date.now());
+  // `now` so a este de "null" ate o primeiro efeito rodar (so no cliente, pos-
+  // hidratacao) — inicializar com Date.now() direto no useState causaria
+  // mismatch garantido de hidratacao, pois o render do servidor e o primeiro
+  // render do cliente acontecem em instantes diferentes.
+  const [now, setNow] = React.useState<number | null>(null);
 
   React.useEffect(() => {
+    setNow(Date.now());
     if (!targetDate) return;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [targetDate]);
 
-  if (!targetDate) {
+  if (!targetDate || now === null) {
     return { days: 0, hours: 0, minutes: 0, seconds: 0, total: 0, expired: false };
   }
   const t = new Date(targetDate).getTime() - now;
