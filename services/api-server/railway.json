@@ -3,10 +3,10 @@
   "build": {
     "builder": "NIXPACKS",
     "installCommand": "pnpm install --frozen-lockfile",
-    "buildCommand": "pnpm run build"
+    "buildCommand": "pnpm --filter @bet62/db run build && pnpm --filter @bet62/api-server run build"
   },
   "deploy": {
-    "startCommand": "pnpm run start:railway",
+    "startCommand": "pnpm --filter @bet62/api-server run start",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",
