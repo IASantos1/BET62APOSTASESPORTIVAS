@@ -1,19 +1,8 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "node infra/scripts/prisma-generate-all.mjs && npm run build",
-    "buildEnvironmentVariables": {
-      "NODE_ENV": "development",
-      "NPM_CONFIG_PRODUCTION": "false"
-    },
-    "nixpacksPlan": {
-      "phases": {
-        "install": {
-          "cmds": ["npm ci --include=dev --ignore-scripts=false --foreground-scripts"]
-        }
-      }
-    }
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
   },
   "deploy": {
     "startCommand": "npm run start:railway",
