@@ -44,7 +44,16 @@ const envSchema = z.object({
       cache: true,
       envFilePath: ['.env', '../../.env'],
       validate: (config) => {
-        const normalized = config ?? {};
+        const normalized = { ...(config ?? {}) };
+        // Algumas plataformas (Railway incluido) definem env vars nao configuradas
+        // como string vazia em vez de omiti-las. Isso quebra os `.default(...)` do
+        // Zod, que so se aplicam quando o valor e `undefined` — nao quando e "".
+        // Tratamos "" como ausente para TODAS as chaves antes de validar.
+        for (const key of Object.keys(normalized)) {
+          if (normalized[key] === '') {
+            delete normalized[key];
+          }
+        }
         const autoAppUrl = normalized.NEXT_PUBLIC_APP_URL
           ?? normalized.RAILWAY_PUBLIC_DOMAIN
           ?? normalized.RAILWAY_STATIC_URL
