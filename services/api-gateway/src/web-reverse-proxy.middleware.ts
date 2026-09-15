@@ -9,7 +9,12 @@ export class WebReverseProxyMiddlewareController implements NestMiddleware {
 
   use(@Req() req: Request, @Res() res: Response, @Next() next: NextFunction): void {
     try {
-      const url = req.url ?? '/';
+      // IMPORTANTE: usar req.originalUrl, nao req.url. O Nest/Express reescreve
+      // req.url para ficar relativo ao "ponto de montagem" quando o middleware e
+      // registrado via forRoutes('*') — na pratica, req.url vira sempre "/" aqui,
+      // independente do caminho real requisitado. req.originalUrl preserva o
+      // caminho completo original.
+      const url = req.originalUrl ?? req.url ?? '/';
       if (url.startsWith('/api/') || url === '/api' || url.startsWith('/health') || url === '/health') {
         next();
         return;

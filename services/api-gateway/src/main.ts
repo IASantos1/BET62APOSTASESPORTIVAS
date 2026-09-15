@@ -28,7 +28,13 @@ async function bootstrap() {
     }),
   );
 
-  app.setGlobalPrefix('api', { exclude: ['health'] });
+  // Nenhum controller deste gateway precisa de prefixo "/api" (HealthController
+  // ja mapeia /health diretamente); o roteamento de /api/* e feito manualmente
+  // pelo ApiReverseProxyMiddlewareController. setGlobalPrefix aqui so atrapalha:
+  // o Nest passa a rejeitar com 404, ANTES de qualquer middleware rodar,
+  // qualquer requisicao que nao comece com "/api" e nao esteja no exclude —
+  // e isso incluia toda rota do frontend (/, /login, etc.), quebrando o proxy
+  // para o Next.js inteiro.
 
   const config = new DocumentBuilder()
     .setTitle('BET62 API Gateway')

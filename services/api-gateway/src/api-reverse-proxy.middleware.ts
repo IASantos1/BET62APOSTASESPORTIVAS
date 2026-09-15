@@ -49,7 +49,12 @@ function matchRoute(url: string): (typeof SERVICE_ROUTES)[number] | null {
 
 export class ApiReverseProxyMiddlewareController implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction): void {
-    const url = req.url ?? '/';
+    // IMPORTANTE: usar req.originalUrl, nao req.url. O Nest/Express reescreve
+    // req.url para ficar relativo ao "ponto de montagem" quando o middleware e
+    // registrado via forRoutes('*') — na pratica, req.url vira sempre "/" aqui,
+    // independente do caminho real requisitado. req.originalUrl preserva o
+    // caminho completo original.
+    const url = req.originalUrl ?? req.url ?? '/';
     if (url.startsWith('/health') || url === '/health') return next();
     const route = matchRoute(url);
     if (!route) return next();
