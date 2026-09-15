@@ -1,0 +1,6 @@
+{
+  "nixpkgsArchive": "23f9169c4ccce521379e602cc82ed873a1f1b52b",
+  "nixpkgs": ["procps"],
+  "start": "npm run start:prod --workspace=@bet62/api-gateway"
+}
+
