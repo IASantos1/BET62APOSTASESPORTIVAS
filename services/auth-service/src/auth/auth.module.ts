@@ -1,6 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JwtModule, JwtService } from '@nestjs/jwt';
+import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import {
   ThrottlerModule,
@@ -104,6 +104,6 @@ class ThrottlerRedisStorage implements ThrottlerStorage {
       useClass: RolesGuard,
     },
   ],
-  exports: [AuthService, JwtBlacklistService, JwtService, JwtModule],
+  exports: [AuthService, JwtBlacklistService, JwtModule],
 })
 export class AuthModule {}
