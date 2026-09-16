@@ -24,6 +24,10 @@ import {
   CalendarDays,
   AlertTriangle,
   RefreshCw,
+  Info,
+  Server,
+  KeyRound,
+  ExternalLink,
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
@@ -416,13 +420,23 @@ export default function HomePage() {
     const runAll = async () => {
       try {
         const [prematchRes, liveRes] = await Promise.all([
-          apiClient.get<{ events: BaseEvent[] }>('/odds/events/prematch?limit=50', { auth: false }),
-          apiClient.get<{ events: BaseEvent[] }>('/odds/events/live?limit=50', { auth: false }),
+          apiClient.get<{ events: BaseEvent[]; total: number; page: number; limit: number }>('/odds/events/prematch?limit=50', { auth: false }),
+          apiClient.get<{ events: BaseEvent[]; total: number; page: number; limit: number }>('/odds/events/live?limit=50', { auth: false }),
         ]);
         // #region debug-point H3,H5:home-success-count
         (() => { const p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { if (typeof window !== 'undefined') { const e = ''; u = 'http://127.0.0.1:7777/event'; } } catch {} const d = { sessionId: s, runId: 'post-fix', hypothesisId: 'H3+H5', location: 'page.tsx:414', msg: '[DEBUG] home useEffect fetch SUCESSO (200 ok) - contagens recebidas', data: { prematchCount: prematchRes?.events?.length ?? 0, liveCount: liveRes?.events?.length ?? 0, hasPrematchTotalKey: Object.prototype.hasOwnProperty.call(prematchRes || {}, 'total'), hasLiveTotalKey: Object.prototype.hasOwnProperty.call(liveRes || {}, 'total') }, ts: Date.now() }; fetch(u, { method: 'POST', body: JSON.stringify(d), headers: { 'Content-Type': 'application/json' } }).catch(() => {}); })();
         // #endregion
         if (cancelled) return;
+        const pCount = prematchRes?.events?.length ?? 0;
+        const lCount = liveRes?.events?.length ?? 0;
+        if (typeof console !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.table({ 'Home fetch (200 OK)': 'Resultados recebidos', 'Pré-jogo (prematch)': pCount, 'Ao vivo (live)': lCount, 'Prematch.total': prematchRes?.total ?? 'N/A', 'Live.total': liveRes?.total ?? 'N/A', 'Railway vars check': pCount + lCount === 0 ? '⚠️  VERIFICAR PROPLINE_API_KEY + GOAL_API_KEY' : '✅ OK' });
+          if (pCount + lCount === 0) {
+            // eslint-disable-next-line no-console
+            console.warn('[BET62] Nenhum evento recebido dos provedores. Causas prováveis: (1) Railway: PROPLINE_API_KEY ou GOAL_API_KEY são placeholder; (2) Provedor retornou [] (atraso sincronismo inicial, aguardar 2min); (3) Filtro sports muito restrito.');
+          }
+        }
         setPrematch(prematchRes?.events ?? []);
         setLive(liveRes?.events ?? []);
       } catch (err) {
@@ -480,6 +494,60 @@ export default function HomePage() {
               >
                 <RefreshCw size={14} /> Tentar novamente
               </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {!loading && !error && prematch.length === 0 && live.length === 0 ? (
+        <div className="relative z-39 mx-4 mt-4 max-w-[1400px] lg:mx-auto lg:px-8">
+          <Card className="border-amber-500/30 bg-amber-500/5 backdrop-blur-xl shadow-xl shadow-amber-900/10">
+            <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+              <div className="shrink-0 w-11 h-11 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mt-0.5">
+                <Info size={20} className="text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0 space-y-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="amber" className="uppercase tracking-widest text-[10px] px-2 py-0.5">
+                    <Server size={10} className="mr-1" /> Sincronização em curso
+                  </Badge>
+                  <span className="text-xs text-white/45 font-mono">HTTP 200 · events.length=0</span>
+                </div>
+                <p className="font-bold text-amber-200 text-sm">
+                  Nenhum evento recebido dos provedores de odds ainda
+                </p>
+                <ol className="list-decimal pl-4 marker:text-amber-400 marker:font-bold space-y-1.5 text-xs text-white/70 leading-relaxed">
+                  <li>
+                    <span className="font-semibold text-white/85">Aguarda 2 minutos:</span> a primeira sincronização PropLine + Goal API pode demorar após iniciar o serviço no Railway. Clica em "Tentar novamente" ao fim de 90s.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-white/85"><KeyRound size={12} className="inline mr-1" /> Railway: confirmar variáveis de ambiente:</span> <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">PROPLINE_API_KEY</code> e <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">GOAL_API_KEY</code> — NÃO podem ser placeholder.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-white/85">Abre DevTools → Console:</span> procura por <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">console.table</code> da BET62 (tem contagens exatas de pré-jogo/ao vivo recebidas).
+                  </li>
+                </ol>
+                <div className="pt-1 flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRefetchAt(Date.now())}
+                    className="border-amber-500/30 hover:!bg-amber-500/10 hover:!border-amber-500/60 transition text-amber-100"
+                  >
+                    <RefreshCw size={14} /> Tentar novamente agora
+                  </Button>
+                  <Link href="/ajuda" className="inline-flex">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-white/70"
+                      asChild
+                    >
+                      <span><ExternalLink size={14} /> Central de Ajuda</span>
+                    </Button>
+                  </Link>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>

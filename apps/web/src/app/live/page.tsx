@@ -17,6 +17,12 @@ import {
   Activity,
   Star,
   CircleUser,
+  Info,
+  Server,
+  KeyRound,
+  ExternalLink,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { Footer } from '../../components/layout/Footer';
@@ -281,6 +287,15 @@ export default function LivePage() {
       })
       .then((res) => {
         if (cancelled) return;
+        const count = res?.events?.length ?? 0;
+        if (typeof console !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.table({ 'Live fetch (200 OK)': 'Resultados recebidos', 'Desporto selecionado': sport, 'Ao vivo (events)': count, 'Total (res.total)': res?.total ?? 'N/A', 'Railway vars check': count === 0 ? '⚠️  VERIFICAR PROPLINE_API_KEY + GOAL_API_KEY' : '✅ OK' });
+          if (count === 0) {
+            // eslint-disable-next-line no-console
+            console.warn('[BET62 /live] Nenhum evento ao vivo. Causas prováveis: (1) Railway API Keys placeholder; (2) Nenhum jogo em curso neste horário (normal horários europeus); (3) Sport=FOOTBALL não tem jogos ao vivo (trocar para "Todos").');
+          }
+        }
         setEvents(res?.events ?? []);
       })
       .catch((err) => {
@@ -333,6 +348,88 @@ export default function LivePage() {
   return (
     <div className="min-h-screen bg-bet62-bg">
       <Header />
+      {error ? (
+        <div className="relative z-40 mx-4 mt-4 max-w-[1700px] lg:mx-auto lg:px-8">
+          <Card className="border-red-500/40 bg-red-500/5 backdrop-blur-xl shadow-xl shadow-red-900/20">
+            <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="shrink-0 w-11 h-11 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center">
+                  <AlertTriangle size={20} className="text-red-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-red-300 text-sm flex items-center gap-2">
+                    <span className="uppercase tracking-widest text-[10px] px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20">Erro</span>
+                    Não foi possível carregar jogos ao vivo
+                  </p>
+                  <p className="mt-1 text-xs sm:text-sm text-white/65 font-mono truncate max-w-full">
+                    {error}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-white/40">
+                    Tentativa automática em 15s · Clica em "Tentar novamente"
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRefetchAt(Date.now())}
+                className="shrink-0 w-full sm:w-auto border-red-500/30 hover:!bg-red-500/10 hover:!border-red-500/60 transition"
+              >
+                <RefreshCw size={14} /> Tentar novamente
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {!loading && !error && filtered.length === 0 ? (
+        <div className="relative z-39 mx-4 mt-4 max-w-[1700px] lg:mx-auto lg:px-8">
+          <Card className="border-amber-500/30 bg-amber-500/5 backdrop-blur-xl shadow-xl shadow-amber-900/10">
+            <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+              <div className="shrink-0 w-11 h-11 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mt-0.5">
+                <Info size={20} className="text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0 space-y-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="amber" className="uppercase tracking-widest text-[10px] px-2 py-0.5">
+                    <Server size={10} className="mr-1" /> Sem eventos ao vivo
+                  </Badge>
+                  <span className="text-xs text-white/45 font-mono">
+                    HTTP 200 · filtered.length=0 · sport="{sport}"
+                  </span>
+                </div>
+                <p className="font-bold text-amber-200 text-sm">
+                  Nenhum jogo ao vivo neste momento (HTTP 200, sem erro de rede)
+                </p>
+                <ol className="list-decimal pl-4 marker:text-amber-400 marker:font-bold space-y-1.5 text-xs text-white/70 leading-relaxed">
+                  <li>
+                    <span className="font-semibold text-white/85">Muda para o separador "Todos":</span> o filtro "{sport}" pode estar a excluir jogos. Clica em <Badge variant="outline" className="!py-0 text-[10px] px-1.5 mx-1 inline-flex align-middle">Todos</Badge> nas tabs acima.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-white/85">Aguarda sincronização inicial Railway:</span> a primeira carga (cold start) demora 60-120s. Clica em "Tentar novamente" ao fim de 2 minutos.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-white/85"><KeyRound size={12} className="inline mr-1" /> Variáveis Railway:</span> confirmar que <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">PROPLINE_API_KEY</code> e <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">GOAL_API_KEY</code> são reais, não placeholder.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-white/85">DevTools Console:</span> procura por <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">console.table</code> (BET62) com contagens e sugestões.
+                  </li>
+                </ol>
+                <div className="pt-1 flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setSport('all'); setRefetchAt(Date.now()); }}
+                    className="border-amber-500/30 hover:!bg-amber-500/10 hover:!border-amber-500/60 transition text-amber-100"
+                  >
+                    <RefreshCw size={14} /> Mostrar Todos + Re-sincronizar
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
       <main className="relative">
         <div className="absolute inset-x-0 top-0 h-[420px] bg-gradient-to-b from-bet62-primary/10 via-bet62-accent/5 to-transparent pointer-events-none" />
         <div className="relative max-w-[1700px] mx-auto px-4 lg:px-8 py-8">
