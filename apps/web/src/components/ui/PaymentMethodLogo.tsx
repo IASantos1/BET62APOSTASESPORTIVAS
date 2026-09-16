@@ -4,7 +4,7 @@ import Image from 'next/image';
 import { cn } from '../../lib/utils';
 
 type PaymentMethodLogoProps = {
-  method: 'mbway' | 'multibanco' | 'card';
+  method: 'mbway' | 'multibanco' | 'card' | (string & {});
   className?: string;
   size?: 'sm' | 'md' | 'lg';
 };
@@ -21,15 +21,27 @@ const METHOD_BG = {
   card: 'bg-gradient-to-br from-slate-600 to-slate-900',
 } as const;
 
+const FALLBACK_BG: Record<string, string> = {
+  sepa: 'bg-gradient-to-br from-blue-700 to-blue-900',
+  pix: 'bg-gradient-to-br from-[#00D2AA] to-[#027B68]',
+  usdc: 'bg-gradient-to-br from-[#2775CA] to-[#164B8A]',
+};
+
+const FALLBACK_LABEL: Record<string, string> = {
+  sepa: 'SEPA',
+  pix: 'Pix',
+  usdc: 'USDC',
+};
+
 export function PaymentMethodLogo({
   method,
   className,
   size = 'md',
 }: PaymentMethodLogoProps) {
   const sz = SIZE_MAP[size];
-  const bgClass = METHOD_BG[method];
 
   if (method === 'card') {
+    const bgClass = METHOD_BG.card;
     return (
       <div
         className={cn(
@@ -87,10 +99,36 @@ export function PaymentMethodLogo({
     );
   }
 
-  const src =
-    method === 'mbway' ? '/payments/mbway.svg' : '/payments/multibanco.svg';
-  const alt = method === 'mbway' ? 'Logo MB WAY' : 'Logo Multibanco SIBS';
+  if (method === 'mbway' || method === 'multibanco') {
+    const bgClass = METHOD_BG[method];
+    const src =
+      method === 'mbway' ? '/payments/mbway.svg' : '/payments/multibanco.svg';
+    const alt = method === 'mbway' ? 'Logo MB WAY' : 'Logo Multibanco SIBS';
+    return (
+      <div
+        className={cn(
+          sz.container,
+          'rounded-2xl flex items-center justify-center shrink-0 overflow-hidden',
+          bgClass,
+          className,
+        )}
+      >
+        <div className="relative" style={{ width: sz.w, height: sz.h }}>
+          <Image
+            src={src}
+            alt={alt}
+            fill
+            sizes={`${sz.w}px`}
+            className="object-contain p-1"
+            priority={false}
+          />
+        </div>
+      </div>
+    );
+  }
 
+  const bgClass = FALLBACK_BG[method] || 'bg-slate-700';
+  const label = FALLBACK_LABEL[method] || method.toUpperCase().slice(0, 5);
   return (
     <div
       className={cn(
@@ -100,16 +138,14 @@ export function PaymentMethodLogo({
         className,
       )}
     >
-      <div className="relative" style={{ width: sz.w, height: sz.h }}>
-        <Image
-          src={src}
-          alt={alt}
-          fill
-          sizes={`${sz.w}px`}
-          className="object-contain p-1"
-          priority={false}
-        />
-      </div>
+      <span
+        className={cn(
+          'font-black text-white tracking-tight',
+          size === 'sm' ? 'text-[10px]' : size === 'lg' ? 'text-sm' : 'text-xs',
+        )}
+      >
+        {label}
+      </span>
     </div>
   );
 }
