@@ -33,7 +33,7 @@ export class LiveMatchStateRedisService implements OnModuleDestroy {
     }
 
     try {
-      const p = this.client.connect();
+      const p: unknown = this.client.connect();
       if (p && typeof (p as Promise<unknown>).catch === 'function') {
         (p as Promise<unknown>).catch(() => undefined);
       }
@@ -44,7 +44,7 @@ export class LiveMatchStateRedisService implements OnModuleDestroy {
 
   onModuleDestroy() {
     try {
-      const p = this.client.disconnect(false);
+      const p: unknown = this.client.disconnect(false);
       if (p && typeof (p as Promise<unknown>).catch === 'function') {
         (p as Promise<unknown>).catch(() => undefined);
       }

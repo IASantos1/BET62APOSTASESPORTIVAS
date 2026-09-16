@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { MarketStatus } from '@bet62/shared';
 import type {
   Bet62Market,
   Bet62Odd,
   Bet62Selection,
   EventStatus,
-  MarketStatus,
 } from '@bet62/shared';
 import { roundAmount } from '@bet62/shared';
 import type {
@@ -196,7 +196,7 @@ export class ProplineDataAdapter {
         : selection?.status === 'settled' ? 'settled'
         : selection?.status === 'void' ? 'void'
         : odd.isBest ? 'active' : 'active';
-      const status: MarketStatus = lowerStatus === 'active' ? MarketStatus.ACTIVE
+      let status: MarketStatus = lowerStatus === 'active' ? MarketStatus.ACTIVE
         : lowerStatus === 'suspended' ? MarketStatus.SUSPENDED
         : lowerStatus === 'settled' ? MarketStatus.SETTLED
         : MarketStatus.CLOSED;
@@ -204,13 +204,13 @@ export class ProplineDataAdapter {
         if (ageMs > maxAge) {
           stale = true;
           staleReason = `exceeded_${describeAgeType(Boolean(opts.isLive), mode)}_max_age_${maxAge}ms`;
-          status = 'suspended';
+          status = MarketStatus.SUSPENDED;
         }
       }
       if (belowMinimum) {
         stale = true;
         staleReason = 'below_minimum_odds';
-        status = 'suspended';
+        status = MarketStatus.SUSPENDED;
       }
       return {
         marketId: odd.marketCode,
