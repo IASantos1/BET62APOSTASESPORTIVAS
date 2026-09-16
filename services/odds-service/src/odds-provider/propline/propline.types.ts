@@ -4,11 +4,16 @@ export interface ProplineBookmaker {
   code: string;
   priority: number;
   isPushBased: boolean;
+  key?: string;
+  title?: string;
+  markets?: ProplineBookmakerMarket[] | null;
 }
 
 export interface ProplineSport {
   key: string;
+  title?: string;
   name: string;
+  active?: boolean;
   logo?: string | null;
 }
 
@@ -25,6 +30,20 @@ export interface ProplineTeam {
   name: string;
   logo?: string | null;
   sport_key?: string | null;
+}
+
+export interface ProplineOutcome {
+  name: string;
+  description?: string | null;
+  price: number;
+  point?: number | null;
+  line?: number | null;
+}
+
+export interface ProplineBookmakerMarket {
+  key: string;
+  last_update?: string | null;
+  outcomes: ProplineOutcome[];
 }
 
 export interface ProplineEventScores {
@@ -60,16 +79,22 @@ export type ProplineEventStatus =
   | 'awarded';
 
 export interface ProplineEvent {
-  event_id: string;
+  id: string;
+  event_id?: string;
   sport_key: string;
+  home_team?: string;
+  away_team?: string;
+  commence_time?: string;
+  live?: boolean;
+  completed?: boolean;
   league_key?: string | null;
-  home_team_key: string;
-  away_team_key: string;
+  home_team_key?: string;
+  away_team_key?: string;
   home_team_name?: string | null;
   away_team_name?: string | null;
-  start_date: string;
+  start_date?: string;
   scores?: ProplineEventScores | null;
-  status: ProplineEventStatus;
+  status?: ProplineEventStatus;
   minute?: number | null;
   period?: string | null;
   venue?: string | null;
@@ -115,9 +140,14 @@ export interface ProplineMarket {
 }
 
 export interface ProplineOddsResponse {
-  event_id: string;
+  id: string;
+  event_id?: string;
+  sport_key: string;
+  home_team: string;
+  away_team: string;
+  commence_time: string;
   bookmakers?: ProplineBookmaker[] | null;
-  markets: ProplineMarket[];
+  markets?: ProplineMarket[];
   last_updated_at?: string | null;
   generated_at?: string | null;
 }

@@ -33,9 +33,9 @@ export const SPORTS_PROVIDER_CONFIG: {
     },
     propline: {
       baseUrl:
-        process.env.PROPLINE_API_BASE_URL ?? "https://api.prop-line.com/v1",
+        process.env.PROPLINE_API_BASE_URL ?? "https://api.prop-line.com",
       wsUrl:
-        process.env.PROPLINE_WS_URL ?? "wss://ws.prop-line.com/v1/stream",
+        process.env.PROPLINE_WS_URL ?? "",
       apiKeyEnvName: "PROPLINE_API_KEY",
       shortLivedWsToken: false,
     },
