@@ -292,20 +292,42 @@ export class OtherSportsSettlementService {
     private readonly prisma: PrismaService,
   ) {}
 
+  private resolveProplineSportKey(sportKey?: string): string {
+    const raw = String(sportKey ?? '').trim().toLowerCase();
+    if (!raw) return 'unknown';
+    if (raw.includes('_')) return raw;
+    if (raw === 'tennis' || raw === 'tenis') return 'tennis';
+    if (raw === 'volleyball' || raw === 'volei') return 'volleyball';
+    if (raw === 'hockey' || raw === 'icehockey') return 'hockey_nhl';
+    if (raw === 'basketball') return 'basketball_nba';
+    if (raw === 'baseball' || raw === 'basebol') return 'baseball_mlb';
+    if (raw === 'ufc' || raw === 'mma') return 'mma_ufc';
+    if (raw === 'golf' || raw === 'golfe') return 'golf';
+    if (raw === 'darts' || raw === 'dardos') return 'darts';
+    if (raw === 'table_tennis' || raw === 'tabletennis' || raw === 'tenis_mesa') return 'table_tennis';
+    if (raw === 'f1' || raw === 'formula1' || raw === 'formula_1') return 'f1';
+    if (raw === 'esports' || raw === 'e_sports') return 'esports';
+    return raw;
+  }
+
   private extractEventId(
     eventId: string,
     sportKey?: string,
-  ): { rawId: string; sport: string } {
+  ): { rawId: string; sport: string; proplineSportKey: string } {
     const colon = eventId.indexOf(':');
     if (colon > 0) {
+      const sport = eventId.slice(0, colon).toUpperCase();
       return {
-        sport: eventId.slice(0, colon).toUpperCase(),
+        sport,
         rawId: eventId.slice(colon + 1),
+        proplineSportKey: this.resolveProplineSportKey(eventId.slice(0, colon)),
       };
     }
+    const sport = (sportKey ?? 'OTHER').toUpperCase();
     return {
       rawId: eventId,
-      sport: (sportKey ?? 'OTHER').toUpperCase(),
+      sport,
+      proplineSportKey: this.resolveProplineSportKey(sportKey),
     };
   }
 
@@ -313,7 +335,7 @@ export class OtherSportsSettlementService {
     sportKey: string,
     eventId: string,
   ): Promise<OtherSportSettlementOutcome> {
-    const { rawId, sport } = this.extractEventId(eventId, sportKey);
+    const { rawId, sport, proplineSportKey } = this.extractEventId(eventId, sportKey);
     const pending: OtherSportSettlementOutcome = {
       result: 'PENDING',
       settledBy: 'PROPLINE',
@@ -323,7 +345,7 @@ export class OtherSportsSettlementService {
     };
 
     try {
-      const ev: ProplineEvent | null = await this.proplineHttp.getEventById(rawId);
+      const ev: ProplineEvent | null = await this.proplineHttp.getEventById(proplineSportKey, rawId);
       if (!ev) {
         this.logger.verbose(
           `resolveSettlement: event ${rawId} (sport=${sport}) não encontrado -> PENDING`,
@@ -428,8 +450,8 @@ export class OtherSportsSettlementService {
     let count = 0;
     for (const e of events) {
       try {
-        const { rawId } = this.extractEventId(e.eventId, e.sportKey);
-        const ev = await this.proplineHttp.getEventById(rawId);
+        const { rawId, proplineSportKey } = this.extractEventId(e.eventId, e.sportKey);
+        const ev = await this.proplineHttp.getEventById(proplineSportKey, rawId);
         if (
           ev &&
           (ev.status === 'final' || ev.status === 'ended' || ev.status === 'awarded')
