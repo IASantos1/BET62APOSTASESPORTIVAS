@@ -291,6 +291,20 @@ export class OddsService {
   }
 
   private goalFixtureKickoff(fixture: GoalApiFixture): Date {
+    const koUtc = fixture.kickoffUtc as string | undefined;
+    if (koUtc) {
+      const d = new Date(String(koUtc));
+      if (Number.isFinite(d.getTime())) return d;
+    }
+    if (fixture.matchDate && typeof fixture.matchDate === 'string') {
+      const combined = fixture.matchTime
+        ? `${fixture.matchDate}T${String(fixture.matchTime).padStart(5, '0')}:00.000Z`
+        : `${fixture.matchDate}T00:00:00.000Z`;
+      const d = new Date(combined);
+      if (Number.isFinite(d.getTime())) return d;
+      const d2 = new Date(String(fixture.matchDate));
+      if (Number.isFinite(d2.getTime())) return d2;
+    }
     if (typeof fixture.timestamp === 'number' && Number.isFinite(fixture.timestamp)) {
       return new Date(fixture.timestamp * 1000);
     }
@@ -344,8 +358,30 @@ export class OddsService {
   }
 
   private scoreFootballCandidate(fixture: GoalApiFixture, candidate: ProviderEvent): number {
-    const goalHome = resolveTeamAlias(normalizeTeamName(fixture.home?.name ?? ''));
-    const goalAway = resolveTeamAlias(normalizeTeamName(fixture.away?.name ?? ''));
+    const homeNested = fixture.home as { id?: unknown; name?: unknown; badge?: unknown; logo?: unknown } | undefined;
+    const awayNested = fixture.away as { id?: unknown; name?: unknown; badge?: unknown; logo?: unknown } | undefined;
+    const homeTeamAlt = fixture.homeTeam as { id?: unknown; name?: unknown; badge?: unknown; logo?: unknown } | undefined;
+    const awayTeamAlt = fixture.awayTeam as { id?: unknown; name?: unknown; badge?: unknown; logo?: unknown } | undefined;
+    const goalHome = resolveTeamAlias(
+      normalizeTeamName(
+        String(
+          (fixture.homeTeamName as string | undefined) ??
+            homeNested?.name ??
+            homeTeamAlt?.name ??
+            '',
+        ),
+      ),
+    );
+    const goalAway = resolveTeamAlias(
+      normalizeTeamName(
+        String(
+          (fixture.awayTeamName as string | undefined) ??
+            awayNested?.name ??
+            awayTeamAlt?.name ??
+            '',
+        ),
+      ),
+    );
     const candidateHome = resolveTeamAlias(normalizeTeamName(candidate.homeTeamName ?? ''));
     const candidateAway = resolveTeamAlias(normalizeTeamName(candidate.awayTeamName ?? ''));
     const sameTeams =
@@ -353,7 +389,10 @@ export class OddsService {
       (goalHome === candidateAway && goalAway === candidateHome);
     if (!sameTeams) return 0;
     let score = 0.6;
-    const goalLeague = normalizeCompetitionName(fixture.league?.name ?? '');
+    const leagueAlt = fixture.league as { id?: unknown; name?: unknown; logo?: unknown; country_code?: unknown; country?: unknown } | undefined;
+    const goalLeague = normalizeCompetitionName(
+      String((fixture.leagueName as string | undefined) ?? leagueAlt?.name ?? ''),
+    );
     const candidateLeague = normalizeCompetitionName(candidate.leagueName ?? '');
     if (goalLeague && candidateLeague && goalLeague === candidateLeague) {
       score += 0.2;
@@ -452,6 +491,7 @@ export class OddsService {
       );
       out.push(...football.map((event) => this.toProviderEventFromUpcoming(event)));
     }
+    const goalFootballCount = out.length;
     if (!split.hasFilter || split.otherSports.length > 0) {
       const result = await this.proplineProvider.getPrematchEvents({
         ...query,
@@ -461,7 +501,9 @@ export class OddsService {
       });
       const filtered = split.hasFilter
         ? result.events
-        : result.events.filter((event) => !this.isFootballSportCode(event.sportCode));
+        : goalFootballCount > 0
+          ? result.events.filter((event) => !this.isFootballSportCode(event.sportCode))
+          : result.events;
       out.push(...filtered);
     }
     let filtered = out;
@@ -500,6 +542,7 @@ export class OddsService {
       );
       out.push(...football.map((event) => this.toProviderEventFromLive(event)));
     }
+    const goalLiveFootballCount = out.length;
     if (!split.hasFilter || split.otherSports.length > 0) {
       const result = await this.proplineProvider.getLiveEvents({
         ...query,
@@ -509,7 +552,9 @@ export class OddsService {
       });
       const filtered = split.hasFilter
         ? result.events
-        : result.events.filter((event) => !this.isFootballSportCode(event.sportCode));
+        : goalLiveFootballCount > 0
+          ? result.events.filter((event) => !this.isFootballSportCode(event.sportCode))
+          : result.events;
       out.push(...filtered);
     }
     let filtered = out;
@@ -730,9 +775,6 @@ export class OddsService {
     return this.withProviderOnly(
       'getPrematchEvents',
       async () => {
-        // #region debug-point H6:prematch-query-sport-empty
-        (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'pre-fix', hypothesisId: 'H6', location: 'odds.service.ts:166', msg: '[DEBUG] OddsService.getPrematchEvents chamado', data: { querySports: (query as unknown as { sports?: unknown[] }).sports ?? null, querySportsCount: Array.isArray((query as unknown as { sports?: unknown[] }).sports) ? (query as unknown as { sports: unknown[] }).sports.length : 0, queryLimit: query.limit, queryPage: query.page ?? 1 }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
-        // #endregion
         const cacheKey = this.key(['prematch', JSON.stringify(query)]);
         const cached = (await this.cache.get(cacheKey)) as { events: EventDto[]; total: number; page: number; limit: number };
         if (cached) return cached;

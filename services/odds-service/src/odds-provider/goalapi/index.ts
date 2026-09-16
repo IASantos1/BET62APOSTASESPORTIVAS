@@ -115,10 +115,29 @@ export class GoalApiOddsProviderService extends AbstractOddsProvider {
       const fixtures = await this.http.getUpcomingFixtures(7);
       const seen = new Map<string, League>();
       for (const f of fixtures) {
-        const lg = f.league;
-        if (!lg) continue;
-        const key = String(lg.id);
-        if (!key || seen.has(key)) continue;
+        const lg = f.league as { id?: unknown; name?: unknown; logo?: unknown; country_code?: unknown; country?: unknown; season?: unknown; round?: unknown } | undefined;
+        const lgId = (f.leagueId as string | number | undefined) ?? lg?.id;
+        if (lgId == null || String(lgId) === '') continue;
+        const key = String(lgId);
+        if (seen.has(key)) continue;
+        const lgName = String((f.leagueName as string | undefined) ?? lg?.name ?? `League ${key}`);
+        const countryCode = String(
+          (f.countryName as string | undefined) ??
+            (f.countryId as string | undefined) ??
+            f.countryLogo ??
+            lg?.country_code ??
+            lg?.country ??
+            '',
+        ) || null;
+        const logoUrl = String(
+          (f.leagueLogo as string | undefined) ?? lg?.logo ?? '',
+        ) || null;
+        const season = (f.leagueYear as string | undefined) ?? (lg?.season != null ? String(lg.season) : undefined) ?? null;
+        const roundRaw = (f.matchRound as string | number | undefined) ?? lg?.round;
+        const slug = lgName
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/(^-|-$)/g, '') || `league-${key}`;
         seen.set(key, {
           id: `league-goal-${key}`,
           createdAt: new Date(),
@@ -126,49 +145,57 @@ export class GoalApiOddsProviderService extends AbstractOddsProvider {
           sportId: FOOTBALL_SPORT_ID,
           providerLeagueId: key,
           externalId: key,
-          name: lg.name ?? `League ${key}`,
-          slug: String(lg.name ?? key)
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/(^-|-$)/g, '') || `league-${key}`,
-          countryCode: lg.country_code ?? lg.country ?? null,
-          logoUrl: lg.logo ?? null,
+          name: lgName,
+          slug,
+          countryCode,
+          logoUrl,
           active: true,
           featured: false,
           displayOrder: 100,
           totalLiveEvents: 0,
           totalPrematchEvents: 0,
-          season: lg.season ? String(lg.season) : null,
-          metadata: { round: lg.round ?? null },
+          season,
+          metadata: { round: roundRaw != null ? String(roundRaw) : null },
         });
       }
       try {
         const live = await this.http.getLiveFixtures();
         for (const f of live) {
-          const lg = f.league;
-          if (!lg) continue;
-          const key = String(lg.id);
-          if (!key) continue;
+          const lg = f.league as { id?: unknown; name?: unknown; logo?: unknown; country_code?: unknown; country?: unknown; season?: unknown } | undefined;
+          const lgId = (f.leagueId as string | number | undefined) ?? lg?.id;
+          if (lgId == null || String(lgId) === '') continue;
+          const key = String(lgId);
           const existing = seen.get(key);
           if (existing) {
             existing.totalLiveEvents = (existing.totalLiveEvents ?? 0) + 1;
           } else {
+            const lgName = String((f.leagueName as string | undefined) ?? lg?.name ?? `League ${key}`);
+            const countryCode = String(
+              (f.countryName as string | undefined) ??
+                (f.countryId as string | undefined) ??
+                f.countryLogo ??
+                lg?.country_code ??
+                lg?.country ??
+                '',
+            ) || null;
+            const logoUrl = String((f.leagueLogo as string | undefined) ?? lg?.logo ?? '') || null;
+            const season = (f.leagueYear as string | undefined) ?? (lg?.season != null ? String(lg.season) : undefined) ?? null;
             seen.set(key, {
               id: `league-goal-${key}`,
               createdAt: new Date(),
               updatedAt: new Date(),
               sportId: FOOTBALL_SPORT_ID,
               providerLeagueId: key,
-              name: lg.name ?? `League ${key}`,
+              name: lgName,
               slug: `league-${key}`,
-              countryCode: lg.country_code ?? lg.country ?? null,
-              logoUrl: lg.logo ?? null,
+              countryCode,
+              logoUrl,
               active: true,
               featured: false,
               displayOrder: 100,
               totalLiveEvents: 1,
               totalPrematchEvents: 0,
-              season: lg.season ? String(lg.season) : null,
+              season,
             });
           }
         }
