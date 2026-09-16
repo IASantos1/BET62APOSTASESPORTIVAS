@@ -17,6 +17,8 @@ import type {
   GoalApiCommentary,
   GoalApiStatItem,
   GoalApiTeamStats,
+  GoalApiTeam,
+  GoalApiLeague,
 } from './goalapi.types';
 import {
   GOAL_STATUS_TO_BET62,
@@ -75,10 +77,16 @@ function normalisePeriod(raw: string | undefined | null): Period {
 
 export function clockFromFixture(g: GoalApiFixture): Bet62Clock {
   const clock: GoalApiClock | undefined = g.clock;
-  const status = String(g.status ?? 'NS').toUpperCase();
+  const matchStatusRaw = (g.matchStatus as string | undefined) ?? g.status ?? 'NS';
+  const status = String(matchStatusRaw).toUpperCase();
+  const live =
+    typeof g.matchLive === 'boolean'
+      ? g.matchLive
+      : String(g.matchLive ?? '').trim() === '1' || String(g.matchLive ?? '').toLowerCase() === 'true';
   const minute =
+    toIntOrNull(g.matchMinute) ??
     toIntOrNull(clock?.minute) ??
-    (status === '1H' || status === 'LIVE'
+    (live || status === '1H' || status === 'LIVE'
       ? 0
       : status === '2H'
         ? 45
@@ -86,33 +94,37 @@ export function clockFromFixture(g: GoalApiFixture): Bet62Clock {
           ? 90
           : null);
   const second = toIntOrNull(clock?.second) ?? null;
-  const stoppage = toIntOrNull(clock?.stoppage) ?? null;
+  const stoppage = toIntOrNull(clock?.stoppage) ?? toIntOrNull(g.matchExtra) ?? null;
+  const periodRaw = (g.matchPeriod as string | undefined) ?? (clock?.period_name as string) ?? (clock?.period as string);
+  const periodUp = String(periodRaw ?? status).toUpperCase();
   const periodName =
     (clock?.period_name as string) ??
-    (status === '1H'
+    (periodUp === 'FIRST_HALF' || status === '1H'
       ? '1st Half'
-      : status === 'HT'
+      : periodUp === 'HALFTIME' || status === 'HT'
         ? 'Halftime'
-        : status === '2H'
+        : periodUp === 'SECOND_HALF' || status === '2H'
           ? '2nd Half'
-          : status === 'ET'
+          : periodUp === 'EXTRA_TIME' || status === 'ET'
             ? 'Extra Time'
-            : status === 'PEN'
+            : periodUp === 'PENALTIES' || status === 'PEN'
               ? 'Penalties'
-              : status === 'FT' || status === 'AET'
+              : status === 'FT' || status === 'AET' || periodUp === 'FINAL'
                 ? 'Full Time'
                 : status === 'CANC'
                   ? 'Cancelled'
-                  : status === 'PST' || status === 'INT' || status === 'TBD'
+                  : status === 'PST' || status === 'INT' || status === 'TBD' || periodUp === 'SUSPENDED'
                     ? 'Suspended'
-                    : null);
+                    : periodUp === 'NOT_STARTED' || status === 'SCHEDULED' || status === 'NS'
+                      ? null
+                      : null);
   const period: Period = normalisePeriod(
-    (clock?.period as string) ?? g.status ?? 'NS',
+    periodRaw ?? g.status ?? 'NS',
   );
   const running =
     typeof clock?.running === 'boolean'
       ? clock.running
-      : status === '1H' || status === '2H' || status === 'ET' || status === 'LIVE';
+      : live || status === '1H' || status === '2H' || status === 'ET' || status === 'LIVE';
   return {
     minute,
     second,
@@ -120,37 +132,68 @@ export function clockFromFixture(g: GoalApiFixture): Bet62Clock {
     periodName,
     period,
     running,
-    updatedAt: toDateOrNow(g.last_updated_at ?? clock?.updated_at),
+    updatedAt: toDateOrNow(g.updatedAt ?? g.clockUpdatedAt ?? g.last_updated_at ?? clock?.updated_at),
     source: 'goal_api',
   };
 }
 
 export function scoreFromFixture(g: GoalApiFixture): Bet62Score {
   const score: GoalApiScore | undefined = g.score;
-  const status = normaliseStatus(g.status);
+  const matchStatusRaw = (g.matchStatus as string | undefined) ?? g.status;
+  const status = normaliseStatus(matchStatusRaw);
   let home: number | null = null;
   let away: number | null = null;
-  if (score?.current) {
-    home = toNumberOrNull(score.current.home);
-    away = toNumberOrNull(score.current.away);
+  home = toNumberOrNull(g.homeTeamScore);
+  away = toNumberOrNull(g.awayTeamScore);
+  if (home === null || away === null) {
+    const hFt = toNumberOrNull(g.homeTeamFtScore);
+    const aFt = toNumberOrNull(g.awayTeamFtScore);
+    if (hFt !== null) home = home ?? hFt;
+    if (aFt !== null) away = away ?? aFt;
   }
-  if (
-    (home === null || away === null) &&
-    score?.fulltime &&
-    status === 'final'
-  ) {
-    home = home ?? toNumberOrNull(score.fulltime.home);
-    away = away ?? toNumberOrNull(score.fulltime.away);
+  if (home === null || away === null) {
+    const hHt = toNumberOrNull(g.homeTeamHalftimeScore);
+    const aHt = toNumberOrNull(g.awayTeamHalftimeScore);
+    if (status === 'halftime') {
+      if (hHt !== null) home = home ?? hHt;
+      if (aHt !== null) away = away ?? aHt;
+    }
   }
-  if ((home === null || away === null) && score?.total) {
-    home = home ?? toNumberOrNull(score.total.home);
-    away = away ?? toNumberOrNull(score.total.away);
+  if (home === null || away === null) {
+    const hExt = toNumberOrNull(g.homeTeamExtraScore);
+    const aExt = toNumberOrNull(g.awayTeamExtraScore);
+    if (hExt !== null) home = home ?? hExt;
+    if (aExt !== null) away = away ?? aExt;
+  }
+  if (home === null || away === null) {
+    const hPen = toNumberOrNull(g.homeTeamPenaltyScore);
+    const aPen = toNumberOrNull(g.awayTeamPenaltyScore);
+    if (hPen !== null) home = home ?? hPen;
+    if (aPen !== null) away = away ?? aPen;
+  }
+  if (home === null || away === null) {
+    if (score?.current) {
+      home = home ?? toNumberOrNull(score.current.home);
+      away = away ?? toNumberOrNull(score.current.away);
+    }
+    if (
+      (home === null || away === null) &&
+      score?.fulltime &&
+      status === 'final'
+    ) {
+      home = home ?? toNumberOrNull(score.fulltime.home);
+      away = away ?? toNumberOrNull(score.fulltime.away);
+    }
+    if ((home === null || away === null) && score?.total) {
+      home = home ?? toNumberOrNull(score.total.home);
+      away = away ?? toNumberOrNull(score.total.away);
+    }
   }
   return {
     home,
     away,
     status,
-    updatedAt: toDateOrNow(g.last_updated_at),
+    updatedAt: toDateOrNow(g.updatedAt ?? g.last_updated_at),
   };
 }
 
@@ -335,42 +378,118 @@ export function fixtureToBet62Match(
   providers?: Bet62Match['providers'],
 ): Bet62Match {
   const fixtureId = g.id;
-  const homeTeam = g.home;
-  const awayTeam = g.away;
-  const league = g.league;
-  const kickoffStr = g.kickoff_at ?? g.date;
+  const homeNested = g.home as GoalApiTeam | undefined;
+  const awayNested = g.away as GoalApiTeam | undefined;
+  const homeTeamAlt = g.homeTeam as { id?: unknown; name?: unknown; badge?: unknown; logo?: unknown } | undefined;
+  const awayTeamAlt = g.awayTeam as { id?: unknown; name?: unknown; badge?: unknown; logo?: unknown } | undefined;
+  const league = g.league as GoalApiLeague | undefined;
+
+  const homeId: string | number | null =
+    (g.homeTeamId as string | number | undefined) ??
+    homeNested?.id ??
+    (homeTeamAlt?.id as string | number | undefined) ??
+    null;
+  const awayId: string | number | null =
+    (g.awayTeamId as string | number | undefined) ??
+    awayNested?.id ??
+    (awayTeamAlt?.id as string | number | undefined) ??
+    null;
+  const leagueId: string | number | null =
+    (g.leagueId as string | number | undefined) ?? league?.id ?? null;
+
+  const homeName: string = String(
+    (g.homeTeamName as string | undefined) ??
+      homeNested?.name ??
+      (homeTeamAlt?.name as string | undefined) ??
+      'Home',
+  );
+  const awayName: string = String(
+    (g.awayTeamName as string | undefined) ??
+      awayNested?.name ??
+      (awayTeamAlt?.name as string | undefined) ??
+      'Away',
+  );
+  const leagueName: string = String(
+    (g.leagueName as string | undefined) ?? league?.name ?? 'Unknown League',
+  );
+
+  const homeLogo =
+    g.teamHomeBadge ??
+    homeNested?.logo ??
+    (homeTeamAlt?.badge as string | undefined) ??
+    (homeTeamAlt?.logo as string | undefined) ??
+    null;
+  const awayLogo =
+    g.teamAwayBadge ??
+    awayNested?.logo ??
+    (awayTeamAlt?.badge as string | undefined) ??
+    (awayTeamAlt?.logo as string | undefined) ??
+    null;
+  const leagueLogo =
+    g.leagueLogo ?? league?.logo ?? null;
+  const countryCode =
+    (g.countryName as string | undefined) ??
+    (g.countryId as string | undefined) ??
+    g.countryLogo ??
+    league?.country_code ??
+    league?.country ??
+    null;
+
   let kickoffAt: Date;
+  const koUtc = g.kickoffUtc as string | undefined;
+  const kickoffStrOld = g.kickoff_at ?? g.date;
   if (g.timestamp && typeof g.timestamp === 'number') {
     kickoffAt = new Date(g.timestamp * 1000);
-  } else if (kickoffStr) {
-    const d = new Date(kickoffStr);
+  } else if (koUtc) {
+    const d = new Date(String(koUtc));
+    kickoffAt = Number.isFinite(d.getTime()) ? d : new Date();
+  } else if (g.matchDate && typeof g.matchDate === 'string') {
+    const combined = g.matchTime
+      ? `${g.matchDate}T${String(g.matchTime).padStart(5, '0')}:00.000Z`
+      : `${g.matchDate}T00:00:00.000Z`;
+    const d = new Date(combined);
+    kickoffAt = Number.isFinite(d.getTime())
+      ? d
+      : new Date(String(g.matchDate));
+  } else if (kickoffStrOld) {
+    const d = new Date(String(kickoffStrOld));
     kickoffAt = Number.isFinite(d.getTime()) ? d : new Date();
   } else {
     kickoffAt = new Date();
   }
+
+  const round = g.matchRound != null ? String(g.matchRound) : (g.round as string | undefined) ?? null;
+  const referee = (g.matchReferee as string | undefined) ?? (g.referee as string | undefined) ?? null;
+  const venue =
+    (g.matchStadium as string | undefined) ??
+    (g.venue as string | undefined) ??
+    (g.venue_city as string | undefined) ??
+    null;
+  const updatedAt = toDateOrNow(g.updatedAt ?? g.last_updated_at);
+
   const matchId = `goal:${fixtureId}`;
   return {
     id: matchId,
     sport: 'FOOTBALL',
     league: {
-      id: league?.id ?? null,
-      name: league?.name ?? 'Unknown League',
-      logoUrl: league?.logo ?? null,
-      countryCode: league?.country_code ?? league?.country ?? null,
+      id: leagueId != null ? leagueId : null,
+      name: leagueName,
+      logoUrl: leagueLogo,
+      countryCode,
     },
     homeTeam: {
-      id: homeTeam?.id ?? null,
-      name: homeTeam?.name ?? 'Home',
-      shortName: homeTeam?.name ?? null,
-      logoUrl: homeTeam?.logo ?? null,
-      providerIds: { goal_api: String(homeTeam?.id ?? '') },
+      id: homeId != null ? homeId : null,
+      name: String(homeName),
+      shortName: String(homeName),
+      logoUrl: homeLogo,
+      providerIds: { goal_api: String(homeId ?? '') },
     },
     awayTeam: {
-      id: awayTeam?.id ?? null,
-      name: awayTeam?.name ?? 'Away',
-      shortName: awayTeam?.name ?? null,
-      logoUrl: awayTeam?.logo ?? null,
-      providerIds: { goal_api: String(awayTeam?.id ?? '') },
+      id: awayId != null ? awayId : null,
+      name: String(awayName),
+      shortName: String(awayName),
+      logoUrl: awayLogo,
+      providerIds: { goal_api: String(awayId ?? '') },
     },
     kickoffAt,
     score: scoreFromFixture(g),
@@ -378,15 +497,15 @@ export function fixtureToBet62Match(
     providers: providers ?? {
       goalApi: {
         fixtureId,
-        leagueId: league?.id ?? null,
-        homeTeamId: homeTeam?.id ?? null,
-        awayTeamId: awayTeam?.id ?? null,
+        leagueId: leagueId != null ? leagueId : null,
+        homeTeamId: homeId != null ? homeId : null,
+        awayTeamId: awayId != null ? awayId : null,
       },
       propline: null,
     },
-    venue: g.venue ?? g.venue_city ?? null,
+    venue,
     lastCommentary: null,
-    updatedAt: toDateOrNow(g.last_updated_at),
+    updatedAt,
     dataFreshness: 'goal_api',
   };
 }
