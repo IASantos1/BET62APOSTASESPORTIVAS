@@ -205,9 +205,9 @@ export class GoalApiOddsProviderService extends AbstractOddsProvider {
     try {
       if (!this.resolveSportArg(sport)) return [];
       const fromDate = from ?? new Date();
-      const toDate = to ?? new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const toDate = to ?? new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
       const hours = Math.max(
-        1,
+        24,
         Math.ceil((toDate.getTime() - fromDate.getTime()) / (60 * 60 * 1000)),
       );
       const matches = await this.adapter.fetchUpcomingMatches(hours);
