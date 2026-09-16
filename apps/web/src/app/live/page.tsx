@@ -268,16 +268,19 @@ export default function LivePage() {
   const [selectedEventDetail, setSelectedEventDetail] = React.useState<(LiveEvent & { markets: LiveMarket[] }) | null>(null);
   const [selectedEventLoading, setSelectedEventLoading] = React.useState(false);
   const [refetchAt, setRefetchAt] = React.useState<number>(Date.now());
+  const lastSetEventsAt = React.useRef<number>(0);
+  const lastSportRef = React.useRef<string>('all');
 
   React.useEffect(() => {
-    const t = window.setInterval(() => setRefetchAt(Date.now()), 15_000);
+    const t = window.setInterval(() => setRefetchAt(Date.now()), 30_000);
     return () => window.clearInterval(t);
   }, []);
 
   React.useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    const firstRun = loading || lastSportRef.current !== sport;
+    lastSportRef.current = sport;
+    if (firstRun) setLoading(true);
     const run = async () => {
       try {
         const mainReq = apiClient.get<{ events: LiveEvent[]; total: number }>('/odds/events/live', {
@@ -286,7 +289,16 @@ export default function LivePage() {
             ? { limit: 100, sports: [sport] }
             : { limit: 100 },
         });
-        const footballExtraReq = sport !== 'all' && sport !== 'FOOTBALL'
+        const footballLiveReq = sport !== 'all' && sport !== 'FOOTBALL'
+          ? Promise.resolve({ events: [] as LiveEvent[], total: 0 })
+          : (async () => {
+              try {
+                return await apiClient.get<{ events: LiveEvent[]; total: number }>('/odds/events/live?sports=FOOTBALL&limit=50', { auth: false });
+              } catch {
+                return { events: [] as LiveEvent[], total: 0 };
+              }
+            })();
+        const footballPrematchReq = sport !== 'all' && sport !== 'FOOTBALL'
           ? Promise.resolve({ events: [] as LiveEvent[], total: 0 })
           : (async () => {
               try {
@@ -295,51 +307,69 @@ export default function LivePage() {
                 return { events: [] as LiveEvent[], total: 0 };
               }
             })();
-        const [res, footballExtra] = await Promise.all([mainReq, footballExtraReq]);
+        const [res, footballLiveExtra, footballPrematchExtra] = await Promise.all([mainReq, footballLiveReq, footballPrematchReq]);
         if (cancelled) return;
         const now = Date.now();
         const isLiveStatus = (s: string) => s === 'LIVE' || s === 'HALF_TIME' || s === 'HT' || s === 'IN_PLAY';
         const k = (ev: LiveEvent) => { const t = new Date(ev.kickoffAt).getTime(); return Number.isFinite(t) ? t : now; };
+        const hasMarkets = (ev: LiveEvent): boolean => {
+          const m = (ev as unknown as { markets?: unknown[] }).markets;
+          return Array.isArray(m) && m.length > 0;
+        };
         const seen = new Set<string>();
         const merged: LiveEvent[] = [];
-        for (const ev of [...(res?.events ?? []), ...(footballExtra?.events ?? [])]) {
-          if (!ev || !ev.id || seen.has(ev.id)) continue;
+        for (const ev of [...(footballLiveExtra?.events ?? []), ...(footballPrematchExtra?.events ?? []), ...(res?.events ?? [])]) {
+          if (!ev || !ev.id) continue;
+          if (seen.has(ev.id)) {
+            const prev = merged.find((m) => m.id === ev.id);
+            if (prev && !hasMarkets(prev) && hasMarkets(ev)) {
+              (prev as unknown as { markets: unknown[] }).markets = (ev as unknown as { markets: unknown[] }).markets;
+            }
+            continue;
+          }
           seen.add(ev.id);
           merged.push(ev);
         }
         const liveOnly = merged.filter(ev => isLiveStatus(ev.status));
+        const futureCutoffMs = now - 180 * 60 * 1000;
         const futureOrRecent = merged.filter(ev => {
           if (isLiveStatus(ev.status)) return false;
           const t = k(ev);
-          return t >= now - 120 * 60 * 1000;
+          return t >= futureCutoffMs;
         }).sort((a, b) => k(a) - k(b));
         const final = liveOnly.length > 0
           ? liveOnly
-          : sport === 'all'
-            ? [...futureOrRecent].slice(0, 24)
-            : futureOrRecent.slice(0, 24);
+          : [...futureOrRecent].slice(0, 30);
         const count = final.length;
+        const nowTs = Date.now();
+        if (firstRun || count > 0 || nowTs - lastSetEventsAt.current > 60_000) {
+          setEvents(final);
+          lastSetEventsAt.current = nowTs;
+        }
         if (typeof console !== 'undefined') {
           // eslint-disable-next-line no-console
           console.table({
-            'Live fetch (200 OK)': 'Resultados recebidos',
+            'Live fetch (200 OK)': firstRun ? '1ª carga OK' : 'Refresh OK',
             'Desporto selecionado': sport,
             'Ao vivo (status LIVE/HT)': liveOnly.length,
-            'Futebol Goal API extra': footballExtra?.events?.length ?? 0,
+            'Futebol Goal API extra LIVE': footballLiveExtra?.events?.length ?? 0,
+            'Futebol Goal API extra PRÉ-JOGO': footballPrematchExtra?.events?.length ?? 0,
+            'Total unicos merge + odds cross-over': merged.length,
             'Total mostrados (fallback incluso)': count,
             'Total backend': res?.total ?? 'N/A',
             'API Keys?': count === 0 ? '⚠️  VERIFICAR RAILWAY PROPLINE_API_KEY + GOAL_API_KEY' : '✅ OK',
           });
         }
-        setEvents(final);
+        if (!firstRun) setError(null);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Erro ao carregar jogos ao vivo');
+        const msg = err instanceof Error ? err.message : 'Erro ao carregar jogos ao vivo';
+        if (firstRun || events.length === 0) setError(msg);
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
-    run();
+    void run();
     return () => {
       cancelled = true;
     };
