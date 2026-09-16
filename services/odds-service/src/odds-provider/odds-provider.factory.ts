@@ -42,7 +42,7 @@ export function normalizeProviderName(name?: string | null): SupportedOddsProvid
   const n = (name ?? '').trim().toLowerCase().replace(/[- ]/g, '_');
   if (n === 'sportsdb' || n === 'thesportsdb' || n === 'tsdb') return 'sportsdb';
   if (n === 'custom' || n === 'generic' || n === 'rest' || n === 'api') return 'custom';
-  if (n === 'goaldir' || n === 'bsd' || n === 'bzzoiro' || n === 'bzzorio' || n === 'goaldirbsd' || n === 'goaldir_bsd') return 'goaldir';
+  if (n === 'goaldir' || n === 'bsd' || n === 'bzzoiro' || n === 'goaldirbsd' || n === 'goaldir_bsd') return 'goaldir';
   if (
     n === 'goal_api' ||
     n === 'goalapi' ||
