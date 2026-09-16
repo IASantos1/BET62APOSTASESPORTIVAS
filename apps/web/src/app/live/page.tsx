@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Radio,
@@ -30,6 +31,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Progress } from '../../components/ui/Progress';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/Tabs';
+import { TeamLogo } from '../../components/ui/TeamLogo';
 import { cn, formatOdds, formatCurrencyEUR } from '../../lib/utils';
 import { useBetslipStore, type BetslipSelection } from '../../stores/betslip.store';
 
@@ -125,6 +127,7 @@ const STATS_META: Array<{ key: 'possession' | 'attacks' | 'dangerous' | 'shotsOn
 ];
 
 export default function LivePage() {
+  const router = useRouter();
   const [betslipOpen, setBetslipOpen] = React.useState(false);
   const [marketsMatch, setMarketsMatch] = React.useState<LiveMatch | null>(null);
   const [sport, setSport] = React.useState('all');
@@ -261,41 +264,37 @@ export default function LivePage() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => setMarketsMatch(match)}
+                            onClick={() => router.push('/live/match/' + match.id)}
                             className="inline-flex items-center gap-1 text-bet62-primary hover:underline underline-offset-2"
                           >
                             Ver todos mercados <ChevronRight size={12} />
                           </button>
                         </div>
                         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-                          <div className="space-y-2 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <div className="h-10 w-10 rounded-xl bg-bet62-primary/15 border border-bet62-primary/30 inline-flex items-center justify-center font-black text-sm text-bet62-primary shrink-0">
-                                {match.home.slice(0, 3).toUpperCase()}
+                            <div className="space-y-2 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <TeamLogo src={undefined} name={match.home} color="primary" size={40} />
+                                <div className="min-w-0">
+                                  <p className="font-bold truncate">{match.home}</p>
+                                  {match.lastGoals?.filter((g) => g.team === 'h').map((g, idx) => (
+                                    <div key={idx} className="flex items-center gap-1 text-[10px] text-bet62-primary/90 mt-0.5">
+                                      <Circle size={8} fill="currentColor" /> Golo · {g.minute}'{g.player ? ` · ${g.player}` : ''}
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                              <div className="min-w-0">
-                                <p className="font-bold truncate">{match.home}</p>
-                                {match.lastGoals?.filter((g) => g.team === 'h').map((g, idx) => (
-                                  <div key={idx} className="flex items-center gap-1 text-[10px] text-bet62-primary/90 mt-0.5">
-                                    <Circle size={8} fill="currentColor" /> Golo · {g.minute}'{g.player ? ` · ${g.player}` : ''}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="h-10 w-10 rounded-xl bg-bet62-secondary/15 border border-bet62-secondary/30 inline-flex items-center justify-center font-black text-sm text-bet62-secondary shrink-0">
-                                {match.away.slice(0, 3).toUpperCase()}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="font-bold truncate">{match.away}</p>
-                                {match.lastGoals?.filter((g) => g.team === 'a').map((g, idx) => (
-                                  <div key={idx} className="flex items-center gap-1 text-[10px] text-bet62-secondary/90 mt-0.5">
-                                    <Circle size={8} fill="currentColor" /> Golo · {g.minute}'{g.player ? ` · ${g.player}` : ''}
-                                  </div>
-                                ))}
+                              <div className="flex items-center gap-2">
+                                <TeamLogo src={undefined} name={match.away} color="secondary" size={40} />
+                                <div className="min-w-0">
+                                  <p className="font-bold truncate">{match.away}</p>
+                                  {match.lastGoals?.filter((g) => g.team === 'a').map((g, idx) => (
+                                    <div key={idx} className="flex items-center gap-1 text-[10px] text-bet62-secondary/90 mt-0.5">
+                                      <Circle size={8} fill="currentColor" /> Golo · {g.minute}'{g.player ? ` · ${g.player}` : ''}
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             </div>
-                          </div>
                           <div className="text-center shrink-0">
                             <div className="inline-flex flex-col items-center px-4 py-2 rounded-2xl border border-bet62-border bg-bet62-bg/60">
                               <p className="font-mono font-black text-4xl md:text-5xl tabular-nums leading-none">

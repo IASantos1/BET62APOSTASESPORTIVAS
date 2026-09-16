@@ -1,0 +1,101 @@
+'use client';
+
+import * as React from 'react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft } from 'lucide-react';
+import { Header } from '../../../../components/layout/Header';
+import { Footer } from '../../../../components/layout/Footer';
+import { MatchHeaderCard } from '../../../../components/live/MatchHeaderCard';
+import { FullMarketsGrid } from '../../../../components/live/FullMarketsGrid';
+import MiniFootballPitch, { commentaryToBallPosition, type FootballZone } from '../../../../components/live/MiniFootballPitch';
+
+interface LiveMatchPageProps {
+  params: { matchId: string };
+}
+
+export default function LiveMatchPage({ params }: LiveMatchPageProps) {
+  const router = useRouter();
+  const { matchId } = params;
+
+  const [ballPosition, setBallPosition] = React.useState<{ x: number; y: number; zone: FootballZone }>({ x: 52.5, y: 34, zone: 'center' });
+  const [demoCommentary, setDemoCommentary] = React.useState('Bola no meio campo');
+
+  React.useEffect(() => {
+    console.log('[live/match] fetching matchId:', matchId);
+    const demoCycle = [
+      'Bola no meio campo',
+      'Canto de escanteio esquerdo Benfica',
+      'Bola em circulação no meio campo',
+      'Ataque Sporting na área',
+      'Bola recuperada em defesa do Benfica',
+      'Golo! Benfica marca aos 74 minutos',
+    ];
+    let idx = 0;
+    const t = setInterval(() => {
+      const next = demoCycle[idx % demoCycle.length];
+      setDemoCommentary(next);
+      setBallPosition(commentaryToBallPosition(next, 67, 52));
+      idx += 1;
+    }, 3200);
+    return () => clearInterval(t);
+  }, [matchId]);
+
+  return (
+    <div className="min-h-screen bg-bet62-bg">
+      <Header />
+      <main className="relative">
+        <div className="absolute inset-x-0 top-0 h-[320px] bg-gradient-to-b from-bet62-primary/10 via-bet62-accent/5 to-transparent pointer-events-none" />
+        <div className="relative max-w-[1700px] mx-auto px-4 lg:px-8 py-6">
+          <div className="mb-5">
+            <button
+              type="button"
+              onClick={() => router.back()}
+              className="inline-flex items-center gap-2 text-sm text-white/75 hover:text-bet62-primary hover:underline underline-offset-2 transition"
+            >
+              <ArrowLeft size={16} />
+              Voltar ao vivo
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
+            <div className="md:col-span-8 order-2 md:order-1">
+              <FullMarketsGrid matchId={matchId} />
+            </div>
+
+            <div className="md:col-span-4 order-1 md:order-2 space-y-5">
+              <MatchHeaderCard matchId={matchId} />
+
+              <div
+                className="rounded-xl border overflow-hidden"
+                style={{ borderColor: 'rgba(30, 86, 49, 0.25)', backgroundColor: 'rgba(30, 86, 49, 0.04)' }}
+              >
+                <div className="px-4 py-2 border-b border-[#1e5631]/20 flex items-center justify-between">
+                  <div className="text-xs font-semibold text-[#1e5631] tracking-wide">CAMPO AO VIVO</div>
+                  <div className="text-[11px] text-white/60 max-w-[70%] truncate" title={demoCommentary}>
+                    {demoCommentary}
+                  </div>
+                </div>
+                <div className="p-3">
+                  <MiniFootballPitch
+                    ballX={ballPosition.x}
+                    ballY={ballPosition.y}
+                    ballZone={ballPosition.zone}
+                    yellowHome={1}
+                    yellowAway={0}
+                    redHome={0}
+                    redAway={1}
+                    cornersHome={4}
+                    cornersAway={3}
+                    substitutionsHome={2}
+                    substitutionsAway={3}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <Footer />
+      </main>
+    </div>
+  );
+}

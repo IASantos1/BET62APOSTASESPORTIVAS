@@ -21,14 +21,12 @@ import {
   LogIn,
   Gift,
   Plus,
-  Banknote,
-  CreditCard,
-  Smartphone,
   Percent,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { Avatar, AvatarFallback } from '../ui/Avatar';
+import { PaymentMethodLogo } from '../ui/PaymentMethodLogo';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../stores/auth.store';
 import { formatCurrencyEUR } from '../../lib/utils';
@@ -389,9 +387,7 @@ export function Header() {
                         : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
                     )}
                   >
-                    <div className="h-11 w-11 rounded-xl bg-[#009688] flex items-center justify-center text-white shrink-0">
-                      <Smartphone size={20} />
-                    </div>
+                    <PaymentMethodLogo method="mbway" size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm">MB WAY</p>
                       <p className="text-xs text-white/50">Instantâneo · mín. €10</p>
@@ -414,9 +410,7 @@ export function Header() {
                         : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
                     )}
                   >
-                    <div className="h-11 w-11 rounded-xl bg-[#0070c9] flex items-center justify-center text-white shrink-0">
-                      <Banknote size={20} />
-                    </div>
+                    <PaymentMethodLogo method="multibanco" size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm">Multibanco</p>
                       <p className="text-xs text-white/50">Referência · mín. €10</p>
@@ -439,9 +433,7 @@ export function Header() {
                         : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
                     )}
                   >
-                    <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-white shrink-0">
-                      <CreditCard size={20} />
-                    </div>
+                    <PaymentMethodLogo method="card" size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm">Cartão Crédito / Débito</p>
                       <p className="text-xs text-white/50">Visa / Mastercard · mín. €10</p>

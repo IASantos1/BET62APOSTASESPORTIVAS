@@ -5,8 +5,6 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
   Wallet,
-  Smartphone,
-  Banknote,
   CreditCard,
   ArrowLeft,
   ShieldCheck,
@@ -16,10 +14,10 @@ import {
 } from 'lucide-react';
 import { Header } from '../../../components/layout/Header';
 import { Footer } from '../../../components/layout/Footer';
-import { Sidebar } from '../../../components/layout/Sidebar';
 import { Card, CardContent } from '../../../components/ui/Card';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
+import { PaymentMethodLogo } from '../../../components/ui/PaymentMethodLogo';
 import { cn } from '../../../lib/utils';
 
 type PaymentMethod = 'mbway' | 'multibanco' | 'card';
@@ -56,9 +54,7 @@ export default function CarteiraDepositoPage() {
   return (
     <div className="relative min-h-screen bg-bet62-bg overflow-hidden">
       <Header />
-      <div className="flex">
-        <Sidebar compact />
-        <main className="flex-1 min-w-0">
+      <main className="min-w-0 w-full">
           <div className="relative">
             <div className="absolute inset-0 bg-bet62-grid [background-size:48px_48px] opacity-60 pointer-events-none" />
             <div className="absolute top-0 left-1/4 w-[560px] h-[560px] bg-emerald-500/8 rounded-full blur-3xl animate-pulse-slow" />
@@ -140,9 +136,7 @@ export default function CarteiraDepositoPage() {
                           : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
                       )}
                     >
-                      <div className="h-14 w-14 md:h-16 md:w-16 rounded-2xl bg-[#009688] flex items-center justify-center text-white shrink-0">
-                        <Smartphone size={26} />
-                      </div>
+                      <PaymentMethodLogo method="mbway" size="md" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-base md:text-lg">MB WAY</p>
@@ -168,9 +162,7 @@ export default function CarteiraDepositoPage() {
                           : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
                       )}
                     >
-                      <div className="h-14 w-14 md:h-16 md:w-16 rounded-2xl bg-[#0070c9] flex items-center justify-center text-white shrink-0">
-                        <Banknote size={26} />
-                      </div>
+                      <PaymentMethodLogo method="multibanco" size="md" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-base md:text-lg">Multibanco</p>
@@ -196,9 +188,7 @@ export default function CarteiraDepositoPage() {
                           : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
                       )}
                     >
-                      <div className="h-14 w-14 md:h-16 md:w-16 rounded-2xl bg-gradient-to-br from-slate-600 to-slate-900 flex items-center justify-center text-white shrink-0">
-                        <CreditCard size={26} />
-                      </div>
+                      <PaymentMethodLogo method="card" size="md" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-base md:text-lg">Visa / Mastercard</p>
@@ -280,7 +270,6 @@ export default function CarteiraDepositoPage() {
           </div>
           <Footer />
         </main>
-      </div>
     </div>
   );
 }

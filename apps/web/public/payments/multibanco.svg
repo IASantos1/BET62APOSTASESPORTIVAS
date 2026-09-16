@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" width="200" height="120">
+  <rect width="200" height="120" rx="16" fill="#FFFFFF"/>
+  <g transform="translate(20, 22)">
+    <rect x="0" y="0" width="160" height="76" rx="10" fill="#0070C9"/>
+    <g transform="translate(14, 14)">
+      <circle cx="18" cy="24" r="14" fill="none" stroke="white" stroke-width="3"/>
+      <path d="M18 10 L18 38 M4 24 L32 24" stroke="white" stroke-width="2.5"/>
+      <path d="M50 12 L70 12 L62 36 L44 36 Z M56 18 L50 30 L62 30 Z" fill="white"/>
+      <path d="M84 12 L96 12 L108 36 L96 36 L92 28 L84 36 L72 36 Z M92 18 L88 26 L96 26 Z" fill="white"/>
+      <path d="M116 12 L128 12 L132 22 L136 12 L148 12 L140 36 L124 36 Z M132 26 L128 32 L136 32 Z" fill="white"/>
+    </g>
+    <rect x="0" y="66" width="160" height="10" fill="#E30613"/>
+  </g>
+  <text x="100" y="108" text-anchor="middle" fontFamily="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" fontSize="15" fontWeight="800" fill="#0070C9" letter-spacing="0.8">SIBS MULTIBANCO</text>
+</svg>
