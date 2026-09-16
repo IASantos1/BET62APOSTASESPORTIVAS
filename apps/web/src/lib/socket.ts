@@ -150,6 +150,48 @@ const EMPTY_STATE: LiveMatchStateShape = {
   lastUpdateAt: new Date(0).toISOString(),
 };
 
+function eventPayloadToState(matchId: string, payload: Record<string, unknown>): Partial<LiveMatchStateShape> {
+  const score = (payload.liveScoreJson as { home?: number | null; away?: number | null } | null | undefined) ?? {};
+  const clock = (payload.liveClockJson as { minute?: number | null; injuryMinutes?: number | null; status?: string } | null | undefined) ?? {};
+  const leagueName = typeof payload.leagueName === 'string' ? payload.leagueName : null;
+  return {
+    matchId,
+    homeName: typeof payload.homeTeamName === 'string' ? payload.homeTeamName : null,
+    awayName: typeof payload.awayTeamName === 'string' ? payload.awayTeamName : null,
+    leagueName,
+    kickoffAt: typeof payload.kickoffAt === 'string' ? payload.kickoffAt : null,
+    score: {
+      home: typeof score.home === 'number' ? score.home : null,
+      away: typeof score.away === 'number' ? score.away : null,
+    },
+    clock: {
+      minute: typeof clock.minute === 'number' ? clock.minute : null,
+      stoppage: typeof clock.injuryMinutes === 'number' ? clock.injuryMinutes : null,
+      period: null,
+      periodLabel: typeof clock.status === 'string' ? clock.status : null,
+      running: payload.status === 'LIVE' || payload.status === 'HALF_TIME',
+    },
+    markets: Array.isArray(payload.markets)
+      ? (payload.markets as Array<Record<string, unknown>>).map((market) => ({
+          code: String(market.type ?? market.id ?? 'market'),
+          label: String(market.name ?? market.type ?? 'Mercado'),
+          group: String(market.type ?? 'general'),
+          status: String(market.status ?? 'active').toLowerCase() as LiveMatchMarket['status'],
+          selections: Array.isArray(market.selections)
+            ? (market.selections as Array<Record<string, unknown>>).map((selection) => ({
+                id: String(selection.id ?? ''),
+                name: String(selection.name ?? ''),
+                price: typeof selection.odds === 'number' ? selection.odds : 0,
+                status: String(selection.status ?? 'active').toLowerCase() as LiveMatchMarket['selections'][number]['status'],
+              }))
+            : [],
+          updatedAt: new Date().toISOString(),
+        }))
+      : [],
+    lastUpdateAt: new Date().toISOString(),
+  };
+}
+
 export function applyMatchUpdate(state: LiveMatchStateShape, env: LiveMatchUpdateEnvelope): LiveMatchStateShape {
   switch (env.kind) {
     case 'state':
@@ -214,43 +256,54 @@ export function useLiveMatch(matchId: string | null | undefined, options?: { aut
     setMatch((prev) => applyMatchUpdate(prev, env));
   }, []);
 
+  const handleGatewayPayload = useCallback((raw: unknown) => {
+    if (!matchId) return;
+    try {
+      const payload = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (!payload || typeof payload !== 'object') return;
+      const data = payload as { eventId?: string; payload?: Record<string, unknown> };
+      if (data.eventId && data.eventId !== matchId) return;
+      handleEnvelope({
+        kind: 'state',
+        full: false,
+        state: eventPayloadToState(matchId, data.payload ?? {}),
+      });
+    } catch {
+      /* skip malformed payload */
+    }
+  }, [handleEnvelope, matchId]);
+
   const subscribe = useCallback(() => {
     if (!matchId || subscribedRef.current) return;
     const sock = socketRef.current ?? getOddsSocket();
     socketRef.current = sock;
     subscribedRef.current = true;
     setSubscribed(true);
-    const matchChan = `match:${matchId}`;
-    sock.on(matchChan, (raw) => {
-      try {
-        const env = (typeof raw === 'string' ? JSON.parse(raw) : raw) as LiveMatchUpdateEnvelope;
-        handleEnvelope(env);
-      } catch {
-        /* skip */
-      }
+    sock.on('event:update', handleGatewayPayload as AnyListener);
+    sock.on('connect', () => {
+      setConnected(true);
+      handleEnvelope({ kind: 'hello', connected: true, serverTime: new Date().toISOString() });
     });
-    sock.on('connect', () => setConnected(true));
     sock.on('disconnect', () => setConnected(false));
     sock.on('connect_error', () => setConnected(false));
-    sock.emit('live:subscribe', { matchId });
+    sock.emit('subscribe:event', { eventId: matchId });
     setConnected(sock.connected);
-    void matchChan;
-  }, [matchId, handleEnvelope]);
+  }, [matchId, handleEnvelope, handleGatewayPayload]);
 
   const unsubscribe = useCallback(() => {
     const sock = socketRef.current;
     if (matchId && sock) {
-      sock.off(`match:${matchId}`);
-      sock.emit('live:unsubscribe', { matchId });
+      sock.off('event:update', handleGatewayPayload as AnyListener);
+      sock.emit('unsubscribe:event', { eventId: matchId });
     }
     subscribedRef.current = false;
     setSubscribed(false);
-  }, [matchId]);
+  }, [matchId, handleGatewayPayload]);
 
   const forceRefresh = useCallback(() => {
     const sock = socketRef.current ?? getOddsSocket();
     socketRef.current = sock;
-    sock.emit('live:refresh', { matchId });
+    if (matchId) sock.emit('subscribe:event', { eventId: matchId });
   }, [matchId]);
 
   useEffect(() => {

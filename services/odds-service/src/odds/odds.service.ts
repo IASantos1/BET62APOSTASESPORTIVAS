@@ -29,7 +29,9 @@ import type { LiveOddsEvent, UpcomingEvent } from '../odds-provider/abstract-odd
 import { GoalApiOddsProviderService, GoalApiHttpClient, fixtureToBet62Match } from '../odds-provider/goalapi';
 import { ProplineOddsProviderService } from '../odds-provider/propline';
 import type { GoalApiFixture } from '../odds-provider/goalapi/goalapi.types';
+import type { ProplineEvent } from '../odds-provider/propline/propline.types';
 import { normalizeCompetitionName, normalizeTeamName, resolveTeamAlias } from '../sports/normalization/team-normalizer';
+import { ProviderMappingService } from '../sports';
 
 interface SportDto {
   id: string;
@@ -59,6 +61,8 @@ export class OddsService {
   private readonly logger = new Logger(OddsService.name);
   private readonly CACHE_PREMATCH_TTL_MS = 60_000;
   private readonly CACHE_LIVE_TTL_MS = 5_000;
+  private readonly FOOTBALL_MAPPING_SYNC_MS = 60_000;
+  private lastFootballMappingSyncAt = 0;
 
   constructor(
     @Inject(ABSTRACT_ODDS_PROVIDER_TOKEN)
@@ -66,6 +70,7 @@ export class OddsService {
     private readonly goalApiProvider: GoalApiOddsProviderService,
     private readonly goalApiHttpClient: GoalApiHttpClient,
     private readonly proplineProvider: ProplineOddsProviderService,
+    private readonly providerMappingService: ProviderMappingService,
   ) {}
 
   private readonly cache = new SimpleCache();
@@ -100,6 +105,128 @@ export class OddsService {
     const league = leagueIds?.[0];
     if (!league) return undefined;
     return String(league).replace(/^league-goal-/i, '');
+  }
+
+  private getSourcesForSport(sportCode?: string | SportType | null) {
+    if (this.isFootballSportCode(sportCode)) {
+      return {
+        data: 'goal_api',
+        stats: 'goal_api',
+        odds: 'propline',
+        settlement: 'goal_api',
+      };
+    }
+    return {
+      data: 'propline',
+      stats: 'propline',
+      odds: 'propline',
+      settlement: 'propline',
+    };
+  }
+
+  private buildDataFreshness(ev: ProviderEvent) {
+    const updatedAt = ev.liveUpdatedAt ?? ev.kickoffAt ?? null;
+    const ageMs = updatedAt ? Math.max(0, Date.now() - updatedAt.getTime()) : null;
+    return {
+      dataSource: this.isFootballSportCode(ev.sportCode) ? 'goal_api' : 'propline',
+      scoreAgeMs: ageMs,
+      clockAgeMs: ageMs,
+      statsAgeMs: this.isFootballSportCode(ev.sportCode) ? ageMs : null,
+      oddsAgeMs: {},
+      stale: ageMs !== null ? ageMs > 90_000 : false,
+    };
+  }
+
+  private listFootballPropLineCandidates(): Promise<ProviderEvent[]> {
+    return Promise.all([
+      this.proplineProvider.getPrematchEvents({ sports: [SportType.FOOTBALL], limit: 2000 }),
+      this.proplineProvider.getLiveEvents({ sports: [SportType.FOOTBALL], limit: 2000 }),
+    ]).then(([prematch, live]) => [...prematch.events, ...live.events]);
+  }
+
+  private findBestFootballCandidate(
+    fixture: GoalApiFixture,
+    candidates: ProviderEvent[],
+  ): { candidate: ProviderEvent | null; score: number } {
+    let best: ProviderEvent | null = null;
+    let bestScore = 0;
+    for (const candidate of candidates) {
+      const score = this.scoreFootballCandidate(fixture, candidate);
+      if (score > bestScore) {
+        bestScore = score;
+        best = candidate;
+      }
+    }
+    return { candidate: best, score: bestScore };
+  }
+
+  private toProplineMappingEvent(candidate: ProviderEvent): ProplineEvent {
+    const [maybeSportKey, maybeEventId] = String(candidate.id ?? '').split(':', 2);
+    const sportKey = maybeEventId ? maybeSportKey : 'soccer';
+    const eventId = candidate.providerEventId ?? (maybeEventId || maybeSportKey || candidate.id);
+    const teamKey = (name?: string) =>
+      normalizeTeamName(name ?? '')
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || undefined;
+    return {
+      id: eventId,
+      event_id: eventId,
+      sport_key: sportKey,
+      league_key: candidate.leagueId ?? null,
+      home_team_key: teamKey(candidate.homeTeamName),
+      away_team_key: teamKey(candidate.awayTeamName),
+      home_team_name: candidate.homeTeamName ?? null,
+      away_team_name: candidate.awayTeamName ?? null,
+      start_date: candidate.kickoffAt?.toISOString?.() ?? undefined,
+      status: candidate.status === 'LIVE' || candidate.status === 'HALF_TIME' ? 'in_progress' : 'scheduled',
+    };
+  }
+
+  private async persistFootballMapping(
+    fixture: GoalApiFixture,
+    candidate: ProviderEvent,
+    score: number,
+  ): Promise<void> {
+    if (score < 0.85) return;
+    try {
+      await this.providerMappingService.resolveAndUpsertMapping(
+        fixture,
+        this.toProplineMappingEvent(candidate),
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Falha ao persistir mapping futebol ${fixture.id} -> ${candidate.id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
+  }
+
+  private scheduleFootballMappingSync(): void {
+    const now = Date.now();
+    if (now - this.lastFootballMappingSyncAt < this.FOOTBALL_MAPPING_SYNC_MS) return;
+    this.lastFootballMappingSyncAt = now;
+    void this.syncFootballMappings().catch((err) => {
+      this.logger.warn(
+        `Falha ao sincronizar mappings futebol: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+  }
+
+  private async syncFootballMappings(): Promise<void> {
+    const [upcomingFixtures, liveFixtures, candidates] = await Promise.all([
+      this.goalApiHttpClient.getUpcomingFixtures(3),
+      this.goalApiHttpClient.getLiveFixtures(),
+      this.listFootballPropLineCandidates(),
+    ]);
+    const fixtures = [...liveFixtures, ...upcomingFixtures];
+    await Promise.allSettled(
+      fixtures.map(async (fixture) => {
+        const { candidate, score } = this.findBestFootballCandidate(fixture, candidates);
+        if (!candidate) return;
+        await this.persistFootballMapping(fixture, candidate, score);
+      }),
+    );
   }
 
   private toProviderEventFromUpcoming(event: UpcomingEvent): ProviderEvent {
@@ -223,22 +350,46 @@ export class OddsService {
     fixture: GoalApiFixture,
     includeMarkets: boolean,
   ): Promise<ProviderEventDetail | null> {
-    const [prematch, live] = await Promise.all([
-      this.proplineProvider.getPrematchEvents({ sports: [SportType.FOOTBALL], limit: 2000 }),
-      this.proplineProvider.getLiveEvents({ sports: [SportType.FOOTBALL], limit: 2000 }),
-    ]);
-    const candidates = [...prematch.events, ...live.events];
-    let best: ProviderEvent | null = null;
-    let bestScore = 0;
-    for (const candidate of candidates) {
-      const score = this.scoreFootballCandidate(fixture, candidate);
-      if (score > bestScore) {
-        bestScore = score;
-        best = candidate;
-      }
+    const candidates = await this.listFootballPropLineCandidates();
+    const { candidate, score } = this.findBestFootballCandidate(fixture, candidates);
+    if (!candidate || score < 0.65) return null;
+    await this.persistFootballMapping(fixture, candidate, score);
+    return this.proplineProvider.getEventDetail(candidate.id, includeMarkets);
+  }
+
+  private async getMappedFootballPropLineDetail(
+    fixtureId: string,
+    includeMarkets: boolean,
+  ): Promise<ProviderEventDetail | null> {
+    const mapping = await this.providerMappingService.findByGoalFixture('FOOTBALL', fixtureId);
+    if (!mapping?.proplineEventId || !mapping.proplineSportKey) return null;
+    try {
+      return await this.proplineProvider.getEventDetail(
+        `${mapping.proplineSportKey}:${mapping.proplineEventId}`,
+        includeMarkets,
+      );
+    } catch (err) {
+      this.logger.debug(
+        `Mapping futebol ${fixtureId} -> ${mapping.proplineEventId} inválido: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return null;
     }
-    if (!best || bestScore < 0.65) return null;
-    return this.proplineProvider.getEventDetail(best.id, includeMarkets);
+  }
+
+  private mergeFootballDetail(
+    base: ProviderEventDetail,
+    propDetail: ProviderEventDetail | null,
+  ): ProviderEventDetail {
+    if (!propDetail) return base;
+    return {
+      ...base,
+      markets: propDetail.markets ?? [],
+      marketsCount: propDetail.markets?.length ?? 0,
+      liveStreamAvailable: propDetail.liveStreamAvailable ?? base.liveStreamAvailable,
+      liveUpdatedAt: propDetail.liveUpdatedAt ?? base.liveUpdatedAt,
+    };
   }
 
   private async getFootballEventDetail(
@@ -251,13 +402,10 @@ export class OddsService {
     if (!fixture) return null;
     const base = this.buildFootballDetailFromFixture(fixture);
     if (!includeMarkets) return base;
+    const mappedDetail = await this.getMappedFootballPropLineDetail(fixtureId, true);
+    if (mappedDetail) return this.mergeFootballDetail(base, mappedDetail);
     const propDetail = await this.findFootballPropLineDetail(fixture, true);
-    if (!propDetail) return base;
-    return {
-      ...base,
-      markets: propDetail.markets ?? [],
-      marketsCount: propDetail.markets?.length ?? 0,
-    };
+    return this.mergeFootballDetail(base, propDetail);
   }
 
   private async collectPrematchProviderEvents(
@@ -266,6 +414,7 @@ export class OddsService {
     const split = this.splitSportsFilter(query.sports);
     const out: ProviderEvent[] = [];
     if (!split.hasFilter || split.wantsFootball) {
+      this.scheduleFootballMappingSync();
       const football = await this.goalApiProvider.fetchUpcomingEvents(
         'FOOTBALL',
         this.resolveFootballLeagueFilter(query.leagueIds),
@@ -307,6 +456,7 @@ export class OddsService {
     const split = this.splitSportsFilter(query.sports);
     const out: ProviderEvent[] = [];
     if (!split.hasFilter || split.wantsFootball) {
+      this.scheduleFootballMappingSync();
       const football = await this.goalApiProvider.fetchLiveOdds(
         'FOOTBALL',
         this.resolveFootballLeagueFilter(query.leagueIds),
@@ -575,8 +725,10 @@ export class OddsService {
   }
 
   buildEventDto(ev: ProviderEvent): EventDto {
+    const sources = this.getSourcesForSport(ev.sportCode);
     return {
       id: ev.id,
+      matchId: ev.id,
       sportType: (ev.sportCode as SportType) ?? SportType.FOOTBALL,
       name: ev.name,
       homeTeamName: ev.homeTeamName,
@@ -589,6 +741,10 @@ export class OddsService {
       liveStreamAvailable: ev.liveStreamAvailable,
       marketsCount: ev.marketsCount,
       providerEventId: ev.providerEventId,
+      sources,
+      primaryOddsSource: sources.odds,
+      primaryStatsSource: sources.stats,
+      dataFreshness: this.buildDataFreshness(ev),
     };
   }
 
