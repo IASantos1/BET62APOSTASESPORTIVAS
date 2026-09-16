@@ -419,30 +419,70 @@ export default function HomePage() {
     setError(null);
     const runAll = async () => {
       try {
-        const [prematchRes, liveRes] = await Promise.all([
+        const [prematchRes, footballPrematchRes, liveRes] = await Promise.all([
           apiClient.get<{ events: BaseEvent[]; total: number; page: number; limit: number }>('/odds/events/prematch?limit=50', { auth: false }),
+          (async () => {
+            try {
+              return await apiClient.get<{ events: BaseEvent[]; total: number; page: number; limit: number }>('/odds/events/prematch?sports=FOOTBALL&limit=50', { auth: false });
+            } catch {
+              return { events: [] as BaseEvent[], total: 0, page: 1, limit: 50 };
+            }
+          })(),
           apiClient.get<{ events: BaseEvent[]; total: number; page: number; limit: number }>('/odds/events/live?limit=50', { auth: false }),
         ]);
-        // #region debug-point H3,H5:home-success-count
-        (() => { const p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { if (typeof window !== 'undefined') { const e = ''; u = 'http://127.0.0.1:7777/event'; } } catch {} const d = { sessionId: s, runId: 'post-fix', hypothesisId: 'H3+H5', location: 'page.tsx:414', msg: '[DEBUG] home useEffect fetch SUCESSO (200 ok) - contagens recebidas', data: { prematchCount: prematchRes?.events?.length ?? 0, liveCount: liveRes?.events?.length ?? 0, hasPrematchTotalKey: Object.prototype.hasOwnProperty.call(prematchRes || {}, 'total'), hasLiveTotalKey: Object.prototype.hasOwnProperty.call(liveRes || {}, 'total') }, ts: Date.now() }; fetch(u, { method: 'POST', body: JSON.stringify(d), headers: { 'Content-Type': 'application/json' } }).catch(() => {}); })();
-        // #endregion
         if (cancelled) return;
-        const pCount = prematchRes?.events?.length ?? 0;
-        const lCount = liveRes?.events?.length ?? 0;
-        if (typeof console !== 'undefined') {
-          // eslint-disable-next-line no-console
-          console.table({ 'Home fetch (200 OK)': 'Resultados recebidos', 'Pré-jogo (prematch)': pCount, 'Ao vivo (live)': lCount, 'Prematch.total': prematchRes?.total ?? 'N/A', 'Live.total': liveRes?.total ?? 'N/A', 'Railway vars check': pCount + lCount === 0 ? '⚠️  VERIFICAR PROPLINE_API_KEY + GOAL_API_KEY' : '✅ OK' });
-          if (pCount + lCount === 0) {
-            // eslint-disable-next-line no-console
-            console.warn('[BET62] Nenhum evento recebido dos provedores. Causas prováveis: (1) Railway: PROPLINE_API_KEY ou GOAL_API_KEY são placeholder; (2) Provedor retornou [] (atraso sincronismo inicial, aguardar 2min); (3) Filtro sports muito restrito.');
+        const now = Date.now();
+        const k = (ev: BaseEvent) => { const t = new Date(ev.kickoffAt).getTime(); return Number.isFinite(t) ? t : now; };
+        const seen = new Set<string>();
+        const merged: BaseEvent[] = [];
+        for (const src of [footballPrematchRes?.events ?? [], prematchRes?.events ?? []]) {
+          for (const ev of src) {
+            if (!ev || !ev.id || seen.has(ev.id)) continue;
+            seen.add(ev.id);
+            merged.push(ev);
           }
         }
-        setPrematch(prematchRes?.events ?? []);
-        setLive(liveRes?.events ?? []);
+        const liveMerged: BaseEvent[] = [];
+        const liveSeen = new Set<string>();
+        for (const ev of liveRes?.events ?? []) {
+          if (!ev || !ev.id || liveSeen.has(ev.id)) continue;
+          liveSeen.add(ev.id);
+          liveMerged.push(ev);
+        }
+        const isLiveStatus = (s: string) => s === 'LIVE' || s === 'HALF_TIME' || s === 'HT' || s === 'IN_PLAY';
+        const liveAll = liveMerged.filter(ev => isLiveStatus(ev.status));
+        const sortedLiveAll = liveAll.length > 0
+          ? liveAll
+          : liveMerged.slice().sort((a, b) => k(b) - k(a)).slice(0, 8);
+        const futureCutoffMs = now - 120 * 60 * 1000;
+        const futurePrematch = merged.filter(ev => {
+          if (isLiveStatus(ev.status)) return false;
+          const t = k(ev);
+          return t >= futureCutoffMs;
+        }).sort((a, b) => k(a) - k(b));
+        const fallbackPrematch = futurePrematch.length === 0
+          ? merged.slice().sort((a, b) => k(b) - k(a)).slice(0, 12)
+          : futurePrematch;
+        const pCount = fallbackPrematch.length;
+        const lCount = sortedLiveAll.length;
+        if (typeof console !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.table({
+            'Home fetch 200 OK': 'Resultados recebidos',
+            'Prematch (geral + football)': prematchRes?.events?.length ?? 0,
+            '  - Goal API football extra': footballPrematchRes?.events?.length ?? 0,
+            '  - Unicos (dedupe)': merged.length,
+            '  - Futuro ou recente (<=120s pass.)': pCount,
+            'Ao vivo (status LIVE/HT)': lCount,
+            'Prematch.total backend': prematchRes?.total ?? 'N/A',
+            'Football.total backend': footballPrematchRes?.total ?? 'N/A',
+            'Live.total backend': liveRes?.total ?? 'N/A',
+            'API Keys?': pCount + lCount === 0 ? '⚠️  VERIFICAR RAILWAY PROPLINE_API_KEY + GOAL_API_KEY' : '✅ OK',
+          });
+        }
+        setPrematch(fallbackPrematch);
+        setLive(sortedLiveAll);
       } catch (err) {
-        // #region debug-point H3,H2a:home-silent-catch
-        (() => { const p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { if (typeof window !== 'undefined') { const e = ''; u = 'http://127.0.0.1:7777/event'; } } catch {} const d = { sessionId: s, runId: 'post-fix', hypothesisId: 'H3+H2a', location: 'page.tsx:421', msg: '[DEBUG] home useEffect fetch FALHOU - agora com setError + banner', data: { errorMessage: err instanceof Error ? err.message : String(err), errorName: err instanceof Error ? err.name : typeof err, expectedPostFixH2a: 'NAO deve mais ser 404 se o globalPrefix+Controller foram corrigidos' }, ts: Date.now() }; fetch(u, { method: 'POST', body: JSON.stringify(d), headers: { 'Content-Type': 'application/json' } }).catch(() => {}); })();
-        // #endregion
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : String(err);
         setError(msg || 'Falha ao carregar jogos. A tentar novamente em 30 segundos...');
@@ -518,13 +558,16 @@ export default function HomePage() {
                 </p>
                 <ol className="list-decimal pl-4 marker:text-amber-400 marker:font-bold space-y-1.5 text-xs text-white/70 leading-relaxed">
                   <li>
-                    <span className="font-semibold text-white/85">Aguarda 2 minutos:</span> a primeira sincronização PropLine + Goal API pode demorar após iniciar o serviço no Railway. Clica em "Tentar novamente" ao fim de 90s.
+                    <span className="font-semibold text-white/85">Railway Dashboard:</span> Serviços <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">odds-service</code>, <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">api-gateway</code>, <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">web</code> → ⟳ <span className="font-semibold">Redeploy</span> com <span className="underline decoration-dashed decoration-amber-400/80">☑️ Clear build cache before redeploying</span> LIGADO (obrigatório).
                   </li>
                   <li>
-                    <span className="font-semibold text-white/85"><KeyRound size={12} className="inline mr-1" /> Railway: confirmar variáveis de ambiente:</span> <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">PROPLINE_API_KEY</code> e <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">GOAL_API_KEY</code> — NÃO podem ser placeholder.
+                    <span className="font-semibold text-white/85">Depois do redeploy:</span> a primeira sincronização Goal API + PropLine demora 1-3 minutos. Clica em "Tentar novamente" ou aguarda 2 minutos e faz Hard Refresh.
                   </li>
                   <li>
-                    <span className="font-semibold text-white/85">Abre DevTools → Console:</span> procura por <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">console.table</code> da BET62 (tem contagens exatas de pré-jogo/ao vivo recebidas).
+                    <span className="font-semibold text-white/85"><KeyRound size={12} className="inline mr-1" /> Variáveis obrigatórias:</span> <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">PROPLINE_API_KEY</code>, <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">GOAL_API_KEY</code>, <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">ENABLE_GOAL=true</code>, <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">ENABLE_PROPLINE=true</code> (serviço odds-service).
+                  </li>
+                  <li>
+                    <span className="font-semibold text-white/85">DevTools → Console:</span> procura por <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">console.table</code> BET62 — tem a contagem exata de "Goal API football extra" e "Futuro ou recente".
                   </li>
                 </ol>
                 <div className="pt-1 flex flex-wrap gap-2">

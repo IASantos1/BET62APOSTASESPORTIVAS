@@ -278,33 +278,68 @@ export default function LivePage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    apiClient
-      .get<{ events: LiveEvent[]; total: number }>('/odds/events/live', {
-        auth: false,
-        params: sport !== 'all'
-          ? { limit: 100, sports: [sport] }
-          : { limit: 100 },
-      })
-      .then((res) => {
+    const run = async () => {
+      try {
+        const mainReq = apiClient.get<{ events: LiveEvent[]; total: number }>('/odds/events/live', {
+          auth: false,
+          params: sport !== 'all'
+            ? { limit: 100, sports: [sport] }
+            : { limit: 100 },
+        });
+        const footballExtraReq = sport !== 'all' && sport !== 'FOOTBALL'
+          ? Promise.resolve({ events: [] as LiveEvent[], total: 0 })
+          : (async () => {
+              try {
+                return await apiClient.get<{ events: LiveEvent[]; total: number }>('/odds/events/prematch?sports=FOOTBALL&limit=30', { auth: false });
+              } catch {
+                return { events: [] as LiveEvent[], total: 0 };
+              }
+            })();
+        const [res, footballExtra] = await Promise.all([mainReq, footballExtraReq]);
         if (cancelled) return;
-        const count = res?.events?.length ?? 0;
+        const now = Date.now();
+        const isLiveStatus = (s: string) => s === 'LIVE' || s === 'HALF_TIME' || s === 'HT' || s === 'IN_PLAY';
+        const k = (ev: LiveEvent) => { const t = new Date(ev.kickoffAt).getTime(); return Number.isFinite(t) ? t : now; };
+        const seen = new Set<string>();
+        const merged: LiveEvent[] = [];
+        for (const ev of [...(res?.events ?? []), ...(footballExtra?.events ?? [])]) {
+          if (!ev || !ev.id || seen.has(ev.id)) continue;
+          seen.add(ev.id);
+          merged.push(ev);
+        }
+        const liveOnly = merged.filter(ev => isLiveStatus(ev.status));
+        const futureOrRecent = merged.filter(ev => {
+          if (isLiveStatus(ev.status)) return false;
+          const t = k(ev);
+          return t >= now - 120 * 60 * 1000;
+        }).sort((a, b) => k(a) - k(b));
+        const final = liveOnly.length > 0
+          ? liveOnly
+          : sport === 'all'
+            ? [...futureOrRecent].slice(0, 24)
+            : futureOrRecent.slice(0, 24);
+        const count = final.length;
         if (typeof console !== 'undefined') {
           // eslint-disable-next-line no-console
-          console.table({ 'Live fetch (200 OK)': 'Resultados recebidos', 'Desporto selecionado': sport, 'Ao vivo (events)': count, 'Total (res.total)': res?.total ?? 'N/A', 'Railway vars check': count === 0 ? '⚠️  VERIFICAR PROPLINE_API_KEY + GOAL_API_KEY' : '✅ OK' });
-          if (count === 0) {
-            // eslint-disable-next-line no-console
-            console.warn('[BET62 /live] Nenhum evento ao vivo. Causas prováveis: (1) Railway API Keys placeholder; (2) Nenhum jogo em curso neste horário (normal horários europeus); (3) Sport=FOOTBALL não tem jogos ao vivo (trocar para "Todos").');
-          }
+          console.table({
+            'Live fetch (200 OK)': 'Resultados recebidos',
+            'Desporto selecionado': sport,
+            'Ao vivo (status LIVE/HT)': liveOnly.length,
+            'Futebol Goal API extra': footballExtra?.events?.length ?? 0,
+            'Total mostrados (fallback incluso)': count,
+            'Total backend': res?.total ?? 'N/A',
+            'API Keys?': count === 0 ? '⚠️  VERIFICAR RAILWAY PROPLINE_API_KEY + GOAL_API_KEY' : '✅ OK',
+          });
         }
-        setEvents(res?.events ?? []);
-      })
-      .catch((err) => {
+        setEvents(final);
+      } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar jogos ao vivo');
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    };
+    run();
     return () => {
       cancelled = true;
     };
