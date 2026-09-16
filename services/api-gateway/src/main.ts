@@ -1,4 +1,4 @@
-import '@bet62/shared/config/env-aliases';
+import '@bet62/shared';
 // @ts-nocheck — resolução de tipos temporária enquanto prisma generate não roda
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';

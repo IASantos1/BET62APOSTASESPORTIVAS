@@ -1,4 +1,4 @@
-import '@bet62/shared/config/env-aliases';
+import '@bet62/shared';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
