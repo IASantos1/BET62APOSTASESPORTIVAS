@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsArray,
   IsBoolean,
@@ -26,13 +26,50 @@ import {
   SelectionOutcome,
 } from "../enums";
 
+function normalizeQueryArray(value: unknown): string[] | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => normalizeQueryArray(item) ?? [])
+      .filter(Boolean);
+  }
+  if (typeof value !== "string") {
+    return [String(value)];
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+
+  if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.map((item) => String(item));
+      }
+    } catch {
+      // fallback below
+    }
+  }
+
+  if (trimmed.includes(",")) {
+    return trimmed
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [trimmed];
+}
+
 export class PrematchEventsQueryDto {
   @IsOptional()
+  @Transform(({ value }) => normalizeQueryArray(value))
   @IsEnum(SportType, { each: true })
   @IsArray()
   sports?: SportType[];
 
   @IsOptional()
+  @Transform(({ value }) => normalizeQueryArray(value))
   @IsArray()
   @IsString({ each: true })
   leagueIds?: string[];
@@ -78,11 +115,13 @@ export class PrematchEventsQueryDto {
 
 export class LiveEventsQueryDto {
   @IsOptional()
+  @Transform(({ value }) => normalizeQueryArray(value))
   @IsEnum(SportType, { each: true })
   @IsArray()
   sports?: SportType[];
 
   @IsOptional()
+  @Transform(({ value }) => normalizeQueryArray(value))
   @IsArray()
   @IsString({ each: true })
   leagueIds?: string[];

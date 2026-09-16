@@ -32,13 +32,13 @@ import { apiClient } from '../../lib/api-client';
 
 const SPORTS = [
   { label: 'Todos', icon: Star, id: 'all' },
-  { label: 'Futebol', icon: CircleDot, id: 'football' },
-  { label: 'Basquete', icon: CircleDot, id: 'basketball' },
-  { label: 'Tênis', icon: Target, id: 'tennis' },
-  { label: 'Voleibol', icon: CircleDot, id: 'volleyball' },
-  { label: 'Hóquei', icon: CircleDot, id: 'hockey' },
-  { label: 'MMA / UFC', icon: Swords, id: 'mma' },
-  { label: 'Dardos', icon: Trophy, id: 'darts' },
+  { label: 'Futebol', icon: CircleDot, id: 'FOOTBALL' },
+  { label: 'Basquete', icon: CircleDot, id: 'BASKETBALL' },
+  { label: 'Tênis', icon: Target, id: 'TENNIS' },
+  { label: 'Voleibol', icon: CircleDot, id: 'VOLLEYBALL' },
+  { label: 'Hóquei', icon: CircleDot, id: 'HOCKEY' },
+  { label: 'MMA / UFC', icon: Swords, id: 'UFC' },
+  { label: 'Dardos', icon: Trophy, id: 'DARTS' },
 ];
 
 type LiveScore = { home?: number | null; away?: number | null; homeHalf?: number | null; awayHalf?: number | null };
@@ -257,11 +257,13 @@ export default function LivePage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    const searchParams: Record<string, string> = { limit: '100' };
-    if (sport !== 'all') searchParams.sports = `["${sport.toUpperCase()}"]`;
-    const q = new URLSearchParams(searchParams).toString();
     apiClient
-      .get<{ events: LiveEvent[]; total: number }>(`/odds/events/live${q ? `?${q}` : ''}`, { auth: false })
+      .get<{ events: LiveEvent[]; total: number }>('/odds/events/live', {
+        auth: false,
+        params: sport !== 'all'
+          ? { limit: 100, sports: [sport] }
+          : { limit: 100 },
+      })
       .then((res) => {
         if (cancelled) return;
         setEvents(res?.events ?? []);

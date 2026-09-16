@@ -18,9 +18,13 @@ import { Card, CardContent } from '../../../components/ui/Card';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { PaymentMethodLogo } from '../../../components/ui/PaymentMethodLogo';
+import {
+  DEFAULT_DEPOSIT_METHOD,
+  isPaymentMethodEnabled,
+  normalizeDepositMethod,
+  type PaymentMethod,
+} from '../../../lib/payment-methods';
 import { cn } from '../../../lib/utils';
-
-type PaymentMethod = 'mbway' | 'multibanco' | 'card';
 
 const BENEFITS = [
   { icon: Zap, label: 'Instantâneo', desc: 'Confirmado em segundos' },
@@ -30,17 +34,18 @@ const BENEFITS = [
 
 export default function CarteiraDepositoPage() {
   const [amount, setAmount] = React.useState<number>(20);
-  const [method, setMethod] = React.useState<PaymentMethod>('mbway');
+  const [method, setMethod] = React.useState<PaymentMethod>(DEFAULT_DEPOSIT_METHOD);
   const [loading, setLoading] = React.useState(false);
 
   const handleSubmit = async () => {
     if (amount < 10) return;
+    const paymentMethod = normalizeDepositMethod(method);
     setLoading(true);
     try {
       const res = await fetch('/api/client/deposit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, method }),
+        body: JSON.stringify({ amount, method: paymentMethod }),
       });
       const data = await res.json().catch(() => ({}));
       if (data?.url) window.location.href = data.url;
@@ -128,21 +133,25 @@ export default function CarteiraDepositoPage() {
 
                   <div className="space-y-3 mb-8">
                     <button
-                      onClick={() => setMethod('mbway')}
+                      onClick={() => {
+                        if (isPaymentMethodEnabled('mbway')) setMethod('mbway');
+                      }}
+                      disabled={!isPaymentMethodEnabled('mbway')}
                       className={cn(
                         'w-full flex items-center gap-4 p-4 md:p-5 rounded-2xl border text-left transition-all',
                         method === 'mbway'
                           ? 'border-[#009688]/60 bg-[#009688]/10 shadow-[0_0_0_1px_rgba(0,150,136,0.25)]'
-                          : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
+                          : 'border-bet62-border bg-bet62-surface/50',
+                        !isPaymentMethodEnabled('mbway') && 'opacity-55 cursor-not-allowed',
                       )}
                     >
                       <PaymentMethodLogo method="mbway" size="md" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-bold text-base md:text-lg">MB WAY</p>
-                          <Badge variant="green" className="py-0 text-[10px]">Instantâneo</Badge>
+                          <Badge variant="outline" className="py-0 text-[10px] border-white/15 text-white/70">Em breve</Badge>
                         </div>
-                        <p className="text-xs md:text-sm text-white/55 mt-0.5">Mínimo €10 · Sem taxa · Confirmação por smartphone</p>
+                        <p className="text-xs md:text-sm text-white/55 mt-0.5">Ainda não disponível como método nativo no checkout. Usa Cartão Stripe ou Multibanco.</p>
                       </div>
                       {method === 'mbway' ? (
                         <div className="h-6 w-6 rounded-full bg-[#009688] flex items-center justify-center shrink-0">
@@ -191,10 +200,10 @@ export default function CarteiraDepositoPage() {
                       <PaymentMethodLogo method="card" size="md" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-bold text-base md:text-lg">Visa / Mastercard</p>
+                          <p className="font-bold text-base md:text-lg">Stripe Checkout</p>
                           <Badge variant="outline" className="py-0 text-[10px] border-white/15 text-white/70">Seguro 3DS</Badge>
                         </div>
-                        <p className="text-xs md:text-sm text-white/55 mt-0.5">Mínimo €10 · Sem taxa · Débito e Crédito aceites</p>
+                        <p className="text-xs md:text-sm text-white/55 mt-0.5">Visa e Mastercard processados pela Stripe com autenticação 3D Secure</p>
                       </div>
                       {method === 'card' ? (
                         <div className="h-6 w-6 rounded-full bg-slate-600 flex items-center justify-center shrink-0">
@@ -205,6 +214,10 @@ export default function CarteiraDepositoPage() {
                       )}
                     </button>
                   </div>
+
+                  <p className="mb-6 text-xs text-white/50">
+                    MB WAY será ativado assim que o checkout nativo estiver disponível na conta Stripe. Até lá, não é apresentado como método instantâneo.
+                  </p>
 
                   <div className="mb-8">
                     <label className="block text-xs font-bold uppercase tracking-wider text-white/60 mb-3">
@@ -262,7 +275,7 @@ export default function CarteiraDepositoPage() {
 
                   <p className="mt-4 text-center text-[11px] text-white/40 leading-relaxed">
                     Ao continuar, confirmas que tens 18+ anos e aceitas os Termos & Condições.
-                    Transação encriptada SSL 256-bit · Stripe Payments
+                    Transação encriptada SSL 256-bit · Pagamentos processados via Stripe Checkout
                   </p>
                 </CardContent>
               </Card>
