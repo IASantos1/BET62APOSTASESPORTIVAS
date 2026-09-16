@@ -30,6 +30,14 @@ import { UserEventsListener } from './events/user-event.listener';
       useFactory: (config: ConfigService) => ({
         connection: {
           url: config.get<string>('REDIS_URL') ?? 'redis://localhost:6379',
+          lazyConnect: true,
+          maxRetriesPerRequest: null,
+          enableReadyCheck: false,
+          enableOfflineQueue: false,
+          connectTimeout: 4000,
+          commandTimeout: 5000,
+          reconnectOnError: () => false,
+          retryStrategy: (times: number): number | null => (times > 1 ? null : 1000),
         },
       }),
       inject: [ConfigService],
