@@ -16,7 +16,6 @@ import type {
   ProplineBookmaker,
   ProplineEvent,
   ProplineEventScores,
-  ProplineFootballStatsFull,
   ProplineLeague,
   ProplineMarket,
   ProplineOddsResponse,
@@ -29,6 +28,145 @@ import type {
 import { PROPLINE_BOOKMAKER_BY_CODE, PROPLINE_BOOKMAKER_BY_ID, resolveBookmaker } from './propline.bookmakers';
 
 const logger = new Logger('ProplineMapper');
+
+function buildEventId(value: string | null | undefined): string {
+  return String(value ?? '').trim();
+}
+
+function getEventId(event: ProplineEvent): string {
+  return buildEventId(event.id ?? event.event_id);
+}
+
+function getHomeTeamName(event: ProplineEvent): string {
+  return event.home_team ?? event.home_team_name ?? event.home_team_key ?? 'Casa';
+}
+
+function getAwayTeamName(event: ProplineEvent): string {
+  return event.away_team ?? event.away_team_name ?? event.away_team_key ?? 'Fora';
+}
+
+function getKickoff(event: ProplineEvent): string | null {
+  return event.commence_time ?? event.start_date ?? null;
+}
+
+function getDerivedEventStatus(event: ProplineEvent): MatchStatusCode {
+  if (event.status) return normalizeEventStatus(event.status);
+  if (event.completed) return 'final';
+  if (event.live) return 'in_progress';
+  return 'scheduled';
+}
+
+function americanToDecimal(price: number): number {
+  if (!Number.isFinite(price)) return 1.01;
+  if (price > 1 && !Number.isInteger(price)) return roundAmount(price, 2);
+  if (price === 0) return 1.01;
+  if (price > 0) return roundAmount(1 + price / 100, 2);
+  return roundAmount(1 + 100 / Math.abs(price), 2);
+}
+
+function prettifyMarketKey(key: string): string {
+  return String(key || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function normalizeOutcomeForEvent(
+  rawName: string,
+  homeTeam: string,
+  awayTeam: string,
+): Bet62Selection['outcome'] | string {
+  const s = String(rawName || '').trim().toLowerCase();
+  if (s === String(homeTeam || '').trim().toLowerCase()) return 'home';
+  if (s === String(awayTeam || '').trim().toLowerCase()) return 'away';
+  if (s === 'draw' || s === 'tie' || s === 'empate') return 'draw';
+  if (s === 'over' || s === 'under' || s === 'yes' || s === 'no') return s;
+  return rawName;
+}
+
+function normalizeBookmakerShape(
+  book: ProplineBookmaker,
+  index: number,
+): ProplineBookmaker {
+  const resolved = resolveBookmaker(
+    book.code ?? book.key ?? book.id ?? book.name ?? book.title ?? `book_${index}`,
+  );
+  const code = String(book.code ?? book.key ?? resolved?.code ?? `book_${index}`).toLowerCase();
+  return {
+    ...book,
+    id: book.id ?? resolved?.id ?? code,
+    code,
+    key: book.key ?? code,
+    name: book.name ?? book.title ?? resolved?.name ?? code,
+    title: book.title ?? book.name ?? resolved?.name ?? code,
+    priority: book.priority ?? resolved?.priority ?? index + 100,
+    isPushBased: book.isPushBased ?? resolved?.isPushBased ?? false,
+  };
+}
+
+function normalizeOddsResponse(resp: ProplineOddsResponse): ProplineOddsResponse {
+  const eventId = buildEventId(resp.id ?? resp.event_id);
+  const homeTeam = resp.home_team ?? '';
+  const awayTeam = resp.away_team ?? '';
+  const normalizedBookmakers = (resp.bookmakers ?? []).map((book, index) => normalizeBookmakerShape(book, index));
+  if (resp.markets && resp.markets.length > 0) {
+    return {
+      ...resp,
+      id: eventId,
+      event_id: eventId,
+      bookmakers: normalizedBookmakers,
+    };
+  }
+  const byMarket = new Map<string, ProplineMarket>();
+  for (const book of normalizedBookmakers) {
+    for (const market of book.markets ?? []) {
+      const key = market.key;
+      if (!key) continue;
+      let normalized = byMarket.get(key);
+      if (!normalized) {
+        normalized = {
+          market_code: key,
+          market_label: prettifyMarketKey(key),
+          market_group: prettifyMarketKey(key),
+          status: 'active',
+          line_specifiers: null,
+          selections: [],
+        };
+        byMarket.set(key, normalized);
+      }
+      for (const outcome of market.outcomes ?? []) {
+        const rawOutcomeName = String(outcome.name ?? '').trim();
+        const lineValue = typeof outcome.point === 'number'
+          ? outcome.point
+          : typeof outcome.line === 'number'
+            ? outcome.line
+            : null;
+        const isSpread = key.includes('spread') || key.includes('handicap');
+        const selectionLabel = outcome.description
+          ? `${outcome.description} - ${rawOutcomeName}`
+          : rawOutcomeName;
+        normalized.selections.push({
+          label: selectionLabel,
+          outcome: String(normalizeOutcomeForEvent(rawOutcomeName, homeTeam, awayTeam)),
+          price: americanToDecimal(outcome.price),
+          line: !isSpread ? lineValue : null,
+          handicap: isSpread ? lineValue : null,
+          trend: null,
+          book_id: book.id,
+          book_code: book.code,
+          recorded_at: market.last_update ?? resp.generated_at ?? resp.last_updated_at ?? new Date().toISOString(),
+          last_change_at: market.last_update ?? resp.generated_at ?? resp.last_updated_at ?? null,
+        });
+      }
+    }
+  }
+  return {
+    ...resp,
+    id: eventId,
+    event_id: eventId,
+    bookmakers: normalizedBookmakers,
+    markets: Array.from(byMarket.values()),
+  };
+}
 
 export function normalizePeriod(raw: string | null | undefined): Period {
   if (!raw || typeof raw !== 'string') return null;
@@ -149,9 +287,11 @@ export function buildBookmakersMap(
   const result = new Map<string, ProplineBookmaker>();
   try {
     if (fromResponse && Array.isArray(fromResponse)) {
-      for (const b of fromResponse) {
+      for (let i = 0; i < fromResponse.length; i++) {
+        const b = normalizeBookmakerShape(fromResponse[i], i);
         if (!b || !b.code) continue;
         result.set(String(b.code).toLowerCase(), b);
+        if (b.key) result.set(String(b.key).toLowerCase(), b);
         if (b.id !== undefined && b.id !== null) result.set(String(b.id), b);
       }
     }
@@ -427,15 +567,16 @@ export function oddsResponseToMarkets(
   now = new Date(),
 ): { markets: Bet62Market[]; bookmakersCount: number } {
   try {
-    const bookiesMap = buildBookmakersMap(resp.bookmakers ?? null);
+    const normalizedResp = normalizeOddsResponse(resp);
+    const bookiesMap = buildBookmakersMap(normalizedResp.bookmakers ?? null);
     const out: Bet62Market[] = [];
     const uniqueBookies = new Set<string>();
-    if (!resp || !resp.markets || resp.markets.length === 0) {
+    if (!normalizedResp || !normalizedResp.markets || normalizedResp.markets.length === 0) {
       return { markets: [], bookmakersCount: 0 };
     }
-    for (const m of resp.markets) {
+    for (const m of normalizedResp.markets) {
       try {
-        const bet = marketToBet62Market(m, resp.event_id, bookiesMap, now);
+        const bet = marketToBet62Market(m, normalizedResp.event_id ?? normalizedResp.id, bookiesMap, now);
         if (bet) {
           out.push(bet);
           for (const odd of bet.bestOdds) uniqueBookies.add(String(odd.bookmakerId));
@@ -469,7 +610,7 @@ export function buildBet62Score(event: ProplineEvent, now = new Date()): Bet62Sc
   return {
     home: home ?? null,
     away: away ?? null,
-    status: normalizeEventStatus(event.status),
+    status: getDerivedEventStatus(event),
     updatedAt: event.last_updated_at ? toDateOrNow(event.last_updated_at) : now,
   };
 }
@@ -477,7 +618,7 @@ export function buildBet62Score(event: ProplineEvent, now = new Date()): Bet62Sc
 export function buildBet62Clock(event: ProplineEvent, now = new Date()): Bet62Clock {
   const period = normalizePeriod(event.period ?? null);
   const periodName = event.period ?? null;
-  const statusNorm = normalizeEventStatus(event.status);
+  const statusNorm = getDerivedEventStatus(event);
   const running = statusNorm === 'in_progress';
   let minute: number | null = null;
   if (typeof event.minute === 'number') {
@@ -511,12 +652,17 @@ export function eventToBet62Match(
     const now = extra?.updatedAt ?? new Date();
     const score = buildBet62Score(event, now);
     const clock = buildBet62Clock(event, now);
-    const kickoffAt = event.start_date ? toDateOrNow(event.start_date) : now;
+    const kickoffAt = getKickoff(event) ? toDateOrNow(getKickoff(event)) : now;
+    const eventId = getEventId(event);
+    const homeTeamName = getHomeTeamName(event);
+    const awayTeamName = getAwayTeamName(event);
+    const homeTeamKey = event.home_team_key ?? homeTeamName;
+    const awayTeamKey = event.away_team_key ?? awayTeamName;
     const dataFreshness = extra?.dataFreshnessMs !== undefined && extra?.dataFreshnessMs !== null
       ? String(extra.dataFreshnessMs)
       : 'propline_default';
     return {
-      id: event.event_id,
+      id: eventId,
       sport: event.sport_key ?? 'FOOTBALL',
       league: {
         id: extra?.league?.key ?? event.league_key ?? null,
@@ -525,18 +671,18 @@ export function eventToBet62Match(
         countryCode: extra?.league?.country_code ?? null,
       },
       homeTeam: {
-        id: extra?.homeTeam?.key ?? event.home_team_key ?? null,
-        name: extra?.homeTeam?.name ?? event.home_team_name ?? event.home_team_key ?? 'Casa',
+        id: extra?.homeTeam?.key ?? homeTeamKey ?? null,
+        name: extra?.homeTeam?.name ?? homeTeamName,
         shortName: extra?.homeTeam?.name?.slice(0, 10) ?? null,
         logoUrl: extra?.homeTeam?.logo ?? null,
-        providerIds: { propline: event.home_team_key },
+        providerIds: { propline: homeTeamKey },
       },
       awayTeam: {
-        id: extra?.awayTeam?.key ?? event.away_team_key ?? null,
-        name: extra?.awayTeam?.name ?? event.away_team_name ?? event.away_team_key ?? 'Fora',
+        id: extra?.awayTeam?.key ?? awayTeamKey ?? null,
+        name: extra?.awayTeam?.name ?? awayTeamName,
         shortName: extra?.awayTeam?.name?.slice(0, 10) ?? null,
         logoUrl: extra?.awayTeam?.logo ?? null,
-        providerIds: { propline: event.away_team_key },
+        providerIds: { propline: awayTeamKey },
       },
       kickoffAt,
       score,
@@ -544,10 +690,10 @@ export function eventToBet62Match(
       providers: {
         goalApi: null,
         propline: {
-          eventId: event.event_id,
+          eventId,
           sportKey: event.sport_key,
-          homeTeamKey: event.home_team_key,
-          awayTeamKey: event.away_team_key,
+          homeTeamKey,
+          awayTeamKey,
           leagueKey: event.league_key ?? null,
         },
       },

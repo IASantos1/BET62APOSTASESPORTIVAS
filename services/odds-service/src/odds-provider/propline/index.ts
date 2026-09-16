@@ -1,6 +1,5 @@
-import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { SportType, EventStatus as SharedEventStatus, MarketStatus, MarketType, SelectionOutcome } from '@bet62/shared';
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { SportType, MarketStatus, MarketType, SelectionOutcome } from '@bet62/shared';
 import type { League, Sport, SportType as SportTypeEnum } from '@bet62/shared';
 import {
   AbstractOddsProvider,
@@ -28,15 +27,11 @@ import { ProplineHttpClient } from './propline.http-client';
 import { ProplineWsClient } from './propline.ws-client';
 import { ProplineWebhookService, type ParsedProplineWebhook } from './propline.webhook';
 import { ProplineDataAdapter } from './propline.adapter';
-import type { ProplineEvent, ProplineLeague, ProplineSport, ProplineStatsResponse } from './propline.types';
+import type { ProplineEvent, ProplineSport, ProplineStatsResponse } from './propline.types';
 import {
-  eventToBet62Match,
-  oddsResponseToMarkets,
-  statsToFootballStats,
   normalizeEventStatus,
   normalizePeriod,
 } from './propline.mapper';
-import { SPORTS_PROVIDER_CONFIG } from '@bet62/shared';
 
 function toISODateOrNow(s: string | null | undefined): Date {
   if (!s) return new Date();
@@ -49,7 +44,7 @@ function toISODateOrNow(s: string | null | undefined): Date {
 }
 
 function buildCompositeId(sportType: string, numericOrKey: string | number): string {
-  return `${String(sportType).toUpperCase()}:${String(numericOrKey)}`;
+  return `${String(sportType)}:${String(numericOrKey)}`;
 }
 
 function normalizeSportKey(key: string | null | undefined): SportType | null {
@@ -69,6 +64,25 @@ function normalizeSportKey(key: string | null | undefined): SportType | null {
     ESPORTS: SportType.ESPORTS, E_SPORTS: SportType.ESPORTS, ESport: SportType.ESPORTS,
   };
   return map[s] ?? null;
+}
+
+function mapPropLineSportKeyToSportType(key: string | null | undefined): SportType | null {
+  const raw = String(key ?? '').trim().toLowerCase();
+  if (!raw) return null;
+  if (raw.startsWith('soccer_')) return SportType.FOOTBALL;
+  if (raw.startsWith('basketball_')) return SportType.BASKETBALL;
+  if (raw.startsWith('baseball_')) return SportType.BASEBALL;
+  if (raw.startsWith('hockey_') || raw.startsWith('icehockey_')) return SportType.HOCKEY;
+  if (raw === 'tennis' || raw.startsWith('tennis_')) return SportType.TENNIS;
+  if (raw.startsWith('americanfootball_') || raw === 'football_nfl' || raw === 'americanfootball_nfl') return SportType.NFL;
+  if (raw.startsWith('volleyball_') || raw === 'volleyball') return SportType.VOLLEYBALL;
+  if (raw.startsWith('darts')) return SportType.DARTS;
+  if (raw.startsWith('tabletennis') || raw.startsWith('table_tennis')) return SportType.TABLE_TENNIS;
+  if (raw.startsWith('golf')) return SportType.GOLF;
+  if (raw.startsWith('mma_') || raw === 'mma_ufc' || raw === 'ufc') return SportType.UFC;
+  if (raw === 'f1' || raw.startsWith('formula1') || raw.startsWith('motorsports_formula1')) return SportType.F1;
+  if (raw.startsWith('esports')) return SportType.ESPORTS;
+  return normalizeSportKey(raw);
 }
 
 function mapStatusFromPropline(raw: string): ProviderEvent['status'] {
@@ -111,7 +125,6 @@ export class ProplineOddsProviderService
     private readonly ws: ProplineWsClient,
     private readonly webhook: ProplineWebhookService,
     private readonly adapter: ProplineDataAdapter,
-    private readonly configService: ConfigService,
   ) {
     super();
   }
@@ -126,30 +139,7 @@ export class ProplineOddsProviderService
       return;
     }
     this.logger.log(`ProplineOddsProvider iniciado: baseUrl=${cfg.baseUrl}, timeout=${cfg.timeoutMs}ms`);
-    try {
-      const wsEnabledRaw = this.configService.get<string>('PROPLINE_WS_ENABLED')
-        ?? process.env.PROPLINE_WS_ENABLED
-        ?? 'true';
-      const wsEnabled = wsEnabledRaw !== 'false' && wsEnabledRaw !== '0' && wsEnabledRaw !== 'off';
-      if (wsEnabled && this.ws.hasApiKey() && !this.ws.isPermanentlyDisabled()) {
-        try {
-          this.ws.onAnyMessage((msg) => {
-            try {
-              this.handleWsAnyMessage(msg);
-            } catch { /* hard constraint: nunca propagar */ }
-          });
-          this.ws.onLifecycle('error', () => { /* nunca propagar */ });
-          this.ws.onLifecycle('close', () => { /* nunca propagar */ });
-          this.ws.onLifecycle('open', () => { /* nunca propagar */ });
-          this.ws.connect();
-          this.logger.log('Propline WebSocket conectado (streaming odds/scores/eventos ativado).');
-        } catch (wsErr) {
-          this.logger.warn(`Propline WS init warning (continuar apenas REST): ${wsErr instanceof Error ? wsErr.message : String(wsErr)}`);
-        }
-      }
-    } catch (err) {
-      this.logger.warn(`Propline onModuleInit warning: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    this.logger.log('Propline inicializado em modo oficial REST/Webhook. WebSocket público fica desativado.');
   }
 
   onModuleDestroy(): void {
@@ -184,28 +174,63 @@ export class ProplineOddsProviderService
     return normalizeSportKey(sport);
   }
 
+  private async getAvailablePropLineSports(): Promise<ProplineSport[]> {
+    if (this.fatalInitFailed) return [];
+    const sports = await this.http.getSports();
+    return sports.filter((sport) => sport.active !== false);
+  }
+
+  private async resolveRequestedSportKeys(sport?: string): Promise<string[]> {
+    const available = await this.getAvailablePropLineSports();
+    if (available.length === 0) return [];
+    if (!sport) {
+      return available
+        .map((item) => item.key)
+        .filter((key) => mapPropLineSportKeyToSportType(key) !== null);
+    }
+    const wanted = this.resolveSport(sport);
+    if (!wanted) return [];
+    return available
+      .map((item) => item.key)
+      .filter((key) => mapPropLineSportKeyToSportType(key) === wanted);
+  }
+
+  private getDefaultMarketsForSportKey(_sportKey: string): string[] {
+    return ['h2h', 'spreads', 'totals'];
+  }
+
+  private mapEventLifecycleStatus(pe: ProplineEvent): ProviderEvent['status'] {
+    if (pe.status) return mapStatusFromPropline(pe.status);
+    if (pe.completed) return 'FINISHED';
+    if (pe.live) return 'LIVE';
+    return 'PRE_MATCH';
+  }
+
   private mapProplineEventToProviderEvent(
     pe: ProplineEvent,
     sportType: SportType,
     includeMarkets = false,
   ): ProviderEvent {
-    const kickoffAt = toISODateOrNow(pe.start_date);
-    const status = mapStatusFromPropline(pe.status);
-    const compositeId = buildCompositeId(sportType, pe.event_id);
+    const kickoffAt = toISODateOrNow(pe.commence_time ?? pe.start_date);
+    const status = this.mapEventLifecycleStatus(pe);
+    const providerEventId = pe.id ?? pe.event_id ?? '';
+    const compositeId = buildCompositeId(pe.sport_key, providerEventId);
+    const homeTeamName = pe.home_team ?? pe.home_team_name ?? pe.home_team_key ?? 'Casa';
+    const awayTeamName = pe.away_team ?? pe.away_team_name ?? pe.away_team_key ?? 'Fora';
     const homeScore = pe.scores?.home ?? pe.scores?.current_period_home ?? null;
     const awayScore = pe.scores?.away ?? pe.scores?.current_period_away ?? null;
-    const minute = typeof pe.minute === 'number' ? pe.minute : (status === 'LIVE' ? undefined : undefined);
+    const minute = typeof pe.minute === 'number' ? pe.minute : undefined;
     const ev: ProviderEvent = {
       id: compositeId,
-      providerEventId: pe.event_id,
-      name: `${pe.home_team_name ?? pe.home_team_key} vs ${pe.away_team_name ?? pe.away_team_key}`,
+      providerEventId,
+      name: `${homeTeamName} vs ${awayTeamName}`,
       sportCode: sportType,
-      leagueId: pe.league_key ?? `${sportType.toLowerCase()}-league-default`,
-      leagueName: pe.league_key ?? 'Liga Desconhecida',
-      homeTeamId: pe.home_team_key,
-      awayTeamId: pe.away_team_key,
-      homeTeamName: pe.home_team_name ?? pe.home_team_key,
-      awayTeamName: pe.away_team_name ?? pe.away_team_key,
+      leagueId: pe.league_key ? buildCompositeId(pe.sport_key, pe.league_key) : pe.sport_key,
+      leagueName: pe.league_key ?? pe.sport_key,
+      homeTeamId: pe.home_team_key ?? homeTeamName,
+      awayTeamId: pe.away_team_key ?? awayTeamName,
+      homeTeamName,
+      awayTeamName,
       homeScore: toNumberOrNull(homeScore),
       awayScore: toNumberOrNull(awayScore),
       homeHalfScore: toNumberOrNull(pe.scores?.half_home),
@@ -249,35 +274,34 @@ export class ProplineOddsProviderService
   ): Promise<ProviderEvent[]> {
     if (this.fatalInitFailed) return [];
     try {
-      const st = this.resolveSport(opts.sport);
-      const sportKey = st ? String(st).toLowerCase().replace(/_/g, '') : (opts.sport ? opts.sport.toLowerCase() : undefined);
-      const rawList: ProplineEvent[] = opts.live
-        ? await this.http.getLiveEvents()
-        : await this.http.getUpcomingEvents(sportKey, 72);
-      if (rawList.length === 0) return [];
       const out: ProviderEvent[] = [];
-      for (const pe of rawList) {
-        const sportType = this.resolveSport(pe.sport_key) ?? SportType.FOOTBALL;
-        if (opts.sport && sportType !== this.resolveSport(opts.sport)) {
-          const sportNorm = normalizeSportKey(opts.sport);
-          if (sportNorm && sportType !== sportNorm) continue;
+      const sportKeys = await this.resolveRequestedSportKeys(opts.sport);
+      for (const sportKey of sportKeys) {
+        const rawList = await this.http.getEventsBySport(sportKey);
+        const sportType = mapPropLineSportKeyToSportType(sportKey);
+        if (!sportType) continue;
+        for (const pe of rawList) {
+          if (opts.live) {
+            if (!pe.live || pe.completed) continue;
+          } else {
+            if (pe.live || pe.completed) continue;
+          }
+          const pev = this.mapProplineEventToProviderEvent(pe, sportType, false);
+          if (opts.league) {
+            const leagueKey = String(opts.league).toLowerCase();
+            const leagueName = (pev.leagueName ?? '').toLowerCase();
+            const leagueId = (pev.leagueId ?? '').toLowerCase();
+            if (leagueName !== leagueKey && leagueId !== leagueKey) continue;
+          }
+          if (!opts.live) {
+            if (opts.from && pev.kickoffAt < opts.from) continue;
+            if (opts.to && pev.kickoffAt > opts.to) continue;
+          }
+          out.push(pev);
         }
-        const pev = this.mapProplineEventToProviderEvent(pe, sportType, false);
-        if (opts.league) {
-          const leagueKey = String(opts.league).toLowerCase();
-          const leagueName = (pev.leagueName ?? '').toLowerCase();
-          const leagueId = (pev.leagueId ?? '').toLowerCase();
-          if (leagueName !== leagueKey && leagueId !== leagueKey) continue;
-        }
-        if (!opts.live) {
-          if (opts.from && pev.kickoffAt < opts.from) continue;
-          if (opts.to && pev.kickoffAt > opts.to) continue;
-        }
-        out.push(pev);
-        if (opts.limit && out.length >= opts.limit) break;
       }
       out.sort((a, b) => a.kickoffAt.getTime() - b.kickoffAt.getTime());
-      return out;
+      return opts.limit ? out.slice(0, opts.limit) : out;
     } catch (err) {
       this.logger.verbose(`Propline fetchEventsGeneric warning: ${err instanceof Error ? err.message : String(err)}`);
       return [];
@@ -340,19 +364,39 @@ export class ProplineOddsProviderService
       const colon = eventId.indexOf(':');
       const sportRaw = colon > 0 ? eventId.slice(0, colon) : null;
       const rawEventId = colon > 0 ? eventId.slice(colon + 1) : eventId;
-      const sportType = this.resolveSport(sportRaw ?? 'FOOTBALL') ?? SportType.FOOTBALL;
-      const pe = await this.http.getEventById(rawEventId);
+      if (!sportRaw) return null;
+      const sportType = mapPropLineSportKeyToSportType(sportRaw) ?? this.resolveSport(sportRaw) ?? SportType.FOOTBALL;
+      const oddsResp = includeMarkets
+        ? await this.http.getEventOdds(sportRaw, rawEventId, this.getDefaultMarketsForSportKey(sportRaw))
+        : null;
+      const pe = await this.http.getEventById(sportRaw, rawEventId) ?? (
+        oddsResp ? {
+          id: oddsResp.id ?? rawEventId,
+          event_id: oddsResp.event_id ?? oddsResp.id ?? rawEventId,
+          sport_key: oddsResp.sport_key ?? sportRaw,
+          home_team: oddsResp.home_team,
+          away_team: oddsResp.away_team,
+          commence_time: oddsResp.commence_time,
+          start_date: oddsResp.commence_time,
+          home_team_key: oddsResp.home_team,
+          away_team_key: oddsResp.away_team,
+          home_team_name: oddsResp.home_team,
+          away_team_name: oddsResp.away_team,
+          status: 'scheduled' as const,
+          live: false,
+          completed: false,
+        } as ProplineEvent : null
+      );
       if (!pe) return null;
       const base = this.mapProplineEventToProviderEvent(pe, sportType, false);
       let markets: ProviderMarket[] = [];
       if (includeMarkets) {
         try {
-          const oddsResp = await this.http.getOdds(rawEventId);
           if (oddsResp) {
             const { markets: bet62Markets } = this.adapter.runOddsPipeline(oddsResp, {
               isLive: base.status === 'LIVE' || base.status === 'HALF_TIME',
             });
-            markets = bet62Markets.map((m, idx) => {
+            markets = bet62Markets.map((m) => {
               const pm: ProviderMarket = {
                 id: m.id,
                 providerMarketId: m.code,
@@ -366,7 +410,7 @@ export class ProplineOddsProviderService
                 status: m.status === 'active' ? MarketStatus.ACTIVE : m.status === 'suspended' ? MarketStatus.SUSPENDED : m.status === 'settled' ? MarketStatus.SETTLED : MarketStatus.CLOSED,
                 displayedName: m.label,
                 cashoutAvailable: true,
-                selections: m.selections.map((s, sIdx) => {
+                selections: m.selections.map((s) => {
                   const ps: ProviderMarketSelection = {
                     id: s.id,
                     providerSelectionId: s.id,
@@ -399,44 +443,28 @@ export class ProplineOddsProviderService
   async getActiveLeagues(sport?: SportType): Promise<ProviderLeague[]> {
     try {
       if (this.fatalInitFailed) return [];
-      const sportType = sport ? (sport as unknown as string) : undefined;
-      const key = sportType ? sportType.toLowerCase().replace(/_/g, '') : undefined;
-      const rawLeagues: ProplineLeague[] = key ? await this.http.getLeagues(key) : [];
-      if (rawLeagues.length === 0) {
-        const rawSports: ProplineSport[] = await this.http.getSports();
-        const sportsToFetch = key ? [key] : rawSports.slice(0, 10).map((s) => s.key);
-        const all: ProviderLeague[] = [];
-        await Promise.all(sportsToFetch.map(async (k) => {
-          try {
-            const list = await this.http.getLeagues(k);
-            for (const l of list) {
-              const st = this.resolveSport(l.sport_key) ?? SportType.FOOTBALL;
-              all.push({
-                id: `${st}:${l.key}`,
-                providerLeagueId: l.key,
-                name: l.name,
-                sportCode: st,
-                countryCode: l.country_code ?? undefined,
-                tier: 1,
-                isTop: false,
-              });
-            }
-          } catch { /* */ }
-        }));
-        return all;
+      const keys = await this.resolveRequestedSportKeys(sport as unknown as string | undefined);
+      const leagues = new Map<string, ProviderLeague>();
+      for (const key of keys) {
+        const sportType = mapPropLineSportKeyToSportType(key);
+        if (!sportType) continue;
+        const events = await this.http.getEventsBySport(key);
+        for (const event of events) {
+          const providerLeagueId = event.league_key ?? key;
+          const leagueId = buildCompositeId(key, providerLeagueId);
+          if (leagues.has(leagueId)) continue;
+          leagues.set(leagueId, {
+            id: leagueId,
+            providerLeagueId,
+            name: event.league_key ?? key,
+            sportCode: sportType,
+            countryCode: undefined,
+            tier: 1,
+            isTop: false,
+          });
+        }
       }
-      return rawLeagues.map((l) => {
-        const st = this.resolveSport(l.sport_key) ?? SportType.FOOTBALL;
-        return {
-          id: `${st}:${l.key}`,
-          providerLeagueId: l.key,
-          name: l.name,
-          sportCode: st,
-          countryCode: l.country_code ?? undefined,
-          tier: 1,
-          isTop: false,
-        };
-      });
+      return Array.from(leagues.values());
     } catch (err) {
       this.logger.verbose(`Propline getActiveLeagues: ${err instanceof Error ? err.message : String(err)}`);
       return [];
@@ -454,10 +482,12 @@ export class ProplineOddsProviderService
       };
       if (this.fatalInitFailed) return result;
       try {
-        const live = await this.http.getLiveEvents();
-        for (const pe of live) {
-          const st = this.resolveSport(pe.sport_key) ?? SportType.FOOTBALL;
-          result.updatedEvents.push(buildCompositeId(st, pe.event_id));
+        const sportKeys = await this.resolveRequestedSportKeys();
+        for (const sportKey of sportKeys) {
+          const live = await this.http.getLiveEvents(sportKey);
+          for (const pe of live) {
+            result.updatedEvents.push(buildCompositeId(sportKey, pe.id ?? pe.event_id ?? ''));
+          }
         }
       } catch { /* */ }
       return result;
@@ -570,7 +600,7 @@ export class ProplineOddsProviderService
       const colon = eventId.indexOf(':');
       const sportRaw = colon > 0 ? eventId.slice(0, colon) : null;
       const rawEventId = colon > 0 ? eventId.slice(colon + 1) : eventId;
-      const sportType = this.resolveSport(sportRaw ?? 'FOOTBALL') ?? SportType.FOOTBALL;
+      const sportType = mapPropLineSportKeyToSportType(sportRaw) ?? this.resolveSport(sportRaw ?? 'FOOTBALL') ?? SportType.FOOTBALL;
 
       // R3: Futebol settlement 100% GOAL (retornar null/PENDING para futebol)
       if (sportType === SportType.FOOTBALL) {
@@ -638,36 +668,30 @@ export class ProplineOddsProviderService
     try {
       const prematch = await this.getPrematchEvents({});
       const live = await this.getLiveEvents({});
-      const rawSports: ProplineSport[] = this.fatalInitFailed ? [] : await this.http.getSports();
-      const allSportCodes = new Set<string>();
+      const rawSports: ProplineSport[] = this.fatalInitFailed ? [] : await this.getAvailablePropLineSports();
+      const allSportCodes = new Set<SportType>();
       for (const s of rawSports) {
-        const st = this.resolveSport(s.key);
+        const st = mapPropLineSportKeyToSportType(s.key);
         if (st) allSportCodes.add(st);
-      }
-      for (const sport of SPORTS_PROVIDER_CONFIG.allSports) {
-        allSportCodes.add(sport);
       }
       const result: Sport[] = [];
       let displayOrder = 0;
       for (const code of allSportCodes) {
-        const st = this.resolveSport(code);
-        if (!st) continue;
-        const name = SPORTS_PROVIDER_CONFIG.allSports.includes(code)
-          ? code.charAt(0) + code.slice(1).toLowerCase().replace(/_/g, ' ')
-          : String(st);
+        const st = code;
+        const name = String(st).charAt(0) + String(st).slice(1).toLowerCase().replace(/_/g, ' ');
         result.push({
-          id: code,
-          slug: code.toLowerCase(),
+          id: String(code),
+          slug: String(code).toLowerCase(),
           name,
           sportType: st,
-          providerSportId: rawSports.find((rs) => this.resolveSport(rs.key) === st)?.key ?? null,
+          providerSportId: rawSports.find((rs) => mapPropLineSportKeyToSportType(rs.key) === st)?.key ?? null,
           active: true,
           featured: displayOrder === 0,
           displayOrder,
           iconUrl: null,
           colorHex: null,
-          totalLiveEvents: live.events.filter((e) => e.sportCode === code).length,
-          totalPrematchEvents: prematch.events.filter((e) => e.sportCode === code).length,
+          totalLiveEvents: live.events.filter((e) => e.sportCode === st).length,
+          totalPrematchEvents: prematch.events.filter((e) => e.sportCode === st).length,
           createdAt: new Date(),
           updatedAt: new Date(),
         });
