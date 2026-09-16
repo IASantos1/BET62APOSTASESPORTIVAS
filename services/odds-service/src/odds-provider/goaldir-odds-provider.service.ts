@@ -145,7 +145,8 @@ export class GoaldirOddsProviderService
       const wsRaw = process.env.GOALDIR_WS_ENABLED;
       wsEnabled = wsRaw === 'true' || wsRaw === '1' || wsRaw === 'on';
     }
-    this.http = new GoaldirHttpClient({ baseUrl, apiKey, timeoutMs });
+    const cleanBaseUrl = String(baseUrl ?? '').trim().replace(/[,;\s]+$/g, '').replace(/\/+$/g, '');
+    this.http = new GoaldirHttpClient({ baseUrl: cleanBaseUrl, apiKey, timeoutMs });
     this.wsEnabled = wsEnabled;
     this.ws = new GoaldirWsClient({ apiKey });
     for (const s of SUPPORTED_GOALDIR_SPORTS) {

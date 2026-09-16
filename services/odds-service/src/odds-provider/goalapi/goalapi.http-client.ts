@@ -56,10 +56,13 @@ export class GoalApiHttpClient {
   private readonly _authFailWarnedOnce: Map<string, boolean> = new Map();
 
   constructor(private readonly configService: ConfigService) {
-    this.baseUrl =
-      (this.configService?.get<string>('GOAL_API_BASE_URL') ||
-        process.env.GOAL_API_BASE_URL ||
-        DEFAULT_BASE_URL).replace(/\/$/, '');
+    const sanitize = (s: string | undefined | null): string =>
+      String(s ?? '').trim().replace(/[,;\s]+$/g, '').replace(/\/+$/g, '');
+    this.baseUrl = sanitize(
+      this.configService?.get<string>('GOAL_API_BASE_URL') ??
+        process.env.GOAL_API_BASE_URL ??
+        DEFAULT_BASE_URL,
+    );
     this.apiKey =
       this.configService?.get<string>('GOAL_API_KEY') ||
       process.env.GOAL_API_KEY ||

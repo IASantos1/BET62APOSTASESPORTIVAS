@@ -51,10 +51,13 @@ export class GoalApiWsClient {
 
   async fetchWsToken(): Promise<string | null> {
     try {
-      const baseUrl =
-        (this.configService?.get<string>('GOAL_API_BASE_URL') ||
-          process.env.GOAL_API_BASE_URL ||
-          'https://api.goal-api.com/v1').replace(/\/$/, '');
+      const sanitize = (s: string | undefined | null): string =>
+        String(s ?? '').trim().replace(/[,;\s]+$/g, '').replace(/\/+$/g, '');
+      const baseUrl = sanitize(
+        this.configService?.get<string>('GOAL_API_BASE_URL') ??
+          process.env.GOAL_API_BASE_URL ??
+          'https://api.goal-api.com/v1',
+      );
       const apiKey =
         this.configService?.get<string>('GOAL_API_KEY') ||
         process.env.GOAL_API_KEY ||
