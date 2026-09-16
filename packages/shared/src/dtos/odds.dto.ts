@@ -266,6 +266,10 @@ export class EventDto {
   @IsString()
   id!: string;
 
+  @IsOptional()
+  @IsString()
+  matchId?: string;
+
   @IsEnum(SportType)
   sportType!: SportType;
 
@@ -328,6 +332,34 @@ export class EventDto {
   @IsOptional()
   @IsString()
   providerEventId?: string;
+
+  @IsOptional()
+  @IsObject()
+  sources?: {
+    data: string;
+    stats: string;
+    odds: string;
+    settlement: string;
+  };
+
+  @IsOptional()
+  @IsString()
+  primaryOddsSource?: string;
+
+  @IsOptional()
+  @IsString()
+  primaryStatsSource?: string;
+
+  @IsOptional()
+  @IsObject()
+  dataFreshness?: {
+    dataSource: string;
+    scoreAgeMs: number | null;
+    clockAgeMs: number | null;
+    statsAgeMs: number | null;
+    oddsAgeMs: Record<string, number>;
+    stale: boolean;
+  };
 }
 
 export class LiveMatchUpdateDto {

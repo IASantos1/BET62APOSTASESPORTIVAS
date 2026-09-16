@@ -8,6 +8,34 @@ import { Footer } from '../../../../components/layout/Footer';
 import { MatchHeaderCard } from '../../../../components/live/MatchHeaderCard';
 import { FullMarketsGrid } from '../../../../components/live/FullMarketsGrid';
 import MiniFootballPitch, { commentaryToBallPosition, type FootballZone } from '../../../../components/live/MiniFootballPitch';
+import { apiClient } from '../../../../lib/api-client';
+import { eventToUiMarketCategories, eventToUiMatchPreview } from '../../../../lib/odds-adapters';
+
+type LiveScore = { home?: number | null; away?: number | null };
+type LiveEventDetail = {
+  id: string;
+  name: string;
+  homeTeamName?: string;
+  awayTeamName?: string;
+  leagueName?: string;
+  sportType: string;
+  status: string;
+  liveScoreJson?: LiveScore | null;
+  liveClockJson?: unknown;
+  markets?: Array<{
+    id: string;
+    type?: string;
+    name: string;
+    status?: string;
+    selections: Array<{
+      id: string;
+      name: string;
+      odds: number;
+      status?: string;
+      outcome?: string;
+    }>;
+  }>;
+};
 
 interface LiveMatchPageProps {
   params: { matchId: string };
@@ -16,12 +44,14 @@ interface LiveMatchPageProps {
 export default function LiveMatchPage({ params }: LiveMatchPageProps) {
   const router = useRouter();
   const { matchId } = params;
+  const decodedMatchId = decodeURIComponent(matchId);
 
   const [ballPosition, setBallPosition] = React.useState<{ x: number; y: number; zone: FootballZone }>({ x: 52.5, y: 34, zone: 'center' });
   const [demoCommentary, setDemoCommentary] = React.useState('Bola no meio campo');
+  const [detail, setDetail] = React.useState<LiveEventDetail | null>(null);
+  const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    console.log('[live/match] fetching matchId:', matchId);
     const demoCycle = [
       'Bola no meio campo',
       'Canto de escanteio esquerdo Benfica',
@@ -38,7 +68,30 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
       idx += 1;
     }, 3200);
     return () => clearInterval(t);
-  }, [matchId]);
+  }, [decodedMatchId]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const res = await apiClient.get<LiveEventDetail>(`/odds/events/${encodeURIComponent(decodedMatchId)}`, {
+          auth: false,
+        });
+        if (!cancelled) setDetail(res);
+      } catch {
+        if (!cancelled) setDetail(null);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void load();
+    const timer = window.setInterval(load, 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [decodedMatchId]);
 
   return (
     <div className="min-h-screen bg-bet62-bg">
@@ -59,11 +112,18 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
             <div className="md:col-span-8 order-2 md:order-1">
-              <FullMarketsGrid matchId={matchId} />
+              <FullMarketsGrid
+                matchId={decodedMatchId}
+                loading={loading}
+                categories={detail ? eventToUiMarketCategories(detail) : []}
+              />
             </div>
 
             <div className="md:col-span-4 order-1 md:order-2 space-y-5">
-              <MatchHeaderCard matchId={matchId} />
+              <MatchHeaderCard
+                matchId={decodedMatchId}
+                match={detail ? eventToUiMatchPreview(detail) : null}
+              />
 
               <div
                 className="rounded-xl border overflow-hidden"

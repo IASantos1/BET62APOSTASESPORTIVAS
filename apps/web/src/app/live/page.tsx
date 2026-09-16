@@ -29,6 +29,7 @@ import { Tabs, TabsList, TabsTrigger } from '../../components/ui/Tabs';
 import { Button } from '../../components/ui/Button';
 import { cn, formatOdds } from '../../lib/utils';
 import { apiClient } from '../../lib/api-client';
+import { eventToUiModal } from '../../lib/odds-adapters';
 
 const SPORTS = [
   { label: 'Todos', icon: Star, id: 'all' },
@@ -45,8 +46,10 @@ type LiveScore = { home?: number | null; away?: number | null; homeHalf?: number
 type LiveClock = { minute?: number | null; injuryMinutes?: number | null; status?: string };
 type LiveMarketSelection = { id: string; name: string; odds: number; outcome?: string; status?: string };
 type LiveMarket = { id: string; type?: string; name: string; status?: string; selections: LiveMarketSelection[] };
+type EventSources = { data: string; stats: string; odds: string; settlement: string };
 type LiveEvent = {
   id: string;
+  matchId?: string;
   providerEventId?: string;
   sportType: string;
   name: string;
@@ -62,6 +65,7 @@ type LiveEvent = {
   liveStreamAvailable?: boolean;
   markets?: LiveMarket[];
   marketsCount?: number;
+  sources?: EventSources;
 };
 
 function SkeletonMatchCard({ i }: { i: number }) {
@@ -135,6 +139,12 @@ function LiveEventCard({ event, onOpenMarkets }: { event: LiveEvent; onOpenMarke
   const mainMarket: LiveMarket | undefined = event.markets?.[0];
   const selections: LiveMarketSelection[] = mainMarket?.selections ?? [];
   while (selections.length < 3) selections.push({ id: `f${selections.length}`, name: '-', odds: 0, status: 'suspended' });
+  const sourceLabel =
+    event.sportType === 'FOOTBALL'
+      ? 'Goal API + PropLine'
+      : event.sources?.odds === 'propline'
+        ? 'PropLine'
+        : event.sportType;
 
   return (
     <motion.article
@@ -154,6 +164,9 @@ function LiveEventCard({ event, onOpenMarkets }: { event: LiveEvent; onOpenMarke
                 <Timer size={12} /> {min}
               </Badge>
             </div>
+            <p className="text-[11px] uppercase tracking-wider text-white/40 font-semibold">
+              Fontes: {sourceLabel}
+            </p>
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
               <div className="space-y-3 min-w-0">
                 <div className="flex items-center gap-3">
@@ -246,6 +259,8 @@ export default function LivePage() {
   const [error, setError] = React.useState<string | null>(null);
   const [events, setEvents] = React.useState<LiveEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = React.useState<LiveEvent | null>(null);
+  const [selectedEventDetail, setSelectedEventDetail] = React.useState<(LiveEvent & { markets: LiveMarket[] }) | null>(null);
+  const [selectedEventLoading, setSelectedEventLoading] = React.useState(false);
   const [refetchAt, setRefetchAt] = React.useState<number>(Date.now());
 
   React.useEffect(() => {
@@ -294,6 +309,26 @@ export default function LivePage() {
   }, [events, search]);
 
   const liveCount = filtered.length;
+
+  const handleOpenMarkets = React.useCallback((event: LiveEvent) => {
+    setSelectedEvent(event);
+    setSelectedEventDetail(null);
+    setSelectedEventLoading(true);
+    apiClient
+      .get<LiveEvent & { markets: LiveMarket[] }>(`/odds/events/${encodeURIComponent(event.id)}`, {
+        auth: false,
+      })
+      .then((detail) => {
+        setSelectedEventDetail(detail);
+      })
+      .catch(() => {
+        setSelectedEventDetail({
+          ...event,
+          markets: [],
+        });
+      })
+      .finally(() => setSelectedEventLoading(false));
+  }, []);
 
   return (
     <div className="min-h-screen bg-bet62-bg">
@@ -384,7 +419,7 @@ export default function LivePage() {
               </Card>
             ) : null}
             {!loading && !error && filtered.length > 0
-              ? filtered.map((ev) => <LiveEventCard key={ev.id} event={ev} onOpenMarkets={setSelectedEvent} />)
+              ? filtered.map((ev) => <LiveEventCard key={ev.id} event={ev} onOpenMarkets={handleOpenMarkets} />)
               : null}
           </div>
         </div>
@@ -393,10 +428,29 @@ export default function LivePage() {
       <Betslip open={betslipOpen} onClose={() => setBetslipOpen(false)} />
       <FloatingBetslipToggle onClick={() => setBetslipOpen(true)} open={betslipOpen} />
       <EventMarketsModal
-        event={selectedEvent as unknown as null}
-        onClose={() => setSelectedEvent(null)}
+        event={selectedEventDetail ? eventToUiModal(selectedEventDetail) : null}
+        score={
+          selectedEventDetail?.liveScoreJson
+            ? [
+                ((selectedEventDetail.liveScoreJson as LiveScore).home ?? 0),
+                ((selectedEventDetail.liveScoreJson as LiveScore).away ?? 0),
+              ]
+            : undefined
+        }
+        onClose={() => {
+          setSelectedEvent(null);
+          setSelectedEventDetail(null);
+          setSelectedEventLoading(false);
+        }}
         onSelect={() => {}}
       />
+      {selectedEvent && selectedEventLoading ? (
+        <div className="fixed inset-x-0 bottom-6 z-[82] flex justify-center pointer-events-none">
+          <Badge variant="blue" className="px-3 py-1.5">
+            A carregar mercados reais...
+          </Badge>
+        </div>
+      ) : null}
     </div>
   );
 }
