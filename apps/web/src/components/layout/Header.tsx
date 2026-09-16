@@ -355,14 +355,15 @@ export function Header() {
               onClick={() => setDepositOpen(false)}
               className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70]"
             />
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.96 }}
-              transition={{ duration: 0.25, type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[71] w-[92vw] max-w-lg"
-            >
-              <div className="rounded-3xl border border-bet62-border bg-bet62-surface/95 backdrop-blur-xl shadow-glass p-6">
+            <div className="fixed inset-0 z-[71] flex items-center justify-center p-4 sm:p-6 pointer-events-none">
+              <motion.div
+                initial={{ opacity: 0, y: 20, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 20, scale: 0.96 }}
+                transition={{ duration: 0.25, type: 'spring', damping: 25, stiffness: 300 }}
+                className="pointer-events-auto w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto"
+              >
+                <div className="rounded-3xl border border-bet62-border bg-bet62-surface/95 backdrop-blur-xl shadow-glass p-6">
                 <div className="flex items-center justify-between mb-5">
                   <div>
                     <h3 className="text-xl font-bold tracking-tight">Depósito Rápido</h3>
@@ -492,8 +493,9 @@ export function Header() {
                 >
                   CONTINUAR
                 </Button>
-              </div>
-            </motion.div>
+                </div>
+              </motion.div>
+            </div>
           </>
         ) : null}
       </AnimatePresence>
