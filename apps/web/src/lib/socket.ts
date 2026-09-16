@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Socket as ISocket } from 'socket.io-client';
+import { io, Socket as IoSocket } from 'socket.io-client';
 
 const WS_URL =
   (typeof process !== 'undefined' && (process as unknown as { env?: Record<string, string> }).env?.NEXT_PUBLIC_WS_URL) ||
@@ -52,13 +52,13 @@ export type LiveMatchCommentary = {
 };
 export type LiveMatchStateShape = {
   matchId: string;
-  homeName: string;
-  awayName: string;
+  homeName: string | null;
+  awayName: string | null;
   homeLogo: string | null;
   awayLogo: string | null;
   leagueName: string | null;
   leagueLogo: string | null;
-  kickoffAt: string;
+  kickoffAt: string | null;
   score: LiveMatchScore;
   clock: LiveMatchClock;
   markets: LiveMatchMarket[];
@@ -81,67 +81,41 @@ export type LiveMatchUpdateEnvelope =
   | { kind: 'stats_delta'; stats: Partial<LiveMatchStats> }
   | { kind: 'hello'; connected: boolean; serverTime: string };
 
-class MockSocket {
-  private listeners: Map<string, Set<AnyListener>> = new Map();
-  public connected = false;
-  public id: string | undefined;
+export type Bet62Socket = IoSocket;
 
-  constructor(public ns: string) {
-    if (typeof window !== 'undefined') {
-      setTimeout(() => {
-        this.connected = true;
-        this.id = 'mock-' + Math.random().toString(36).slice(2, 10);
-        this.emitSelf('connect');
-      }, 50);
-    }
-  }
-  private emitSelf(ev: string, ...args: unknown[]) {
-    const set = this.listeners.get(ev);
-    if (set) for (const fn of [...set]) fn(...args);
-  }
-  on(ev: string, fn: AnyListener) {
-    if (!this.listeners.has(ev)) this.listeners.set(ev, new Set());
-    this.listeners.get(ev)!.add(fn);
-    return this;
-  }
-  off(ev: string, fn?: AnyListener) {
-    if (!fn) this.listeners.delete(ev);
-    else this.listeners.get(ev)?.delete(fn);
-    return this;
-  }
-  emit(ev: string, ...args: unknown[]) {
-    queueMicrotask(() => this.emitSelf(`${ev}:ack`, { ok: true, args }));
-    return this;
-  }
-  disconnect() {
-    this.connected = false;
-    this.emitSelf('disconnect', 'io client disconnect');
-    return this;
-  }
-  connect() {
-    this.connected = true;
-    this.emitSelf('connect');
-    return this;
-  }
+let oddsSocket: IoSocket | null = null;
+let notifSocket: IoSocket | null = null;
+
+function createSocket(ns: string): IoSocket {
+  const base = WS_URL.replace(/\/+$/, '');
+  const url = ns.startsWith('/') ? `${base}${ns}` : `${base}/${ns}`;
+  return io(url, {
+    transports: ['websocket', 'polling'],
+    autoConnect: true,
+    reconnection: true,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 10000,
+    timeout: 20000,
+  });
 }
 
-export type Bet62Socket = MockSocket;
-
-let oddsSocket: MockSocket | null = null;
-let notifSocket: MockSocket | null = null;
-
-export function getOddsSocket(): MockSocket {
-  if (typeof window === 'undefined') return new MockSocket('/odds-ws');
+export function getOddsSocket(): IoSocket {
+  if (typeof window === 'undefined') {
+    return createSocket('/odds-ws');
+  }
   if (!oddsSocket) {
-    oddsSocket = new MockSocket('/odds-ws');
+    oddsSocket = createSocket('/odds-ws');
   }
   return oddsSocket;
 }
 
-export function getNotificationsSocket(): MockSocket {
-  if (typeof window === 'undefined') return new MockSocket('/notifications-ws');
+export function getNotificationsSocket(): IoSocket {
+  if (typeof window === 'undefined') {
+    return createSocket('/notifications-ws');
+  }
   if (!notifSocket) {
-    notifSocket = new MockSocket('/notifications-ws');
+    notifSocket = createSocket('/notifications-ws');
   }
   return notifSocket;
 }
@@ -155,17 +129,17 @@ export function disconnectAll() {
 
 export const realIoWsUrl = WS_URL;
 
-const DEFAULT_STATE: LiveMatchStateShape = {
+const EMPTY_STATE: LiveMatchStateShape = {
   matchId: '',
-  homeName: 'Equipa Casa',
-  awayName: 'Equipa Fora',
+  homeName: null,
+  awayName: null,
   homeLogo: null,
   awayLogo: null,
   leagueName: null,
   leagueLogo: null,
-  kickoffAt: new Date().toISOString(),
-  score: { home: 0, away: 0 },
-  clock: { minute: 0, stoppage: null, period: null, periodLabel: 'Em Breve', running: false },
+  kickoffAt: null,
+  score: { home: null, away: null },
+  clock: { minute: null, stoppage: null, period: null, periodLabel: null, running: false },
   markets: [],
   stats: null,
   recentEvents: [],
@@ -220,16 +194,16 @@ export type UseLiveMatchReturn = {
   forceRefresh: () => void;
 };
 
-export function useLiveMatch(matchId: string | null | undefined, options?: { autoSubscribe?: boolean; mockSeedState?: Partial<LiveMatchStateShape> }): UseLiveMatchReturn {
+export function useLiveMatch(matchId: string | null | undefined, options?: { autoSubscribe?: boolean; seedState?: Partial<LiveMatchStateShape> }): UseLiveMatchReturn {
   const autoSubscribe = options?.autoSubscribe ?? true;
-  const socketRef = useRef<MockSocket | null>(null);
+  const socketRef = useRef<IoSocket | null>(null);
   const subscribedRef = useRef(false);
   const [connected, setConnected] = useState(false);
   const [subscribed, setSubscribed] = useState(false);
   const [lastEnvelope, setLastEnvelope] = useState<LiveMatchUpdateEnvelope | null>(null);
   const [match, setMatch] = useState<LiveMatchStateShape>(() => {
-    const s: LiveMatchStateShape = matchId ? { ...DEFAULT_STATE, matchId } : DEFAULT_STATE;
-    if (options?.mockSeedState) Object.assign(s, options.mockSeedState);
+    const s: LiveMatchStateShape = matchId ? { ...EMPTY_STATE, matchId } : EMPTY_STATE;
+    if (options?.seedState) Object.assign(s, options.seedState);
     return s;
   });
   const [lastUpdateAt, setLastUpdateAt] = useState<Date | null>(null);
@@ -257,6 +231,7 @@ export function useLiveMatch(matchId: string | null | undefined, options?: { aut
     });
     sock.on('connect', () => setConnected(true));
     sock.on('disconnect', () => setConnected(false));
+    sock.on('connect_error', () => setConnected(false));
     sock.emit('live:subscribe', { matchId });
     setConnected(sock.connected);
     void matchChan;

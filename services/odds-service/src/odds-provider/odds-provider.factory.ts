@@ -85,8 +85,7 @@ export function createOddsProvider(
 
   if (normalized === 'mock') {
     if (config.mockInstance) return config.mockInstance;
-    const scheduler = config.schedulerRegistry ?? new SchedulerRegistry();
-    const instance = new MockOddsProviderService(scheduler);
+    const instance = new MockOddsProviderService();
     if (typeof instance.onModuleInit === 'function') {
       try {
         instance.onModuleInit();

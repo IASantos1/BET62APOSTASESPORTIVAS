@@ -1,55 +1,69 @@
 'use client';
 
 import * as React from 'react';
-import { Clock, CircleDot, Square, Flag } from 'lucide-react';
+import { Clock, Square, Flag } from 'lucide-react';
 import { Card, CardContent } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { TeamLogo } from '../ui/TeamLogo';
 import { cn } from '../../lib/utils';
 
-interface MatchPreview {
+export interface MatchPreviewEvent {
+  type: string;
+  team: 'h' | 'a' | 'neutral';
+  minute: number;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  color: string;
+}
+
+export interface MatchPreview {
   homeTeam: { name: string; logoUrl?: string };
   awayTeam: { name: string; logoUrl?: string };
-  score: { home: number; away: number };
+  score: { home: number | null; away: number | null };
   league: { name: string; logoUrl?: string };
-  clock: { minute: number; period: string; running: boolean; stoppage?: number };
+  clock: { minute: number | null; period: string; running: boolean; stoppage?: number };
+  status?: 'PRE_MATCH' | 'LIVE' | 'HALF_TIME' | 'FINISHED' | string;
+  events?: MatchPreviewEvent[];
 }
 
 interface MatchHeaderCardProps {
   matchId: string;
+  match?: MatchPreview | null;
 }
 
-const MOCK_MATCH: MatchPreview = {
-  homeTeam: { name: 'Benfica' },
-  awayTeam: { name: 'Sporting' },
-  score: { home: 1, away: 1 },
-  league: { name: 'Liga Portugal Bwin' },
-  clock: { minute: 67, period: '2ºT', running: true, stoppage: 0 },
-};
-
-const MOCK_EVENTS = [
-  { type: 'goal', team: 'h', minute: 23, label: 'Golo', icon: CircleDot, color: 'text-bet62-primary' },
-  { type: 'goal', team: 'a', minute: 51, label: 'Golo', icon: CircleDot, color: 'text-bet62-secondary' },
-  { type: 'yellow', team: 'h', minute: 34, label: 'Cartão Amarelo', icon: Square, color: 'text-yellow-400' },
-  { type: 'corner', team: 'a', minute: 62, label: 'Canto', icon: Flag, color: 'text-bet62-accent' },
-];
-
-export function MatchHeaderCard({ matchId }: MatchHeaderCardProps) {
-  const [match, setMatch] = React.useState<MatchPreview | null>(null);
+export function MatchHeaderCard({ matchId, match }: MatchHeaderCardProps) {
+  const [data, setData] = React.useState<MatchPreview | null>(match ?? null);
   const [showEvents, setShowEvents] = React.useState(true);
 
   React.useEffect(() => {
-    setMatch(MOCK_MATCH);
-  }, [matchId]);
+    if (match !== undefined) {
+      setData(match);
+    }
+  }, [matchId, match]);
 
-  const data = match ?? MOCK_MATCH;
-  const { homeTeam, awayTeam, score, league, clock } = data;
+  if (!data) {
+    return (
+      <Card className="overflow-hidden">
+        <CardContent className="p-8 flex flex-col items-center justify-center min-h-[240px] gap-2 text-white/40">
+          <Clock size={28} className="animate-pulse" />
+          <p className="text-sm font-semibold">A carregar dados da partida...</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const { homeTeam, awayTeam, score, league, clock, events } = data;
 
   const formatClock = () => {
-    if (clock.period === 'HT') return 'Intervalo';
-    if (clock.period === 'FT') return `FT ${clock.minute}'${clock.stoppage ? `+${clock.stoppage}` : ''}`;
-    return `${clock.minute}'${clock.stoppage ? `+${clock.stoppage}` : ''} ${clock.running ? 'LIVE' : ''}`;
+    if (!clock) return '';
+    if (clock.period === 'HT' || clock.period === 'Intervalo') return 'Intervalo';
+    if (clock.period === 'FT' || clock.period === 'Final') {
+      return `FT ${clock.minute ?? 90}'${clock.stoppage ? `+${clock.stoppage}` : ''}`;
+    }
+    return `${clock.minute ?? 0}'${clock.stoppage ? `+${clock.stoppage}` : ''} ${clock.running ? 'LIVE' : ''}`;
   };
+
+  const isLive = clock?.running || data.status === 'LIVE' || data.status === 'HALF_TIME';
 
   return (
     <Card className="overflow-hidden">
@@ -60,14 +74,24 @@ export function MatchHeaderCard({ matchId }: MatchHeaderCardProps) {
               <img src={league.logoUrl} alt={league.name} className="w-6 h-6 rounded object-contain" />
             ) : (
               <div className="w-6 h-6 rounded bg-bet62-primary/15 flex items-center justify-center text-[10px] font-black text-bet62-primary">
-                LP
+                {(league.name || 'LP').slice(0, 2).toUpperCase()}
               </div>
             )}
             <span className="font-semibold text-sm">{league.name}</span>
           </div>
-          <Badge variant="green" dot className="py-0.5 px-2.5">
-            LIVE
-          </Badge>
+          {isLive ? (
+            <Badge variant="green" dot className="py-0.5 px-2.5">
+              LIVE
+            </Badge>
+          ) : data.status === 'FINISHED' || clock?.period === 'FT' ? (
+            <Badge variant="outline" className="py-0.5 px-2.5">
+              Terminado
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="py-0.5 px-2.5">
+              Pré-Jogo
+            </Badge>
+          )}
         </div>
 
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 md:gap-6">
@@ -78,12 +102,12 @@ export function MatchHeaderCard({ matchId }: MatchHeaderCardProps) {
 
           <div className="text-center shrink-0">
             <div className="inline-flex items-center gap-2 md:gap-4 px-4 py-3 rounded-2xl border border-bet62-border bg-bet62-bg/60">
-              <span className="font-mono font-black text-4xl md:text-5xl tabular-nums leading-none text-bet62-primary animate-pulse">
-                {score.home}
+              <span className="font-mono font-black text-4xl md:text-5xl tabular-nums leading-none text-bet62-primary">
+                {score.home ?? '-'}
               </span>
               <span className="text-white/30 text-2xl md:text-3xl font-black">–</span>
-              <span className="font-mono font-black text-4xl md:text-5xl tabular-nums leading-none text-bet62-secondary animate-pulse">
-                {score.away}
+              <span className="font-mono font-black text-4xl md:text-5xl tabular-nums leading-none text-bet62-secondary">
+                {score.away ?? '-'}
               </span>
             </div>
           </div>
@@ -99,42 +123,48 @@ export function MatchHeaderCard({ matchId }: MatchHeaderCardProps) {
           <span className="font-mono font-bold text-bet62-primary">
             {formatClock()}
           </span>
-          {clock.stoppage ? (
+          {clock?.stoppage ? (
             <Badge variant="amber" className="py-0 px-2 text-[10px]">
               +{clock.stoppage}' Paragem
             </Badge>
           ) : null}
         </div>
 
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowEvents((s) => !s)}
-            className="w-full flex items-center justify-between text-xs uppercase tracking-wider text-white/55 font-semibold mb-2 hover:text-white/80 transition"
-          >
-            <span>Últimos eventos</span>
-            <span className={cn('transition-transform', showEvents ? 'rotate-90' : '')}>›</span>
-          </button>
-          {showEvents ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {MOCK_EVENTS.map((ev, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    'rounded-xl border border-bet62-border bg-bet62-surface/40 p-2.5 flex items-center gap-2',
-                    ev.team === 'h' ? 'border-l-[3px] border-l-bet62-primary' : 'border-l-[3px] border-l-bet62-secondary',
-                  )}
-                >
-                  <ev.icon size={14} className={ev.color} />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] font-semibold truncate">{ev.label}</p>
-                    <p className="text-[10px] text-white/50 font-mono">{ev.minute}'</p>
+        {events && events.length > 0 ? (
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowEvents((s) => !s)}
+              className="w-full flex items-center justify-between text-xs uppercase tracking-wider text-white/55 font-semibold mb-2 hover:text-white/80 transition"
+            >
+              <span>Últimos eventos</span>
+              <span className={cn('transition-transform', showEvents ? 'rotate-90' : '')}>›</span>
+            </button>
+            {showEvents ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {events.map((ev, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      'rounded-xl border border-bet62-border bg-bet62-surface/40 p-2.5 flex items-center gap-2',
+                      ev.team === 'h'
+                        ? 'border-l-[3px] border-l-bet62-primary'
+                        : ev.team === 'a'
+                          ? 'border-l-[3px] border-l-bet62-secondary'
+                          : 'border-l-[3px] border-l-white/20',
+                    )}
+                  >
+                    <ev.icon size={14} className={ev.color} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] font-semibold truncate">{ev.label}</p>
+                      <p className="text-[10px] text-white/50 font-mono">{ev.minute}'</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

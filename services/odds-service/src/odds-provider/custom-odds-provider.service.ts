@@ -73,53 +73,7 @@ function pickObject<T>(resp: unknown, keys: string[]): T | null {
 }
 
 function defaultSportList(): Sport[] {
-  return [
-    {
-      id: 'FOOTBALL',
-      slug: 'football',
-      name: 'Futebol',
-      sportType: SportType.FOOTBALL,
-      active: true,
-      featured: true,
-      displayOrder: 0,
-      iconUrl: null,
-      colorHex: null,
-      totalLiveEvents: 0,
-      totalPrematchEvents: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: 'BASKETBALL',
-      slug: 'basketball',
-      name: 'Basquete',
-      sportType: SportType.BASKETBALL,
-      active: true,
-      featured: false,
-      displayOrder: 1,
-      iconUrl: null,
-      colorHex: null,
-      totalLiveEvents: 0,
-      totalPrematchEvents: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-    {
-      id: 'TENNIS',
-      slug: 'tennis',
-      name: 'Tênis',
-      sportType: SportType.TENNIS,
-      active: true,
-      featured: false,
-      displayOrder: 2,
-      iconUrl: null,
-      colorHex: null,
-      totalLiveEvents: 0,
-      totalPrematchEvents: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    },
-  ];
+  return [];
 }
 
 @Injectable()

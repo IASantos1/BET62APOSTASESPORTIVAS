@@ -1,4 +1,4 @@
-export type SportsProviderName = "goal_api" | "propline" | "mock";
+export type SportsProviderName = "goal_api" | "propline";
 export type SportsProviderDimension =
   | "data"
   | "stats"
@@ -37,12 +37,6 @@ export const SPORTS_PROVIDER_CONFIG: {
       wsUrl:
         process.env.PROPLINE_WS_URL ?? "wss://ws.prop-line.com/v1/stream",
       apiKeyEnvName: "PROPLINE_API_KEY",
-      shortLivedWsToken: false,
-    },
-    mock: {
-      baseUrl: "https://api.mock-odds.local",
-      wsUrl: "wss://mock-odds.local/ws",
-      apiKeyEnvName: "",
       shortLivedWsToken: false,
     },
   },
