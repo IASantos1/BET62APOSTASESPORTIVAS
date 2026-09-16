@@ -177,7 +177,7 @@ export class LiveMatchStateRedisService implements OnModuleDestroy {
 
       const tryConnect = async () => {
         try {
-          await client.connect(3000);
+          await client.connect();
           this.ready = true;
         } catch (err) {
           fallbackToMemory(`connect() threw: ${((err as Error)?.message ?? String(err)).slice(0, 90)}`);
@@ -193,10 +193,7 @@ export class LiveMatchStateRedisService implements OnModuleDestroy {
   onModuleDestroy() {
     if (this.backend.kind === 'redis') {
       try {
-        const p = this.backend.client.disconnect(false);
-        if (p && typeof (p as unknown as Promise<unknown>).catch === 'function') {
-          (p as unknown as Promise<unknown>).catch(() => undefined);
-        }
+        this.backend.client.disconnect(false);
       } catch { /* noop */ }
     } else {
       this.backend.client.quit();
@@ -347,6 +344,39 @@ export class LiveMatchStateRedisService implements OnModuleDestroy {
   getRedisClient(): unknown {
     if (this.backend.kind === 'redis') return this.backend.client;
     return null;
+  }
+
+  private readonly memoryLocks = new Map<string, number>();
+
+  async acquireDistributedLock(key: string, ttlMs: number): Promise<boolean> {
+    try {
+      if (this.backend.kind === 'redis') {
+        const set = await this.backend.client.set(key, '1', 'PX', ttlMs, 'NX');
+        return set === 'OK';
+      }
+      const now = Date.now();
+      for (const [k, expiresAt] of this.memoryLocks) {
+        if (expiresAt < now) this.memoryLocks.delete(k);
+      }
+      const existing = this.memoryLocks.get(key);
+      if (existing && existing > now) return false;
+      this.memoryLocks.set(key, now + ttlMs);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async releaseDistributedLock(key: string): Promise<void> {
+    try {
+      if (this.backend.kind === 'redis') {
+        await this.backend.client.del(key);
+      } else {
+        this.memoryLocks.delete(key);
+      }
+    } catch {
+      /* noop */
+    }
   }
 }
 

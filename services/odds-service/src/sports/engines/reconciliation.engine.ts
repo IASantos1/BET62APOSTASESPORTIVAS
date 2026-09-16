@@ -44,20 +44,11 @@ export class ReconciliationEngine implements OnApplicationBootstrap {
   }
 
   private async acquireLock(matchId: string): Promise<boolean> {
-    const client = this.liveState.getRedisClient();
-    const set = await client.set(
-      this.lockKey(matchId),
-      '1',
-      'PX',
-      RECONCILIATION_LOCK_TTL_MS,
-      'NX',
-    );
-    return set === 'OK';
+    return this.liveState.acquireDistributedLock(this.lockKey(matchId), RECONCILIATION_LOCK_TTL_MS);
   }
 
   private async releaseLock(matchId: string): Promise<void> {
-    const client = this.liveState.getRedisClient();
-    await client.del(this.lockKey(matchId));
+    await this.liveState.releaseDistributedLock(this.lockKey(matchId));
   }
 
   markWsDisconnected(matchId: string): void {
