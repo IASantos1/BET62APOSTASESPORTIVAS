@@ -1,5 +1,3 @@
-import type { EventDto, MarketDto } from '@bet62/shared';
-
 type LiveScore = {
   home?: number | null;
   away?: number | null;
@@ -68,15 +66,45 @@ export type UiEventMarketsModalEvent = {
   }>;
 };
 
-function readScore(event: Pick<EventDto, 'liveScoreJson'>): LiveScore {
+type AdapterSelection = {
+  id: string;
+  name: string;
+  odds: number;
+  status?: string;
+  outcome?: string;
+};
+
+type AdapterMarket = {
+  id: string;
+  type?: string | null;
+  name: string;
+  status?: string;
+  selections?: AdapterSelection[] | null;
+};
+
+type AdapterEvent = {
+  id: string;
+  matchId?: string;
+  name: string;
+  homeTeamName?: string;
+  awayTeamName?: string;
+  leagueName?: string;
+  sportType: string;
+  status: string;
+  liveScoreJson?: LiveScore | null;
+  liveClockJson?: LiveClock | null | unknown;
+  markets?: AdapterMarket[] | null;
+};
+
+function readScore(event: Pick<AdapterEvent, 'liveScoreJson'>): LiveScore {
   return (event.liveScoreJson as LiveScore | null | undefined) ?? {};
 }
 
-function readClock(event: Pick<EventDto, 'liveClockJson'>): LiveClock {
+function readClock(event: Pick<AdapterEvent, 'liveClockJson'>): LiveClock {
   return (event.liveClockJson as LiveClock | null | undefined) ?? {};
 }
 
-function marketSelectionsToUi(market: MarketDto): UiSelection[] {
+function marketSelectionsToUi(market: AdapterMarket): UiSelection[] {
   return (market.selections ?? []).map((selection) => ({
     id: selection.id,
     name: selection.name,
@@ -87,16 +115,16 @@ function marketSelectionsToUi(market: MarketDto): UiSelection[] {
   }));
 }
 
-export function eventToUiMarketCategories(event: Pick<EventDto, 'markets'> & { markets?: MarketDto[] }): UiMarketCategory[] {
+export function eventToUiMarketCategories(event: Pick<AdapterEvent, 'markets'>): UiMarketCategory[] {
   return (event.markets ?? []).map((market) => ({
     name: market.name,
-    code: market.type || market.id,
-    group: market.type,
+    code: market.type ?? market.id,
+    group: market.type ?? undefined,
     odds: marketSelectionsToUi(market),
   }));
 }
 
-export function eventToUiModal(event: EventDto & { markets?: MarketDto[] }): UiEventMarketsModalEvent {
+export function eventToUiModal(event: AdapterEvent): UiEventMarketsModalEvent {
   const clock = readClock(event);
   return {
     id: event.matchId ?? event.id,
@@ -121,7 +149,7 @@ export function eventToUiModal(event: EventDto & { markets?: MarketDto[] }): UiE
   };
 }
 
-export function eventToUiMatchPreview(event: EventDto): UiMatchPreview {
+export function eventToUiMatchPreview(event: AdapterEvent): UiMatchPreview {
   const score = readScore(event);
   const clock = readClock(event);
   const period =
