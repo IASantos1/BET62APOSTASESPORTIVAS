@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import { PaymentProvider } from '@bet62/shared';
 
 type CheckoutPaymentMethod = 'card' | 'mbway' | 'multibanco';
+type EffectiveCheckoutPaymentMethod = 'card' | 'multibanco';
 
 interface CreateCheckoutSessionDto {
   userId: string;
@@ -27,6 +28,15 @@ export class StripeService {
     this.stripe = this.secretKey.startsWith('sk_test_mock') || this.secretKey === ''
       ? null
       : new Stripe(this.secretKey, { apiVersion: '2023-10-16' });
+  }
+
+  private normalizeCheckoutPaymentMethod(
+    paymentMethod: CheckoutPaymentMethod,
+  ): EffectiveCheckoutPaymentMethod {
+    if (paymentMethod === 'mbway') {
+      return 'card';
+    }
+    return paymentMethod;
   }
 
   async createPaymentIntent(
@@ -70,50 +80,47 @@ export class StripeService {
     clientSecret?: string;
     status: string;
     provider: PaymentProvider;
+    paymentMethod: EffectiveCheckoutPaymentMethod;
   }> {
     const { userId, amountCents, currency, paymentMethod, returnUrl, promoCode } = dto;
+    const effectivePaymentMethod = this.normalizeCheckoutPaymentMethod(paymentMethod);
     const successUrl = returnUrl && returnUrl.length > 0
-      ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}payType=${paymentMethod}&sessionId={CHECKOUT_SESSION_ID}&status=success`
+      ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}payType=${effectivePaymentMethod}&sessionId={CHECKOUT_SESSION_ID}&status=success`
       : undefined;
     const cancelUrl = returnUrl && returnUrl.length > 0
-      ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}payType=${paymentMethod}&status=cancel`
+      ? `${returnUrl}${returnUrl.includes('?') ? '&' : '?'}payType=${effectivePaymentMethod}&status=cancel`
       : undefined;
 
     if (!this.stripe) {
-      this.logger.debug(`[MOCK] createCheckoutSession user=${userId} amount=${amountCents} currency=${currency} method=${paymentMethod}`);
+      this.logger.debug(`[MOCK] createCheckoutSession user=${userId} amount=${amountCents} currency=${currency} method=${paymentMethod} effective=${effectivePaymentMethod}`);
       const sessionId = `cs_mock_${userId}_${Date.now()}`;
       return {
         sessionId,
-        url: `${returnUrl || 'http://localhost'}${returnUrl?.includes('?') ? '&' : '?'}payType=${paymentMethod}&sessionId=${sessionId}&status=success`,
+        url: `${returnUrl || 'http://localhost'}${returnUrl?.includes('?') ? '&' : '?'}payType=${effectivePaymentMethod}&sessionId=${sessionId}&status=success`,
         clientSecret: `cs_mock_${userId}_${Date.now()}_secret_${Math.random().toString(36).slice(2)}`,
         status: 'open',
         provider: PaymentProvider.STRIPE,
+        paymentMethod: effectivePaymentMethod,
       };
     }
 
-    const metadata: Record<string, string> = { userId, paymentMethod };
+    const metadata: Record<string, string> = {
+      userId,
+      requestedPaymentMethod: paymentMethod,
+      paymentMethod: effectivePaymentMethod,
+    };
     if (promoCode) metadata.promoCode = promoCode;
 
     let paymentMethodTypes: any;
     let paymentMethodOptions: Stripe.Checkout.SessionCreateParams.PaymentMethodOptions | undefined;
 
-    switch (paymentMethod) {
+    switch (effectivePaymentMethod) {
       case 'card':
         paymentMethodTypes = ['card' as const];
         break;
 
       case 'multibanco':
         paymentMethodTypes = ['multibanco' as const, 'card' as const];
-        break;
-
-      case 'mbway':
-        // Stripe suporta MB Way através Stripe Payments API Stripe.Checkout.Session.create com
-        // payment_method_types: ['multibanco', 'card'] para métodos de PT;
-        // mbway via pix/bancontact dependendo da conta Stripe PT ativada.
-        // Em ambiente de produção com Stripe PT devidamente ativado, MB Way pode ser disponibilizado
-        // através de payment_method_types apropriados ou fluxos de pagamento alternativos.
-        paymentMethodTypes = ['card' as const];
-        paymentMethodOptions = {};
         break;
 
       default:
@@ -128,7 +135,7 @@ export class StripeService {
             currency: currency.toLowerCase(),
             product_data: {
               name: `Depósito ${amountCents / 100} ${currency.toUpperCase()}`,
-              description: `Depósito via ${paymentMethod}`,
+              description: `Depósito via ${effectivePaymentMethod}`,
             },
             unit_amount: amountCents,
           },
@@ -149,6 +156,7 @@ export class StripeService {
       clientSecret: session.client_secret ?? undefined,
       status: session.status,
       provider: PaymentProvider.STRIPE,
+      paymentMethod: effectivePaymentMethod,
     };
   }
 
