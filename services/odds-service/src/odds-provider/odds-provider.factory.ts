@@ -53,20 +53,13 @@ export function normalizeProviderName(name?: string | null): SupportedOddsProvid
   ) {
     return 'goal_api';
   }
-  if (
-    n === 'propline' ||
-    n === 'prop_line' ||
-    n === 'propline_api' ||
-    n === 'propline_ws' ||
-    n === 'proplines' ||
-    n === 'proline' ||
-    n === 'propl'
-  ) {
+  if (n === 'propline' || n === 'prop_line' || n === 'propline_api' || n === 'propline_ws' || n === 'proplines' || n === 'proline' || n === 'propl') {
     return 'propline';
   }
-  if (n === 'mock' || n === '' || n === 'default') return 'mock';
-  logger.warn(`Provider desconhecido "${name}", usando fallback "mock"`);
-  return 'mock';
+  if (n === 'mock') return 'mock';
+  if (n === '' || n === 'default') return 'propline';
+  logger.warn(`Provider desconhecido "${name}", usando fallback "propline"`);
+  return 'propline';
 }
 
 export function buildOddsProvider(

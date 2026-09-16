@@ -71,7 +71,7 @@ export const ABSTRACT_ODDS_PROVIDER_TOKEN = Symbol('ABSTRACT_ODDS_PROVIDER');
         proplineProvider: ProplineOddsProviderService,
       ): OddsProvider => {
         const logger = new Logger('OddsProviderModule');
-        const name = configService.get<string>('ODDS_PROVIDER_NAME', 'mock');
+        const name = configService.get<string>('ODDS_PROVIDER_NAME', 'propline');
         const normalized = normalizeProviderName(name);
         logger.log(
           `ODDS_PROVIDER_NAME="${name}" -> resolved="${normalized}" para token ODDS_PROVIDER (interface legada)`,
@@ -117,7 +117,7 @@ export const ABSTRACT_ODDS_PROVIDER_TOKEN = Symbol('ABSTRACT_ODDS_PROVIDER');
         proplineProvider: ProplineOddsProviderService,
       ): AbstractOddsProvider => {
         const logger = new Logger('OddsProviderModule');
-        const name = configService.get<string>('ODDS_PROVIDER_NAME', 'mock');
+        const name = configService.get<string>('ODDS_PROVIDER_NAME', 'propline');
         const normalized = normalizeProviderName(name);
         logger.log(
           `ODDS_PROVIDER_NAME="${name}" -> resolved="${normalized}" para AbstractOddsProvider`,

@@ -47,10 +47,10 @@ export class OddsController {
 
   @Get('events/:id')
   @ApiOperation({ summary: 'Detalhe do evento com mercados' })
-  @ApiParam({ name: 'id', type: String, description: 'UUID do evento' })
+  @ApiParam({ name: 'id', type: String, description: 'ID do evento (UUID ou composite SPORT:id)' })
   @ApiQuery({ type: EventDetailQueryDto })
   async getEventDetail(
-    @Param('id', ParseUUIDPipe) eventId: string,
+    @Param('id') eventId: string,
     @Query() _query: EventDetailQueryDto,
   ): Promise<(EventDto & { markets: MarketDto[] }) | null> {
     return this.oddsService.getEventDetail(_query, eventId);
@@ -58,8 +58,8 @@ export class OddsController {
 
   @Get('events/:id/markets')
   @ApiOperation({ summary: 'Mercados do evento' })
-  @ApiParam({ name: 'id', type: String })
-  async getEventMarkets(@Param('id', ParseUUIDPipe) eventId: string): Promise<MarketDto[]> {
+  @ApiParam({ name: 'id', type: String, description: 'ID do evento (UUID ou composite SPORT:id)' })
+  async getEventMarkets(@Param('id') eventId: string): Promise<MarketDto[]> {
     return this.oddsService.getEventMarkets(eventId);
   }
 }
