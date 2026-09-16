@@ -32,6 +32,7 @@ export class ProplineHttpClient {
     retryAfterSec: null,
     last429At: null,
   };
+  private readonly _emptyKeyWarnedOnce: Map<string, boolean> = new Map();
 
   constructor(private readonly configService: ConfigService) {
     const endpoint = SPORTS_PROVIDER_CONFIG.endpoints.propline;
@@ -50,6 +51,10 @@ export class ProplineHttpClient {
       ?? process.env.PROPLINE_TIMEOUT_MS
       ?? String(DEFAULT_TIMEOUT_MS),
     ) || DEFAULT_TIMEOUT_MS;
+
+    // #region debug-point H1:propline-api-key-status
+    (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'pre-fix', hypothesisId: 'H1', location: 'propline.http-client.ts:36', msg: '[DEBUG] ProplineHttpClient constructor config', data: { envNameChecked: endpoint.apiKeyEnvName, hasApiKey: Boolean(this.apiKey && this.apiKey.length > 0), isSetButPlaceholder: Boolean(this.apiKey && (this.apiKey.includes('coloca') || this.apiKey.includes('<<') || this.apiKey.includes('replace') || this.apiKey.length < 10)), baseUrl: this.baseUrl, timeoutMs: this.timeoutMs, apiKeyLength: this.apiKey.length, apiKeyFirst3: this.apiKey ? this.apiKey.slice(0, 3) : '' }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
+    // #endregion
   }
 
   private buildHeaders(): Record<string, string> {
@@ -118,10 +123,21 @@ export class ProplineHttpClient {
         return fallbackEmpty;
       }
       if (!this.apiKey) {
-        this.logger.verbose(`PropLine API key vazia. Retornar fallback para ${path}.`);
+        // #region debug-point H1:propline-api-key-empty-return
+        (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'post-fix', hypothesisId: 'H1', location: 'propline.http-client.ts:120', msg: '[DEBUG] PropLine API key EMPTY - retornado fallbackEmpty[] para path (Causa H1)', data: { path, params: params || null, returned: 'fallbackEmpty length=' + (Array.isArray(fallbackEmpty) ? fallbackEmpty.length : 'non-array') }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
+        // #endregion
+        if (!this._emptyKeyWarnedOnce.get(path)) {
+          this.logger.warn(
+            `PropLine API key VAZIA ou PLACEHOLDER. endpoint=${path} retornara vazio. Configurar PROPLINE_API_KEY no .env / Railway vars.`,
+          );
+          this._emptyKeyWarnedOnce.set(path, true);
+        }
         return fallbackEmpty;
       }
       const url = this.buildUrl(path, params);
+      // #region debug-point H4:propline-request-url-sent
+      (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'pre-fix', hypothesisId: 'H4', location: 'propline.http-client.ts:124', msg: '[DEBUG] PropLine HTTP request vai ser enviado', data: { method, url, path, params: params || null, hasXApiKeyHeader: Boolean(this.apiKey) }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
+      // #endregion
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
@@ -131,6 +147,9 @@ export class ProplineHttpClient {
           signal: controller.signal,
           redirect: 'follow',
         });
+        // #region debug-point H4:propline-request-status-received
+        (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'pre-fix', hypothesisId: 'H4', location: 'propline.http-client.ts:134', msg: '[DEBUG] PropLine HTTP response recebido', data: { url, status: res.status, statusText: res.statusText, ok: res.ok, contentType: res.headers.get('content-type') || null, willReturnFallbackEmpty: res.status === 404 || res.status === 401 || res.status === 403 || res.status === 429 || !res.ok }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
+        // #endregion
         this.processResponseHeaders(res.headers);
         if (res.status === 429) {
           const retryAfterRaw = res.headers.get('Retry-After');

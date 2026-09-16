@@ -22,6 +22,8 @@ import {
   ShieldCheck,
   Banknote,
   CalendarDays,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
@@ -395,6 +397,7 @@ function UpcomingEventCard({ ev }: { ev: BaseEvent }) {
 export default function HomePage() {
   const [betslipOpen, setBetslipOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
   const [prematch, setPrematch] = React.useState<BaseEvent[]>([]);
   const [live, setLive] = React.useState<BaseEvent[]>([]);
   const [refetchAt, setRefetchAt] = React.useState<number>(Date.now());
@@ -409,17 +412,26 @@ export default function HomePage() {
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(null);
     const runAll = async () => {
       try {
         const [prematchRes, liveRes] = await Promise.all([
           apiClient.get<{ events: BaseEvent[] }>('/odds/events/prematch?limit=50', { auth: false }),
           apiClient.get<{ events: BaseEvent[] }>('/odds/events/live?limit=50', { auth: false }),
         ]);
+        // #region debug-point H3,H5:home-success-count
+        (() => { const p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { if (typeof window !== 'undefined') { const e = ''; u = 'http://127.0.0.1:7777/event'; } } catch {} const d = { sessionId: s, runId: 'post-fix', hypothesisId: 'H3+H5', location: 'page.tsx:414', msg: '[DEBUG] home useEffect fetch SUCESSO (200 ok) - contagens recebidas', data: { prematchCount: prematchRes?.events?.length ?? 0, liveCount: liveRes?.events?.length ?? 0, hasPrematchTotalKey: Object.prototype.hasOwnProperty.call(prematchRes || {}, 'total'), hasLiveTotalKey: Object.prototype.hasOwnProperty.call(liveRes || {}, 'total') }, ts: Date.now() }; fetch(u, { method: 'POST', body: JSON.stringify(d), headers: { 'Content-Type': 'application/json' } }).catch(() => {}); })();
+        // #endregion
         if (cancelled) return;
         setPrematch(prematchRes?.events ?? []);
         setLive(liveRes?.events ?? []);
-      } catch {
+      } catch (err) {
+        // #region debug-point H3,H2a:home-silent-catch
+        (() => { const p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { if (typeof window !== 'undefined') { const e = ''; u = 'http://127.0.0.1:7777/event'; } } catch {} const d = { sessionId: s, runId: 'post-fix', hypothesisId: 'H3+H2a', location: 'page.tsx:421', msg: '[DEBUG] home useEffect fetch FALHOU - agora com setError + banner', data: { errorMessage: err instanceof Error ? err.message : String(err), errorName: err instanceof Error ? err.name : typeof err, expectedPostFixH2a: 'NAO deve mais ser 404 se o globalPrefix+Controller foram corrigidos' }, ts: Date.now() }; fetch(u, { method: 'POST', body: JSON.stringify(d), headers: { 'Content-Type': 'application/json' } }).catch(() => {}); })();
+        // #endregion
         if (cancelled) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(msg || 'Falha ao carregar jogos. A tentar novamente em 30 segundos...');
         setPrematch([]);
         setLive([]);
       } finally {
@@ -439,6 +451,39 @@ export default function HomePage() {
   return (
     <div className="relative min-h-screen bg-bet62-bg overflow-hidden">
       <Header />
+      {error ? (
+        <div className="relative z-40 mx-4 mt-4 max-w-[1400px] lg:mx-auto lg:px-8">
+          <Card className="border-red-500/40 bg-red-500/5 backdrop-blur-xl shadow-xl shadow-red-900/20">
+            <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="shrink-0 w-11 h-11 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center">
+                  <AlertTriangle size={20} className="text-red-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-red-300 text-sm flex items-center gap-2">
+                    <span className="uppercase tracking-widest text-[10px] px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20">Aviso</span>
+                    Não foi possível carregar os jogos
+                  </p>
+                  <p className="mt-1 text-xs sm:text-sm text-white/65 font-mono truncate max-w-full">
+                    {error}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-white/40">
+                    Próxima tentativa automática em ~30s · Clica no botão para tentar já
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRefetchAt(Date.now())}
+                className="shrink-0 w-full sm:w-auto border-red-500/30 hover:!bg-red-500/10 hover:!border-red-500/60 transition"
+              >
+                <RefreshCw size={14} /> Tentar novamente
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
       <div className="flex">
         <Sidebar compact />
         <main className="flex-1 min-w-0">

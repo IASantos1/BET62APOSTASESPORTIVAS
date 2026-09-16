@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery, ApiParam, ApiOkResponse } from '@nestjs/swagger';
 import { OddsService } from './odds.service';
 import {
@@ -11,7 +11,7 @@ import {
 } from '@bet62/shared';
 
 @ApiTags('odds')
-@Controller('odds')
+@Controller()
 export class OddsController {
   constructor(private readonly oddsService: OddsService) {}
 

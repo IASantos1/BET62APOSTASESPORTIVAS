@@ -167,6 +167,9 @@ export class OddsService {
     return this.withProviderOnly(
       'getPrematchEvents',
       async () => {
+        // #region debug-point H6:prematch-query-sport-empty
+        (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'pre-fix', hypothesisId: 'H6', location: 'odds.service.ts:166', msg: '[DEBUG] OddsService.getPrematchEvents chamado', data: { querySports: (query as unknown as { sports?: unknown[] }).sports ?? null, querySportsCount: Array.isArray((query as unknown as { sports?: unknown[] }).sports) ? (query as unknown as { sports: unknown[] }).sports.length : 0, queryLimit: query.limit, queryPage: query.page ?? 1 }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
+        // #endregion
         const cacheKey = this.key(['prematch', JSON.stringify(query)]);
         const cached = (await this.cache.get(cacheKey)) as { events: EventDto[]; total: number; page: number; limit: number };
         if (cached) return cached;
