@@ -468,6 +468,78 @@ export class OddsService {
     return this.mergeFootballDetail(base, propDetail);
   }
 
+  private matchEventDedupeKey(ev: ProviderEvent): string {
+    const home = resolveTeamAlias(normalizeTeamName(ev.homeTeamName ?? ''));
+    const away = resolveTeamAlias(normalizeTeamName(ev.awayTeamName ?? ''));
+    const [h, a] = home < away ? [home, away] : [away, home];
+    const sport = this.isFootballSportCode(ev.sportCode) ? 'FOOTBALL' : String(ev.sportCode ?? '').toUpperCase();
+    return `${sport}:${h}:${a}`;
+  }
+
+  private enrichGoalEventsWithPropLineMarkets(
+    goalEvents: ProviderEvent[],
+    proplineFootballEvents: ProviderEvent[],
+  ): void {
+    if (!goalEvents.length || !proplineFootballEvents.length) return;
+    const byKey = new Map<string, ProviderEvent>();
+    for (const ev of proplineFootballEvents) {
+      const k = this.matchEventDedupeKey(ev);
+      if (!k || byKey.has(k)) continue;
+      byKey.set(k, ev);
+    }
+    for (const goal of goalEvents) {
+      if ((goal.marketsCount ?? 0) > 0) continue;
+      const prop = byKey.get(this.matchEventDedupeKey(goal));
+      if (!prop) continue;
+      const koDiffHrs =
+        Math.abs(goal.kickoffAt.getTime() - prop.kickoffAt.getTime()) / (60 * 60 * 1000);
+      if (koDiffHrs > 6) continue;
+      goal.markets = prop.markets ?? [];
+      goal.marketsCount = prop.markets?.length ?? 0;
+      goal.liveStreamAvailable = prop.liveStreamAvailable ?? goal.liveStreamAvailable;
+      goal.liveUpdatedAt = prop.liveUpdatedAt ?? goal.liveUpdatedAt;
+    }
+  }
+
+  private deduplicateMergedEvents(allEvents: ProviderEvent[]): ProviderEvent[] {
+    const byKey = new Map<string, ProviderEvent>();
+    for (const ev of allEvents) {
+      const key = this.matchEventDedupeKey(ev);
+      if (!key) {
+        byKey.set(`_id:${String(ev.id ?? Math.random())}`, ev);
+        continue;
+      }
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, ev);
+        continue;
+      }
+      const evKo = ev.kickoffAt?.getTime() ?? 0;
+      const exKo = existing.kickoffAt?.getTime() ?? 0;
+      if (Math.abs(evKo - exKo) / (60 * 60 * 1000) > 6) {
+        byKey.set(`_id:${String(ev.id ?? Math.random())}`, ev);
+        continue;
+      }
+      const exMc = existing.marketsCount ?? 0;
+      const evMc = ev.marketsCount ?? 0;
+      const exIsGoal = this.isFootballEventId(String(existing.id ?? ''));
+      const evIsGoal = this.isFootballEventId(String(ev.id ?? ''));
+      if (evMc > exMc) {
+        if (evIsGoal || !exIsGoal) {
+          byKey.set(key, ev);
+        } else {
+          existing.markets = ev.markets ?? existing.markets;
+          existing.marketsCount = ev.marketsCount ?? existing.marketsCount;
+          existing.liveStreamAvailable = ev.liveStreamAvailable ?? existing.liveStreamAvailable;
+          existing.liveUpdatedAt = ev.liveUpdatedAt ?? existing.liveUpdatedAt;
+        }
+      } else if (evMc === exMc && evIsGoal && !exIsGoal) {
+        byKey.set(key, ev);
+      }
+    }
+    return Array.from(byKey.values());
+  }
+
   private async collectPrematchProviderEvents(
     query: PrematchEventsQueryDto,
   ): Promise<ProviderEvent[]> {
@@ -481,6 +553,8 @@ export class OddsService {
     }
     const split = this.splitSportsFilter(query.sports);
     const out: ProviderEvent[] = [];
+    let goalPrematchFootball: ProviderEvent[] = [];
+    let proplinePrematchAll: ProviderEvent[] = [];
     if (!split.hasFilter || split.wantsFootball) {
       this.scheduleFootballMappingSync();
       const football = await this.goalApiProvider.fetchUpcomingEvents(
@@ -489,9 +563,9 @@ export class OddsService {
         query.fromDate,
         query.toDate,
       );
-      out.push(...football.map((event) => this.toProviderEventFromUpcoming(event)));
+      goalPrematchFootball = football.map((event) => this.toProviderEventFromUpcoming(event));
+      out.push(...goalPrematchFootball);
     }
-    const goalFootballCount = out.length;
     if (!split.hasFilter || split.otherSports.length > 0) {
       const result = await this.proplineProvider.getPrematchEvents({
         ...query,
@@ -499,14 +573,14 @@ export class OddsService {
         page: 1,
         limit: 2000,
       });
-      const filtered = split.hasFilter
-        ? result.events
-        : goalFootballCount > 0
-          ? result.events.filter((event) => !this.isFootballSportCode(event.sportCode))
-          : result.events;
-      out.push(...filtered);
+      proplinePrematchAll = result.events;
+      out.push(...proplinePrematchAll);
     }
-    let filtered = out;
+    const proplineFootball = (!split.hasFilter || split.wantsFootball)
+      ? proplinePrematchAll.filter((event) => this.isFootballSportCode(event.sportCode))
+      : [];
+    this.enrichGoalEventsWithPropLineMarkets(goalPrematchFootball, proplineFootball);
+    let filtered = this.deduplicateMergedEvents(out);
     if (query.topEventsOnly) filtered = filtered.filter((event) => !!event.isTop);
     if (query.onlyWithLiveStream) filtered = filtered.filter((event) => !!event.liveStreamAvailable);
     if (query.searchTerm) {
@@ -534,15 +608,17 @@ export class OddsService {
     }
     const split = this.splitSportsFilter(query.sports);
     const out: ProviderEvent[] = [];
+    let goalLiveFootball: ProviderEvent[] = [];
+    let proplineLiveAll: ProviderEvent[] = [];
     if (!split.hasFilter || split.wantsFootball) {
       this.scheduleFootballMappingSync();
       const football = await this.goalApiProvider.fetchLiveOdds(
         'FOOTBALL',
         this.resolveFootballLeagueFilter(query.leagueIds),
       );
-      out.push(...football.map((event) => this.toProviderEventFromLive(event)));
+      goalLiveFootball = football.map((event) => this.toProviderEventFromLive(event));
+      out.push(...goalLiveFootball);
     }
-    const goalLiveFootballCount = out.length;
     if (!split.hasFilter || split.otherSports.length > 0) {
       const result = await this.proplineProvider.getLiveEvents({
         ...query,
@@ -550,14 +626,14 @@ export class OddsService {
         page: 1,
         limit: 2000,
       });
-      const filtered = split.hasFilter
-        ? result.events
-        : goalLiveFootballCount > 0
-          ? result.events.filter((event) => !this.isFootballSportCode(event.sportCode))
-          : result.events;
-      out.push(...filtered);
+      proplineLiveAll = result.events;
+      out.push(...proplineLiveAll);
     }
-    let filtered = out;
+    const proplineFootball = (!split.hasFilter || split.wantsFootball)
+      ? proplineLiveAll.filter((event) => this.isFootballSportCode(event.sportCode))
+      : [];
+    this.enrichGoalEventsWithPropLineMarkets(goalLiveFootball, proplineFootball);
+    let filtered = this.deduplicateMergedEvents(out);
     if (query.onlyWithLiveStream) filtered = filtered.filter((event) => !!event.liveStreamAvailable);
     if (query.onlyWithActiveMarkets) {
       filtered = filtered.filter(

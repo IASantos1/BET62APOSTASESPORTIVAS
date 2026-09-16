@@ -620,7 +620,7 @@ export default function HomePage() {
   }, [refetchAt]);
 
   const featured = prematch.slice(0, 6);
-  const upcoming = prematch.slice(0, 6);
+  const upcoming = prematch.slice(6, 18);
   const liveNow = live.slice(0, 5);
 
   return (
