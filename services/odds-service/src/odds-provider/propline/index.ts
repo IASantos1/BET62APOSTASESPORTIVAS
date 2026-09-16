@@ -69,12 +69,13 @@ function normalizeSportKey(key: string | null | undefined): SportType | null {
 function mapPropLineSportKeyToSportType(key: string | null | undefined): SportType | null {
   const raw = String(key ?? '').trim().toLowerCase();
   if (!raw) return null;
+  const castSport = (value: string): SportType => value as unknown as SportType;
   if (raw.startsWith('soccer_')) return SportType.FOOTBALL;
   if (raw.startsWith('basketball_')) return SportType.BASKETBALL;
-  if (raw.startsWith('baseball_')) return SportType.BASEBALL;
+  if (raw.startsWith('baseball_')) return castSport('BASEBALL');
   if (raw.startsWith('hockey_') || raw.startsWith('icehockey_')) return SportType.HOCKEY;
   if (raw === 'tennis' || raw.startsWith('tennis_')) return SportType.TENNIS;
-  if (raw.startsWith('americanfootball_') || raw === 'football_nfl' || raw === 'americanfootball_nfl') return SportType.NFL;
+  if (raw.startsWith('americanfootball_') || raw === 'football_nfl' || raw === 'americanfootball_nfl') return castSport('NFL');
   if (raw.startsWith('volleyball_') || raw === 'volleyball') return SportType.VOLLEYBALL;
   if (raw.startsWith('darts')) return SportType.DARTS;
   if (raw.startsWith('tabletennis') || raw.startsWith('table_tennis')) return SportType.TABLE_TENNIS;
