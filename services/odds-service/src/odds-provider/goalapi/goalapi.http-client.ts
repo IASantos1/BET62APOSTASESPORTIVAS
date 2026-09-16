@@ -190,16 +190,81 @@ export class GoalApiHttpClient {
 
   async getUpcomingFixtures(days?: number): Promise<GoalApiFixture[]> {
     try {
-      const params: Record<string, string | number> = {};
-      if (days !== undefined && days !== null) {
-        params.next = days;
+      const rangeDays = Math.max(1, Math.min(90, Number.isFinite(days) ? (days ?? 14) : 14));
+      const seenIds = new Set<string | number>();
+      const out: GoalApiFixture[] = [];
+      const dedupe = (list: GoalApiFixture[]) => {
+        for (const f of list) {
+          if (!f || f.id == null) continue;
+          const key = String(f.id);
+          if (seenIds.has(key)) continue;
+          seenIds.add(key);
+          out.push(f);
+        }
+      };
+      try {
+        const params: Record<string, string | number> = {};
+        params.next = rangeDays;
+        const urlUpcoming = this.buildUrl('/fixtures/upcoming', params);
+        const [, bodyUpcoming] = await this.safeFetch(urlUpcoming);
+        dedupe(extractData<GoalApiFixture>(bodyUpcoming));
+      } catch (err) {
+        this.logger.verbose(
+          `getUpcomingFixtures /upcoming skip (não fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
-      const url = this.buildUrl('/fixtures/upcoming', params);
-      const [, body] = await this.safeFetch(url);
-      return extractData<GoalApiFixture>(body);
+      const toPad = (n: number) => n < 10 ? `0${n}` : String(n);
+      const isoDate = (d: Date) => `${d.getUTCFullYear()}-${toPad(d.getUTCMonth() + 1)}-${toPad(d.getUTCDate())}`;
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      const minFixtures = rangeDays >= 14 ? 10 : 2;
+      for (let offset = 0; offset < rangeDays; offset++) {
+        if (out.length >= minFixtures * 4) break;
+        const d = new Date(today.getTime() + offset * 24 * 60 * 60 * 1000);
+        try {
+          const urlDate = this.buildUrl(`/fixtures/date/${isoDate(d)}`);
+          const [, bodyDate] = await this.safeFetch(urlDate);
+          dedupe(extractData<GoalApiFixture>(bodyDate));
+        } catch (err) {
+          this.logger.verbose(
+            `getUpcomingFixtures /date/${isoDate(d)} skip (não fatal): ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+      try {
+        const urlLive = this.buildUrl('/fixtures/live');
+        const [, bodyLive] = await this.safeFetch(urlLive);
+        dedupe(extractData<GoalApiFixture>(bodyLive));
+      } catch (err) {
+        this.logger.verbose(
+          `getUpcomingFixtures /live skip (não fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      const now = Date.now();
+      out.sort((a, b) => {
+        const ta = a.kickoff_at
+          ? new Date(String(a.kickoff_at)).getTime()
+          : a.date
+            ? new Date(String(a.date)).getTime()
+            : typeof a.timestamp === 'number'
+              ? a.timestamp * 1000
+              : now;
+        const tb = b.kickoff_at
+          ? new Date(String(b.kickoff_at)).getTime()
+          : b.date
+            ? new Date(String(b.date)).getTime()
+            : typeof b.timestamp === 'number'
+              ? b.timestamp * 1000
+              : now;
+        return ta - tb;
+      });
+      this.logger.log(
+        `getUpcomingFixtures GOAL: /upcoming?next=${rangeDays} + ${rangeDays}x /date/YYYY-MM-DD + /live => ${out.length} fixtures.`,
+      );
+      return out;
     } catch (err) {
-      this.logger.verbose(
-        `getUpcomingFixtures erro: ${err instanceof Error ? err.message : String(err)}`,
+      this.logger.warn(
+        `getUpcomingFixtures fallback vazio: ${err instanceof Error ? err.message : String(err)}`,
       );
       return [];
     }
