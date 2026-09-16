@@ -52,6 +52,8 @@ export class GoalApiHttpClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly timeoutMs: number;
+  private readonly _emptyKeyWarnedOnce: Map<string, boolean> = new Map();
+  private readonly _authFailWarnedOnce: Map<string, boolean> = new Map();
 
   constructor(private readonly configService: ConfigService) {
     this.baseUrl =
@@ -67,6 +69,11 @@ export class GoalApiHttpClient {
         process.env.GOAL_API_TIMEOUT_MS ||
         String(DEFAULT_TIMEOUT_MS),
     );
+    if (!this.apiKey) {
+      this.logger.warn(
+        'GOAL_API_KEY VAZIA ou PLACEHOLDER. Futebol (SourceOfTruth = GOAL_API) retornara vazio. Configurar GOAL_API_KEY no .env / Railway vars.',
+      );
+    }
   }
 
   async safeFetch(
@@ -76,6 +83,15 @@ export class GoalApiHttpClient {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
+      if (!this.apiKey) {
+        const pathKey = new URL(url).pathname;
+        if (!this._emptyKeyWarnedOnce.get(pathKey)) {
+          this.logger.warn(
+            `GOAL_API_KEY vazia. Chamada a ${pathKey} retorna vazio (sem envio auth). Configurar GOAL_API_KEY no Railway.`,
+          );
+          this._emptyKeyWarnedOnce.set(pathKey, true);
+        }
+      }
       const baseHeaders: Record<string, string> = {
         Accept: 'application/json',
         ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
@@ -100,9 +116,19 @@ export class GoalApiHttpClient {
         redirect: 'follow',
       });
       if (!res.ok) {
-        this.logger.verbose(
-          `GOAL API HTTP ${res.status} em ${opts?.method ?? 'GET'} ${url}`,
-        );
+        if (res.status === 401 || res.status === 403) {
+          const pathKey = new URL(url).pathname;
+          if (!this._authFailWarnedOnce.get(pathKey)) {
+            this.logger.warn(
+              `GOAL API HTTP ${res.status} AUTH FAIL em ${opts?.method ?? 'GET'} ${url}. Verificar GOAL_API_KEY (key invalida, expirada ou permissoes insuficientes).`,
+            );
+            this._authFailWarnedOnce.set(pathKey, true);
+          }
+        } else {
+          this.logger.verbose(
+            `GOAL API HTTP ${res.status} em ${opts?.method ?? 'GET'} ${url}`,
+          );
+        }
       }
       let body: unknown = null;
       try {
