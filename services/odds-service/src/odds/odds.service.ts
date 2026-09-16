@@ -19,6 +19,7 @@ import {
   ABSTRACT_ODDS_PROVIDER_TOKEN,
 } from '../odds-provider/odds-provider.module';
 import type {
+  OddsProvider,
   ProviderEvent,
   ProviderEventDetail,
   ProviderMarket,
@@ -75,6 +76,14 @@ export class OddsService {
 
   private readonly cache = new SimpleCache();
 
+  private get runtimeOddsProvider(): OddsProvider {
+    return this.abstractProvider as unknown as OddsProvider;
+  }
+
+  private isGoaldirRuntimeProvider(): boolean {
+    return String(this.abstractProvider.providerName ?? '').trim().toUpperCase() === 'GOALDIR';
+  }
+
   private isFootballSportCode(value?: string | SportType | null): boolean {
     const raw = String(value ?? '').trim().toUpperCase();
     return (
@@ -108,6 +117,14 @@ export class OddsService {
   }
 
   private getSourcesForSport(sportCode?: string | SportType | null) {
+    if (this.isGoaldirRuntimeProvider()) {
+      return {
+        data: 'goaldir',
+        stats: 'goaldir',
+        odds: 'goaldir',
+        settlement: 'goaldir',
+      };
+    }
     if (this.isFootballSportCode(sportCode)) {
       return {
         data: 'goal_api',
@@ -128,10 +145,14 @@ export class OddsService {
     const updatedAt = ev.liveUpdatedAt ?? ev.kickoffAt ?? null;
     const ageMs = updatedAt ? Math.max(0, Date.now() - updatedAt.getTime()) : null;
     return {
-      dataSource: this.isFootballSportCode(ev.sportCode) ? 'goal_api' : 'propline',
+      dataSource: this.isGoaldirRuntimeProvider()
+        ? 'goaldir'
+        : this.isFootballSportCode(ev.sportCode)
+          ? 'goal_api'
+          : 'propline',
       scoreAgeMs: ageMs,
       clockAgeMs: ageMs,
-      statsAgeMs: this.isFootballSportCode(ev.sportCode) ? ageMs : null,
+      statsAgeMs: this.isGoaldirRuntimeProvider() || this.isFootballSportCode(ev.sportCode) ? ageMs : null,
       oddsAgeMs: {},
       stale: ageMs !== null ? ageMs > 90_000 : false,
     };
@@ -411,6 +432,14 @@ export class OddsService {
   private async collectPrematchProviderEvents(
     query: PrematchEventsQueryDto,
   ): Promise<ProviderEvent[]> {
+    if (this.isGoaldirRuntimeProvider()) {
+      const result = await this.runtimeOddsProvider.getPrematchEvents({
+        ...query,
+        page: 1,
+        limit: 2000,
+      });
+      return [...result.events].sort((a, b) => a.kickoffAt.getTime() - b.kickoffAt.getTime());
+    }
     const split = this.splitSportsFilter(query.sports);
     const out: ProviderEvent[] = [];
     if (!split.hasFilter || split.wantsFootball) {
@@ -453,6 +482,14 @@ export class OddsService {
   private async collectLiveProviderEvents(
     query: LiveEventsQueryDto,
   ): Promise<ProviderEvent[]> {
+    if (this.isGoaldirRuntimeProvider()) {
+      const result = await this.runtimeOddsProvider.getLiveEvents({
+        ...query,
+        page: 1,
+        limit: 2000,
+      });
+      return [...result.events].sort((a, b) => a.kickoffAt.getTime() - b.kickoffAt.getTime());
+    }
     const split = this.splitSportsFilter(query.sports);
     const out: ProviderEvent[] = [];
     if (!split.hasFilter || split.wantsFootball) {
@@ -516,6 +553,18 @@ export class OddsService {
     }
   }
 
+  private async getRuntimeEventDetail(
+    eventId: string,
+    includeMarkets: boolean,
+  ): Promise<ProviderEventDetail | null> {
+    if (this.isGoaldirRuntimeProvider()) {
+      return this.runtimeOddsProvider.getEventDetail(eventId, includeMarkets);
+    }
+    return this.isFootballEventId(eventId)
+      ? this.getFootballEventDetail(eventId, includeMarkets)
+      : this.proplineProvider.getEventDetail(eventId, includeMarkets);
+  }
+
   async getSports(): Promise<SportDto[]> {
     return this.withProviderOnly(
       'getSports',
@@ -523,6 +572,34 @@ export class OddsService {
         const cacheKey = this.key(['sports']);
         const cached = (await this.cache.get(cacheKey)) as SportDto[];
         if (cached) return cached;
+        if (this.isGoaldirRuntimeProvider()) {
+          const [providerSports, prematch, live] = await Promise.all([
+            this.abstractProvider.getSports(),
+            this.collectPrematchProviderEvents({ limit: 2000 }),
+            this.collectLiveProviderEvents({ limit: 2000 }),
+          ]);
+          const result: SportDto[] = providerSports.map((sp, idx) => {
+            const sportCode = String(sp.sportType ?? sp.id);
+            const prematchCount = prematch.filter(
+              (event) => event.sportCode === sportCode || event.sportCode === sp.id,
+            ).length;
+            const liveCount = live.filter(
+              (event) => event.sportCode === sportCode || event.sportCode === sp.id,
+            ).length;
+            return {
+              id: sp.id,
+              code: sportCode,
+              name: sp.name,
+              active: sp.active !== false,
+              orderIndex: sp.displayOrder ?? idx,
+              iconUrl: sp.iconUrl ?? null,
+              liveCount,
+              prematchCount,
+            };
+          });
+          await this.cache.set(cacheKey, result, this.CACHE_PREMATCH_TTL_MS / 1000);
+          return result;
+        }
         const [goalSports, proplineSports, prematch, live] = await Promise.all([
           this.goalApiProvider.getSports(),
           this.proplineProvider.getSports(),
@@ -562,7 +639,38 @@ export class OddsService {
         if (cached) return cached;
         const sport = query.sportType?.toString();
         let leagues;
-        if (sport && this.isFootballSportCode(sport)) {
+        if (this.isGoaldirRuntimeProvider()) {
+          const sportCodes = sport
+            ? [sport]
+            : Array.from(
+                new Set(
+                  (await this.abstractProvider.getSports()).map((sp) =>
+                    String(sp.sportType ?? sp.id),
+                  ),
+                ),
+              );
+          const groups = await Promise.all(
+            sportCodes.map(async (sportCode) => {
+              const providerLeagues = await this.abstractProvider.getLeagues(sportCode);
+              return providerLeagues.map((league) => ({
+                id: league.providerLeagueId || league.id,
+                providerLeagueId: league.providerLeagueId || league.id,
+                name: league.name,
+                sportCode,
+                countryCode: league.countryCode ?? undefined,
+                tier: league.tier ? Number(league.tier) : undefined,
+                isTop: !!league.featured,
+              }));
+            }),
+          );
+          leagues = Array.from(
+            new Map(
+              groups
+                .flat()
+                .map((league) => [`${league.sportCode}:${league.providerLeagueId}`, league]),
+            ).values(),
+          );
+        } else if (sport && this.isFootballSportCode(sport)) {
           const fromGoal = await this.goalApiProvider.getLeagues('FOOTBALL');
           leagues = fromGoal.map((l) => ({
             id: `league-goal-${l.providerLeagueId || l.id}`,
@@ -666,9 +774,7 @@ export class OddsService {
         const cacheKey = this.key(['event', eventId]);
         const cached = (await this.cache.get(cacheKey)) as EventDto & { markets: MarketDto[] };
         if (cached) return cached;
-        const detail = this.isFootballEventId(eventId)
-          ? await this.getFootballEventDetail(eventId, true)
-          : await this.proplineProvider.getEventDetail(eventId, true);
+        const detail = await this.getRuntimeEventDetail(eventId, true);
         if (!detail) return null;
         const ttl = detail.status === 'LIVE' || detail.status === 'HALF_TIME' ? this.CACHE_LIVE_TTL_MS : this.CACHE_PREMATCH_TTL_MS;
         const base = this.buildEventDto(detail);
@@ -688,9 +794,7 @@ export class OddsService {
         const cacheKey = this.key(['event', eventId, 'markets']);
         const cached = (await this.cache.get(cacheKey)) as MarketDto[];
         if (cached) return cached;
-        const detail = this.isFootballEventId(eventId)
-          ? await this.getFootballEventDetail(eventId, true)
-          : await this.proplineProvider.getEventDetail(eventId, true);
+        const detail = await this.getRuntimeEventDetail(eventId, true);
         if (!detail) return [];
         const ttl = detail.status === 'LIVE' || detail.status === 'HALF_TIME' ? this.CACHE_LIVE_TTL_MS : this.CACHE_PREMATCH_TTL_MS;
         const result = this.formatMarketSelections(detail.markets ?? []);
@@ -771,9 +875,7 @@ export class OddsService {
     return this.withProviderOnly(
       'getLiveSnapshot',
       async () => {
-        const detail = this.isFootballEventId(eventId)
-          ? await this.getFootballEventDetail(eventId, false)
-          : await this.proplineProvider.getEventDetail(eventId, false);
+        const detail = await this.getRuntimeEventDetail(eventId, false);
         if (!detail) return null;
         return {
           eventId,
