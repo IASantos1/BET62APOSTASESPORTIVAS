@@ -200,6 +200,68 @@ export class ProplineOddsProviderService
     return ['h2h', 'spreads', 'totals'];
   }
 
+  private bet62MarketsToProviderMarkets(
+    bet62Markets: ReturnType<ProplineDataAdapter['runOddsPipeline']>['markets'],
+    eventId: string,
+  ): ProviderMarket[] {
+    return bet62Markets.map((m) => {
+      const pm: ProviderMarket = {
+        id: m.id,
+        providerMarketId: m.code,
+        eventId,
+        type: (m.code as unknown as ProviderMarket['type']) ?? MarketType.TOTAL,
+        name: m.label,
+        specifiers: m.lineSpecifiers ?? null,
+        handicapValue: (m.lineSpecifiers?.handicap as number) ?? undefined,
+        totalLineValue: (m.lineSpecifiers?.line as number) ?? undefined,
+        period: normalizePeriod(m.period as string | null) ?? undefined,
+        status: m.status === 'active' ? MarketStatus.ACTIVE : m.status === 'suspended' ? MarketStatus.SUSPENDED : m.status === 'settled' ? MarketStatus.SETTLED : MarketStatus.CLOSED,
+        displayedName: m.label,
+        cashoutAvailable: true,
+        selections: m.selections.map((s) => {
+          const ps: ProviderMarketSelection = {
+            id: s.id,
+            providerSelectionId: s.id,
+            name: s.name,
+            outcome: (s.outcome.toUpperCase() as unknown as ProviderMarketSelection['outcome']) ?? SelectionOutcome.HOME,
+            odds: s.price,
+            oddsDisplay: String(s.price),
+            status: s.status === 'active' ? MarketStatus.ACTIVE : s.status === 'suspended' ? MarketStatus.SUSPENDED : s.status === 'settled' ? MarketStatus.SETTLED : MarketStatus.CLOSED,
+            handicapValue: s.handicap ?? undefined,
+            totalLineValue: s.line ?? undefined,
+            isTrendingUp: false,
+          };
+          return ps;
+        }),
+      };
+      return pm;
+    });
+  }
+
+  private async fetchOddsMapForSportKey(
+    sportKey: string,
+    isLive: boolean,
+  ): Promise<Map<string, ProviderMarket[]>> {
+    const map = new Map<string, ProviderMarket[]>();
+    try {
+      const markets = this.getDefaultMarketsForSportKey(sportKey);
+      const oddsResponses = await this.http.getSportOdds(sportKey, markets);
+      for (const oddsResp of oddsResponses) {
+        const eventId = String(oddsResp.id ?? oddsResp.event_id ?? '');
+        if (!eventId) continue;
+        const { markets: bet62Markets } = this.adapter.runOddsPipeline(oddsResp, { isLive });
+        if (bet62Markets.length === 0) continue;
+        const providerMarkets = this.bet62MarketsToProviderMarkets(bet62Markets, eventId);
+        map.set(eventId, providerMarkets);
+        const rawEventId = oddsResp.event_id ?? oddsResp.id;
+        if (rawEventId) map.set(String(rawEventId), providerMarkets);
+      }
+    } catch (err) {
+      this.logger.verbose(`Propline fetchOddsMapForSportKey(${sportKey}): ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return map;
+  }
+
   private mapEventLifecycleStatus(pe: ProplineEvent): ProviderEvent['status'] {
     if (pe.status) return mapStatusFromPropline(pe.status);
     if (pe.completed) return 'FINISHED';
@@ -281,13 +343,21 @@ export class ProplineOddsProviderService
         const rawList = await this.http.getEventsBySport(sportKey);
         const sportType = mapPropLineSportKeyToSportType(sportKey);
         if (!sportType) continue;
+        const oddsBySportKey = rawList.length > 0
+          ? await this.fetchOddsMapForSportKey(sportKey, opts.live)
+          : new Map<string, ProviderMarket[]>();
         for (const pe of rawList) {
           if (opts.live) {
             if (!pe.live || pe.completed) continue;
           } else {
             if (pe.live || pe.completed) continue;
           }
-          const pev = this.mapProplineEventToProviderEvent(pe, sportType, false);
+          const pev = this.mapProplineEventToProviderEvent(pe, sportType, true);
+          const markets = oddsBySportKey.get(String(pe.id ?? '')) ?? oddsBySportKey.get(String(pe.event_id ?? ''));
+          if (markets && markets.length > 0) {
+            pev.markets = markets;
+            pev.marketsCount = markets.length;
+          }
           if (opts.league) {
             const leagueKey = String(opts.league).toLowerCase();
             const leagueName = (pev.leagueName ?? '').toLowerCase();
@@ -397,38 +467,7 @@ export class ProplineOddsProviderService
             const { markets: bet62Markets } = this.adapter.runOddsPipeline(oddsResp, {
               isLive: base.status === 'LIVE' || base.status === 'HALF_TIME',
             });
-            markets = bet62Markets.map((m) => {
-              const pm: ProviderMarket = {
-                id: m.id,
-                providerMarketId: m.code,
-                eventId: base.id,
-                type: (m.code as unknown as ProviderMarket['type']) ?? MarketType.TOTAL,
-                name: m.label,
-                specifiers: m.lineSpecifiers ?? null,
-                handicapValue: m.lineSpecifiers?.handicap as number ?? undefined,
-                totalLineValue: m.lineSpecifiers?.line as number ?? undefined,
-                period: normalizePeriod(m.period as string | null) ?? undefined,
-                status: m.status === 'active' ? MarketStatus.ACTIVE : m.status === 'suspended' ? MarketStatus.SUSPENDED : m.status === 'settled' ? MarketStatus.SETTLED : MarketStatus.CLOSED,
-                displayedName: m.label,
-                cashoutAvailable: true,
-                selections: m.selections.map((s) => {
-                  const ps: ProviderMarketSelection = {
-                    id: s.id,
-                    providerSelectionId: s.id,
-                    name: s.name,
-                    outcome: (s.outcome.toUpperCase() as unknown as ProviderMarketSelection['outcome']) ?? SelectionOutcome.HOME,
-                    odds: s.price,
-                    oddsDisplay: String(s.price),
-                    status: s.status === 'active' ? MarketStatus.ACTIVE : s.status === 'suspended' ? MarketStatus.SUSPENDED : s.status === 'settled' ? MarketStatus.SETTLED : MarketStatus.CLOSED,
-                    handicapValue: s.handicap ?? undefined,
-                    totalLineValue: s.line ?? undefined,
-                    isTrendingUp: false,
-                  };
-                  return ps;
-                }),
-              };
-              return pm;
-            });
+            markets = this.bet62MarketsToProviderMarkets(bet62Markets, base.id);
           }
         } catch (oddsErr) {
           this.logger.verbose(`Propline getEventDetail odds erro: ${oddsErr instanceof Error ? oddsErr.message : String(oddsErr)}`);
@@ -741,8 +780,10 @@ export class ProplineOddsProviderService
     try {
       if (this.fatalInitFailed) return null;
       const colon = eventId.indexOf(':');
+      const sportRaw = colon > 0 ? eventId.slice(0, colon) : null;
       const rawEventId = colon > 0 ? eventId.slice(colon + 1) : eventId;
-      return await this.http.getStats(rawEventId, period);
+      if (!sportRaw) return null;
+      return await this.http.getStats(sportRaw, rawEventId, period);
     } catch (err) {
       this.logger.verbose(`Propline getStats warning ${eventId}: ${err instanceof Error ? err.message : String(err)}`);
       return null;

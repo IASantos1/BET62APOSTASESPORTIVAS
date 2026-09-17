@@ -27,10 +27,17 @@ import type {
 } from '../odds-provider/odds-provider.interface';
 import { AbstractOddsProvider } from '../odds-provider/abstract-odds-provider.service';
 import type { LiveOddsEvent, UpcomingEvent } from '../odds-provider/abstract-odds-provider.service';
-import { GoalApiOddsProviderService, GoalApiHttpClient, fixtureToBet62Match } from '../odds-provider/goalapi';
+import {
+  GoalApiOddsProviderService,
+  GoalApiHttpClient,
+  fixtureToBet62Match,
+  statsToFootballStats,
+  eventToBet62LiveEvent,
+} from '../odds-provider/goalapi';
 import { ProplineOddsProviderService } from '../odds-provider/propline';
-import type { GoalApiFixture } from '../odds-provider/goalapi/goalapi.types';
-import type { ProplineEvent } from '../odds-provider/propline/propline.types';
+import type { GoalApiFixture, GoalApiH2hResponse } from '../odds-provider/goalapi/goalapi.types';
+import type { ProplineEvent, ProplineStatsResponse } from '../odds-provider/propline/propline.types';
+import type { FootballStats, Bet62LiveEvent } from '@bet62/shared';
 import { normalizeCompetitionName, normalizeTeamName, resolveTeamAlias } from '../sports/normalization/team-normalizer';
 import { ProviderMappingService } from '../sports';
 
@@ -1020,6 +1027,104 @@ export class OddsService {
       async () => {
         const events = await this.collectLiveProviderEvents({ limit: 2000 });
         return events.map((e) => e.id);
+      },
+    );
+  }
+
+  private resolveFixtureTeamIds(fixture: GoalApiFixture): { homeId: string | null; awayId: string | null } {
+    const homeNested = fixture.home as { id?: unknown } | undefined;
+    const awayNested = fixture.away as { id?: unknown } | undefined;
+    const homeTeamAlt = fixture.homeTeam as { id?: unknown } | undefined;
+    const awayTeamAlt = fixture.awayTeam as { id?: unknown } | undefined;
+    const homeId = homeNested?.id ?? homeTeamAlt?.id;
+    const awayId = awayNested?.id ?? awayTeamAlt?.id;
+    return {
+      homeId: homeId !== undefined && homeId !== null ? String(homeId) : null,
+      awayId: awayId !== undefined && awayId !== null ? String(awayId) : null,
+    };
+  }
+
+  async getEventStatistics(eventId: string): Promise<FootballStats | ProplineStatsResponse | null> {
+    return this.withProviderOnly(
+      'getEventStatistics',
+      async () => {
+        const cacheKey = this.key(['event', eventId, 'statistics']);
+        const cached = (await this.cache.get(cacheKey)) as FootballStats | ProplineStatsResponse | null;
+        if (cached) return cached;
+        let result: FootballStats | ProplineStatsResponse | null = null;
+        if (this.isFootballEventId(eventId)) {
+          const fixtureId = eventId.replace(/^goal:/, '');
+          const stats = await this.goalApiHttpClient.getStatisticsByFixture(fixtureId);
+          result = stats ? statsToFootballStats(stats) : null;
+        } else {
+          result = await this.proplineProvider.getStats(eventId);
+        }
+        if (result) await this.cache.set(cacheKey, result, this.CACHE_LIVE_TTL_MS / 1000);
+        return result;
+      },
+    );
+  }
+
+  async getEventH2H(eventId: string): Promise<GoalApiH2hResponse | null> {
+    return this.withProviderOnly(
+      'getEventH2H',
+      async () => {
+        if (!this.isFootballEventId(eventId)) return null;
+        const cacheKey = this.key(['event', eventId, 'h2h']);
+        const cached = (await this.cache.get(cacheKey)) as GoalApiH2hResponse | null;
+        if (cached) return cached;
+        const fixtureId = eventId.replace(/^goal:/, '');
+        const fixture = await this.goalApiHttpClient.getFixtureById(fixtureId);
+        if (!fixture) return null;
+        const { homeId, awayId } = this.resolveFixtureTeamIds(fixture);
+        if (!homeId || !awayId) return null;
+        const result = await this.goalApiHttpClient.getH2h(homeId, awayId);
+        await this.cache.set(cacheKey, result, this.CACHE_PREMATCH_TTL_MS / 1000);
+        return result;
+      },
+    );
+  }
+
+  async getEventCommentary(eventId: string): Promise<Array<{
+    id: string;
+    minute: number | null;
+    extraMinute: number | null;
+    text: string;
+    team: string | null;
+    zone: string | null;
+    eventType: string | null;
+    createdAt: string | null;
+  }>> {
+    return this.withProviderOnly(
+      'getEventCommentary',
+      async () => {
+        if (!this.isFootballEventId(eventId)) return [];
+        const fixtureId = eventId.replace(/^goal:/, '');
+        const comments = await this.goalApiHttpClient.getCommentariesByFixture(fixtureId);
+        return comments
+          .map((c) => ({
+            id: String(c.id ?? `${fixtureId}-${c.minute ?? 0}-${c.event_type ?? 'x'}`),
+            minute: c.minute ?? null,
+            extraMinute: c.extra_minute ?? null,
+            text: c.comment ?? '',
+            team: c.team_name ?? null,
+            zone: c.zone ?? null,
+            eventType: c.event_type ?? null,
+            createdAt: c.created_at ?? null,
+          }))
+          .sort((a, b) => (b.minute ?? 0) - (a.minute ?? 0));
+      },
+    );
+  }
+
+  async getEventTimeline(eventId: string): Promise<Bet62LiveEvent[]> {
+    return this.withProviderOnly(
+      'getEventTimeline',
+      async () => {
+        if (!this.isFootballEventId(eventId)) return [];
+        const fixtureId = eventId.replace(/^goal:/, '');
+        const events = await this.goalApiHttpClient.getEventsByFixture(fixtureId);
+        return events.map((e) => eventToBet62LiveEvent(e, eventId));
       },
     );
   }
