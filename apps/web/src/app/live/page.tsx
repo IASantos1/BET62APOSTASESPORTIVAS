@@ -174,7 +174,7 @@ function LiveEventCard({
       transition={{ duration: 0.35 }}
     >
       <Card
-        role="but ou ton"
+        role="button"
         tabIndex={0}
         onClick={() => onOpenMarkets(event)}
         onKeyDown={(e) => {
@@ -430,26 +430,6 @@ export default function LivePage() {
     },
     [router],
   );
-
-  const handleSelect = (event: LiveEvent, payload: QuickSelectPayload) => {
-    const homeName = event.homeTeamName ?? event.name.split(' vs ')[0] ?? 'Casa';
-    const awayName = event.awayTeamName ?? event.name.split(' vs ')[1] ?? 'Fora';
-    const sel: BetslipSelection = {
-      id: `${event.id}-${payload.market}-${payload.sel}`,
-      eventId: event.id,
-      marketId: `${event.id}-${payload.market}`,
-      selectionId: `${event.id}-${payload.market}-${payload.sel}`,
-      selectionName: payload.selName,
-      marketName: payload.marketName,
-      eventName: `${homeName} vs ${awayName} · ${event.leagueName ?? event.sportType}`,
-      kickoffAt: new Date(event.kickoffAt).toISOString(),
-      odds: payload.odds,
-      marketType: '1X2',
-      outcome: payload.sel,
-    };
-    addSelection(sel);
-    setBetslipOpen(true);
-  };
 
   const handleSelect = (event: LiveEvent, payload: QuickSelectPayload) => {
     const homeName = event.homeTeamName ?? event.name.split(' vs ')[0] ?? 'Casa';
