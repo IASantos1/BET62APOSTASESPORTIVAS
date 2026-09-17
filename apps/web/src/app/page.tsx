@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Sparkles,
@@ -272,6 +273,7 @@ function formatKickoff(k: string | Date): string {
 }
 
 function FeaturedEventCard({ ev }: { ev: BaseEvent }) {
+  const router = useRouter();
   const home = ev.homeTeamName ?? ev.name.split(' vs ')[0] ?? 'Casa';
   const away = ev.awayTeamName ?? ev.name.split(' vs ')[1] ?? 'Fora';
   const score: EventScore = ev.liveScoreJson ?? {};
@@ -282,7 +284,15 @@ function FeaturedEventCard({ ev }: { ev: BaseEvent }) {
 
   return (
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-      <Card className="h-full hover:border-bet62-primary/40 transition">
+      <Card
+        role="button"
+        tabIndex={0}
+        onClick={() => router.push(`/live/match/${encodeURIComponent(ev.id)}`)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') router.push(`/live/match/${encodeURIComponent(ev.id)}`);
+        }}
+        className="h-full hover:border-bet62-primary/40 transition cursor-pointer"
+      >
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <Badge variant="outline" className="!py-0.5 text-[11px] truncate">
@@ -347,13 +357,22 @@ function FeaturedEventCard({ ev }: { ev: BaseEvent }) {
 }
 
 function LiveEventCard({ ev }: { ev: BaseEvent }) {
+  const router = useRouter();
   const home = ev.homeTeamName ?? ev.name.split(' vs ')[0] ?? 'Casa';
   const away = ev.awayTeamName ?? ev.name.split(' vs ')[1] ?? 'Fora';
   const score: EventScore = ev.liveScoreJson ?? {};
 
   return (
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-      <Card className="h-full overflow-hidden hover:border-bet62-primary/40 transition group">
+      <Card
+        role="button"
+        tabIndex={0}
+        onClick={() => router.push(`/live/match/${encodeURIComponent(ev.id)}`)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') router.push(`/live/match/${encodeURIComponent(ev.id)}`);
+        }}
+        className="h-full overflow-hidden hover:border-bet62-primary/40 transition group cursor-pointer"
+      >
         <div className="h-1 bg-bet62-primary/60 animate-pulse-slow" />
         <CardContent className="p-4 space-y-3">
           <div className="flex items-center justify-between">
@@ -418,12 +437,21 @@ function LiveEventCard({ ev }: { ev: BaseEvent }) {
 }
 
 function UpcomingEventCard({ ev }: { ev: BaseEvent }) {
+  const router = useRouter();
   const home = ev.homeTeamName ?? ev.name.split(' vs ')[0] ?? 'Casa';
   const away = ev.awayTeamName ?? ev.name.split(' vs ')[1] ?? 'Fora';
 
   return (
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-      <Card className="h-full hover:border-bet62-primary/40 transition group">
+      <Card
+        role="button"
+        tabIndex={0}
+        onClick={() => router.push(`/live/match/${encodeURIComponent(ev.id)}`)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') router.push(`/live/match/${encodeURIComponent(ev.id)}`);
+        }}
+        className="h-full hover:border-bet62-primary/40 transition group cursor-pointer"
+      >
         <CardContent className="p-5 space-y-3">
           <div className="flex items-center justify-between">
             <Badge variant="outline" className="!py-0.5 text-[11px] truncate">

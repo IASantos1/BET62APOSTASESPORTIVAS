@@ -27,7 +27,6 @@ import {
 import { Header } from '../../components/layout/Header';
 import { Footer } from '../../components/layout/Footer';
 import { Betslip, FloatingBetslipToggle } from '../../components/layout/Betslip';
-import { EventMarketsModal } from '../../components/layout/EventMarketsModal';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
@@ -35,7 +34,6 @@ import { Tabs, TabsList, TabsTrigger } from '../../components/ui/Tabs';
 import { Button } from '../../components/ui/Button';
 import { cn, formatOdds } from '../../lib/utils';
 import { apiClient } from '../../lib/api-client';
-import { eventToUiModal } from '../../lib/odds-adapters';
 import { useBetslipStore, type BetslipSelection } from '../../stores/betslip.store';
 
 const SPORTS = [
@@ -175,7 +173,15 @@ function LiveEventCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
     >
-      <Card className="overflow-hidden hover:border-bet62-primary/40 transition group">
+      <Card
+        role="button"
+        tabIndex={0}
+        onClick={() => onOpenMarkets(event)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') onOpenMarkets(event);
+        }}
+        className="overflow-hidden hover:border-bet62-primary/40 transition group cursor-pointer"
+      >
         <div className="h-1 bg-bet62-primary/60 animate-pulse-slow" />
         <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)] divide-y lg:divide-y-0 lg:divide-x divide-bet62-border/60">
           <CardContent className="p-5 space-y-4">
@@ -219,15 +225,16 @@ function LiveEventCard({
                 <Button
                   key={s.id}
                   variant="ghost"
-                  onClick={() =>
+                  onClick={(e) => {
+                    e.stopPropagation();
                     onSelect(event, {
                       market: mainMarket?.id ?? 'main',
                       sel: s.id,
                       odds: s.odds,
                       selName: s.name,
                       marketName: mainMarket?.name ?? 'Resultado Final',
-                    })
-                  }
+                    });
+                  }}
                   className="h-auto py-3 flex-col items-start text-left group/sel hover:!bg-bet62-primary/10 hover:!border-bet62-primary/40 border border-bet62-border rounded-2xl"
                   disabled={s.status === 'suspended' || !s.odds || s.odds < 1.01}
                 >
@@ -244,7 +251,10 @@ function LiveEventCard({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => onOpenMarkets(event)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onOpenMarkets(event);
+                  }}
                   className="!p-1 text-xs text-bet62-primary"
                 >
                   Ver todos <ChevronRight size={14} />
@@ -291,9 +301,6 @@ export default function LivePage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [events, setEvents] = React.useState<LiveEvent[]>([]);
-  const [selectedEvent, setSelectedEvent] = React.useState<LiveEvent | null>(null);
-  const [selectedEventDetail, setSelectedEventDetail] = React.useState<(LiveEvent & { markets: LiveMarket[] }) | null>(null);
-  const [selectedEventLoading, setSelectedEventLoading] = React.useState(false);
   const [refetchAt, setRefetchAt] = React.useState<number>(Date.now());
   const lastSetEventsAt = React.useRef<number>(0);
   const lastSportRef = React.useRef<string>('all');
@@ -417,25 +424,12 @@ export default function LivePage() {
 
   const liveCount = filtered.length;
 
-  const handleOpenMarkets = React.useCallback((event: LiveEvent) => {
-    setSelectedEvent(event);
-    setSelectedEventDetail(null);
-    setSelectedEventLoading(true);
-    apiClient
-      .get<LiveEvent & { markets: LiveMarket[] }>(`/odds/events/${encodeURIComponent(event.id)}`, {
-        auth: false,
-      })
-      .then((detail) => {
-        setSelectedEventDetail(detail);
-      })
-      .catch(() => {
-        setSelectedEventDetail({
-          ...event,
-          markets: [],
-        });
-      })
-      .finally(() => setSelectedEventLoading(false));
-  }, []);
+  const handleOpenMarkets = React.useCallback(
+    (event: LiveEvent) => {
+      router.push(`/live/match/${encodeURIComponent(event.id)}`);
+    },
+    [router],
+  );
 
   const handleSelect = (event: LiveEvent, payload: QuickSelectPayload) => {
     const homeName = event.homeTeamName ?? event.name.split(' vs ')[0] ?? 'Casa';
@@ -638,35 +632,6 @@ export default function LivePage() {
       </main>
       <Betslip open={betslipOpen} onClose={() => setBetslipOpen(false)} />
       <FloatingBetslipToggle onClick={() => setBetslipOpen(true)} open={betslipOpen} />
-      <EventMarketsModal
-        event={selectedEventDetail ? eventToUiModal(selectedEventDetail) : null}
-        score={
-          selectedEventDetail?.liveScoreJson
-            ? [
-                ((selectedEventDetail.liveScoreJson as LiveScore).home ?? 0),
-                ((selectedEventDetail.liveScoreJson as LiveScore).away ?? 0),
-              ]
-            : undefined
-        }
-        onClose={() => {
-          setSelectedEvent(null);
-          setSelectedEventDetail(null);
-          setSelectedEventLoading(false);
-        }}
-        onSelect={(payload) => {
-          if (selectedEventDetail) handleSelect(selectedEventDetail, payload);
-          setSelectedEvent(null);
-          setSelectedEventDetail(null);
-          setSelectedEventLoading(false);
-        }}
-      />
-      {selectedEvent && selectedEventLoading ? (
-        <div className="fixed inset-x-0 bottom-6 z-[82] flex justify-center pointer-events-none">
-          <Badge variant="blue" className="px-3 py-1.5">
-            A carregar mercados reais...
-          </Badge>
-        </div>
-      ) : null}
     </div>
   );
 }
