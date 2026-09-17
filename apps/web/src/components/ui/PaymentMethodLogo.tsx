@@ -41,59 +41,21 @@ export function PaymentMethodLogo({
   const sz = SIZE_MAP[size];
 
   if (method === 'card') {
-    const bgClass = METHOD_BG.card;
+    // Visa/mastercard.svg ja trazem o proprio "cartao" desenhado (fundo
+    // arredondado incluido), entao cada um funciona como um badge completo
+    // por si so — empilhar os dois com sobreposicao dentro de mais um
+    // container colorido (como fazia a versao anterior) so produzia um
+    // amontoado ilegivel. Aqui cada logo e o proprio badge, lado a lado,
+    // sem fundo extra nem overlap.
+    const cardW = size === 'sm' ? 42 : size === 'lg' ? 64 : 52;
+    const cardH = (cardW * 120) / 200;
     return (
-      <div
-        className={cn(
-          sz.container,
-          'rounded-2xl flex items-center justify-center shrink-0 overflow-hidden relative',
-          bgClass,
-          className,
-        )}
-      >
-        <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 px-2">
-          <svg
-            viewBox="0 0 84 24"
-            aria-label="Stripe"
-            className={cn(
-              size === 'sm' ? 'w-12 h-3.5' : size === 'lg' ? 'w-16 h-5' : 'w-14 h-4',
-            )}
-            role="img"
-          >
-            <text
-              x="0"
-              y="17"
-              fill="#ffffff"
-              fontFamily="Inter, Arial, sans-serif"
-              fontSize="18"
-              fontWeight="700"
-              letterSpacing="-0.8"
-            >
-              Stripe
-            </text>
-          </svg>
-          <div className="flex items-center gap-1 scale-[0.62] md:scale-[0.72] origin-center">
-            <div className="relative w-[50px] h-[30px] rounded-md overflow-hidden shadow-sm">
-              <Image
-                src="/payments/visa.svg"
-                alt="Logo Visa"
-                fill
-                sizes="50px"
-                className="object-cover"
-                priority={false}
-              />
-            </div>
-            <div className="relative w-[50px] h-[30px] rounded-md overflow-hidden shadow-sm -ml-1">
-              <Image
-                src="/payments/mastercard.svg"
-                alt="Logo Mastercard"
-                fill
-                sizes="50px"
-                className="object-cover"
-                priority={false}
-              />
-            </div>
-          </div>
+      <div className={cn('flex items-center gap-1 shrink-0', className)}>
+        <div className="relative rounded-md overflow-hidden shadow-sm" style={{ width: cardW, height: cardH }}>
+          <Image src="/payments/visa.svg" alt="Visa" fill sizes={`${cardW}px`} className="object-contain" priority={false} />
+        </div>
+        <div className="relative rounded-md overflow-hidden shadow-sm" style={{ width: cardW, height: cardH }}>
+          <Image src="/payments/mastercard.svg" alt="Mastercard" fill sizes={`${cardW}px`} className="object-contain" priority={false} />
         </div>
       </div>
     );
