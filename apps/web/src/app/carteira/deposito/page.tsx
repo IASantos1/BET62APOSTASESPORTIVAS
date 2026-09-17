@@ -25,6 +25,7 @@ import {
   type PaymentMethod,
 } from '../../../lib/payment-methods';
 import { cn } from '../../../lib/utils';
+import { apiClient, ApiError } from '../../../lib/api-client';
 
 const BENEFITS = [
   { icon: Zap, label: 'Instantâneo', desc: 'Confirmado em segundos' },
@@ -36,21 +37,25 @@ export default function CarteiraDepositoPage() {
   const [amount, setAmount] = React.useState<number>(20);
   const [method, setMethod] = React.useState<PaymentMethod>(DEFAULT_DEPOSIT_METHOD);
   const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   const handleSubmit = async () => {
     if (amount < 10) return;
     const paymentMethod = normalizeDepositMethod(method);
     setLoading(true);
+    setError(null);
     try {
-      const res = await fetch('/api/client/deposit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, method: paymentMethod }),
+      const data = await apiClient.post<{ checkoutUrl?: string }>('/wallet/deposit/stripe/create-intent', {
+        provider: 'STRIPE',
+        amount,
+        currency: 'EUR',
+        paymentMethod,
+        returnUrl: `${window.location.origin}/carteira`,
       });
-      const data = await res.json().catch(() => ({}));
-      if (data?.url) window.location.href = data.url;
-      else if (data?.checkoutUrl) window.location.href = data.checkoutUrl;
-    } catch {
+      if (data?.checkoutUrl) window.location.href = data.checkoutUrl;
+      else setError('Não foi possível iniciar o pagamento. Tenta novamente.');
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Erro ao iniciar o depósito.');
     } finally {
       setLoading(false);
     }
@@ -260,6 +265,12 @@ export default function CarteiraDepositoPage() {
                       Taxa 0%. Mínimo €10. O valor é creditado na carteira assim que a operação for confirmada.
                     </div>
                   </div>
+
+                  {error ? (
+                    <p className="mb-4 text-sm text-bet62-danger bg-bet62-danger/10 border border-bet62-danger/30 rounded-xl px-3 py-2">
+                      {error}
+                    </p>
+                  ) : null}
 
                   <Button
                     variant="primary"

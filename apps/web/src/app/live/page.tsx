@@ -36,6 +36,7 @@ import { Button } from '../../components/ui/Button';
 import { cn, formatOdds } from '../../lib/utils';
 import { apiClient } from '../../lib/api-client';
 import { eventToUiModal } from '../../lib/odds-adapters';
+import { useBetslipStore, type BetslipSelection } from '../../stores/betslip.store';
 
 const SPORTS = [
   { label: 'Todos', icon: Star, id: 'all' },
@@ -136,7 +137,23 @@ function SkeletonMatchCard({ i }: { i: number }) {
   );
 }
 
-function LiveEventCard({ event, onOpenMarkets }: { event: LiveEvent; onOpenMarkets: (e: LiveEvent) => void }) {
+interface QuickSelectPayload {
+  market: string;
+  sel: string;
+  odds: number;
+  selName: string;
+  marketName: string;
+}
+
+function LiveEventCard({
+  event,
+  onOpenMarkets,
+  onSelect,
+}: {
+  event: LiveEvent;
+  onOpenMarkets: (e: LiveEvent) => void;
+  onSelect: (event: LiveEvent, payload: QuickSelectPayload) => void;
+}) {
   const score: LiveScore = event.liveScoreJson ?? ({} as LiveScore);
   const clock: LiveClock = event.liveClockJson ?? ({} as LiveClock);
   const homeName = event.homeTeamName ?? event.name.split(' vs ')[0] ?? 'Casa';
@@ -202,6 +219,15 @@ function LiveEventCard({ event, onOpenMarkets }: { event: LiveEvent; onOpenMarke
                 <Button
                   key={s.id}
                   variant="ghost"
+                  onClick={() =>
+                    onSelect(event, {
+                      market: mainMarket?.id ?? 'main',
+                      sel: s.id,
+                      odds: s.odds,
+                      selName: s.name,
+                      marketName: mainMarket?.name ?? 'Resultado Final',
+                    })
+                  }
                   className="h-auto py-3 flex-col items-start text-left group/sel hover:!bg-bet62-primary/10 hover:!border-bet62-primary/40 border border-bet62-border rounded-2xl"
                   disabled={s.status === 'suspended' || !s.odds || s.odds < 1.01}
                 >
@@ -259,6 +285,7 @@ export default function LivePage() {
   const router = useRouter();
   void router;
   const [betslipOpen, setBetslipOpen] = React.useState(false);
+  const addSelection = useBetslipStore((s) => s.addSelection);
   const [sport, setSport] = React.useState('all');
   const [search, setSearch] = React.useState('');
   const [loading, setLoading] = React.useState(true);
@@ -409,6 +436,26 @@ export default function LivePage() {
       })
       .finally(() => setSelectedEventLoading(false));
   }, []);
+
+  const handleSelect = (event: LiveEvent, payload: QuickSelectPayload) => {
+    const homeName = event.homeTeamName ?? event.name.split(' vs ')[0] ?? 'Casa';
+    const awayName = event.awayTeamName ?? event.name.split(' vs ')[1] ?? 'Fora';
+    const sel: BetslipSelection = {
+      id: `${event.id}-${payload.market}-${payload.sel}`,
+      eventId: event.id,
+      marketId: `${event.id}-${payload.market}`,
+      selectionId: `${event.id}-${payload.market}-${payload.sel}`,
+      selectionName: payload.selName,
+      marketName: payload.marketName,
+      eventName: `${homeName} vs ${awayName} · ${event.leagueName ?? event.sportType}`,
+      kickoffAt: new Date(event.kickoffAt).toISOString(),
+      odds: payload.odds,
+      marketType: '1X2',
+      outcome: payload.sel,
+    };
+    addSelection(sel);
+    setBetslipOpen(true);
+  };
 
   return (
     <div className="min-h-screen bg-bet62-bg">
@@ -581,7 +628,9 @@ export default function LivePage() {
               </Card>
             ) : null}
             {!loading && !error && filtered.length > 0
-              ? filtered.map((ev) => <LiveEventCard key={ev.id} event={ev} onOpenMarkets={handleOpenMarkets} />)
+              ? filtered.map((ev) => (
+                  <LiveEventCard key={ev.id} event={ev} onOpenMarkets={handleOpenMarkets} onSelect={handleSelect} />
+                ))
               : null}
           </div>
         </div>
@@ -604,7 +653,12 @@ export default function LivePage() {
           setSelectedEventDetail(null);
           setSelectedEventLoading(false);
         }}
-        onSelect={() => {}}
+        onSelect={(payload) => {
+          if (selectedEventDetail) handleSelect(selectedEventDetail, payload);
+          setSelectedEvent(null);
+          setSelectedEventDetail(null);
+          setSelectedEventLoading(false);
+        }}
       />
       {selectedEvent && selectedEventLoading ? (
         <div className="fixed inset-x-0 bottom-6 z-[82] flex justify-center pointer-events-none">

@@ -36,6 +36,7 @@ import {
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../stores/auth.store';
 import { formatCurrencyEUR } from '../../lib/utils';
+import { apiClient, ApiError } from '../../lib/api-client';
 
 const NAV = [
   { href: '/', label: 'Destaques', icon: Trophy },
@@ -68,6 +69,7 @@ export function Header() {
   const [depositAmount, setDepositAmount] = React.useState<number>(20);
   const [selectedMethod, setSelectedMethod] = React.useState<PaymentMethod>(DEFAULT_DEPOSIT_METHOD);
   const [depositLoading, setDepositLoading] = React.useState(false);
+  const [depositError, setDepositError] = React.useState<string | null>(null);
   const { user, isAuthenticated, logout, isLoading } = useAuthStore();
   const balance = 0;
 
@@ -75,22 +77,23 @@ export function Header() {
     if (depositAmount < 10) return;
     const paymentMethod = normalizeDepositMethod(selectedMethod);
     setDepositLoading(true);
+    setDepositError(null);
     try {
-      const res = await fetch('/api/client/deposit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: depositAmount,
-          method: paymentMethod,
-        }),
+      const data = await apiClient.post<{ checkoutUrl?: string }>('/wallet/deposit/stripe/create-intent', {
+        provider: 'STRIPE',
+        amount: depositAmount,
+        currency: 'EUR',
+        paymentMethod,
+        returnUrl: `${window.location.origin}/carteira`,
       });
-      const data = await res.json().catch(() => ({}));
-      if (data?.url) {
-        window.location.href = data.url;
-      } else if (data?.checkoutUrl) {
+      if (data?.checkoutUrl) {
         window.location.href = data.checkoutUrl;
+      } else {
+        setDepositError('Não foi possível iniciar o pagamento. Tenta novamente.');
       }
-    } catch {
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Erro ao iniciar o depósito.';
+      setDepositError(message);
     } finally {
       setDepositLoading(false);
     }
@@ -494,6 +497,12 @@ export function Header() {
                     ))}
                   </div>
                 </div>
+
+                {depositError ? (
+                  <p className="mb-3 text-sm text-bet62-danger bg-bet62-danger/10 border border-bet62-danger/30 rounded-xl px-3 py-2">
+                    {depositError}
+                  </p>
+                ) : null}
 
                 <Button
                   variant="primary"
