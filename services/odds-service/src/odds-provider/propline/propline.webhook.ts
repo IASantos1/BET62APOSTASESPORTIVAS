@@ -13,6 +13,10 @@ import type {
 } from './propline.types';
 
 export type ProplineWebhookEventType =
+  | 'line_movement'
+  | 'resolution'
+  | 'steam'
+  | 'test'
   | 'odds.update'
   | 'score.update'
   | 'event.status'
@@ -26,6 +30,7 @@ export interface ProplineWebhookHeaders {
   'x-propline-signature'?: string;
   'x-propline-timestamp'?: string;
   'x-propline-event'?: string;
+  'x-propline-delivery'?: string;
   'x-propline-delivery-id'?: string;
   authorization?: string;
   [key: string]: string | string[] | undefined;
@@ -161,7 +166,11 @@ export class ProplineWebhookService {
     try {
       const s = String(raw || '').trim().toLowerCase();
       if (!s) return 'unknown';
-      if (s === 'ping' || s === 'test' || s === 'health') return 'ping';
+      if (s === 'ping' || s === 'health') return 'ping';
+      if (s === 'test') return 'test';
+      if (s === 'line_movement') return 'line_movement';
+      if (s === 'resolution') return 'resolution';
+      if (s === 'steam') return 'steam';
       if (s.includes('odds') || s.includes('odd') || s.includes('market')) {
         if (s.includes('status')) return 'market.status';
         return 'odds.update';
@@ -171,7 +180,8 @@ export class ProplineWebhookService {
       if (s.includes('event') && (s.includes('status') || s.includes('state'))) return 'event.status';
       if (s.includes('stat') || s.includes('statistic')) return 'stats.update';
       if (s === 'odds.update' || s === 'score.update' || s === 'event.status'
-          || s === 'market.status' || s === 'stats.update' || s === 'settlement') {
+          || s === 'market.status' || s === 'stats.update' || s === 'settlement'
+          || s === 'line_movement' || s === 'resolution' || s === 'steam' || s === 'test') {
         return s as ProplineWebhookEventType;
       }
       return 'unknown';
@@ -273,7 +283,7 @@ export class ProplineWebhookService {
     try {
       const sigResult = this.validateSignature(rawBody, headers);
       const timestamp = new Date();
-      const deliveryId = String(headers['x-propline-delivery-id'] ?? '').trim() || null;
+      const deliveryId = String(headers['x-propline-delivery'] ?? headers['x-propline-delivery-id'] ?? '').trim() || null;
       let parsedRaw: ProplineWebhookRaw;
       try {
         parsedRaw = JSON.parse(rawBody) as ProplineWebhookRaw;
@@ -320,9 +330,11 @@ export class ProplineWebhookService {
       try {
         const inner = (parsedRaw.payload ?? parsedRaw.data) as Record<string, unknown> | undefined;
         switch (eventType) {
+          case 'line_movement':
           case 'odds.update':
             result.odds = (inner as unknown as ProplineOddsResponse) ?? null;
             break;
+          case 'resolution':
           case 'score.update':
             result.score = (inner as unknown as ProplineScoreResponse) ?? null;
             break;
@@ -385,6 +397,7 @@ export class ProplineWebhookService {
           }
         }
         switch (parsed.eventType) {
+          case 'line_movement':
           case 'odds.update':
             if (parsed.odds && hs.onOddsUpdate) {
               try {
@@ -392,6 +405,16 @@ export class ProplineWebhookService {
                 handled = true;
               } catch (innerErr) {
                 this.logger.verbose(`PropLine webhook onOddsUpdate erro: ${innerErr instanceof Error ? innerErr.message : String(innerErr)}`);
+              }
+            }
+            break;
+          case 'resolution':
+            if (parsed.score && hs.onScoreUpdate) {
+              try {
+                await Promise.resolve(hs.onScoreUpdate(parsed.score, parsed));
+                handled = true;
+              } catch (innerErr) {
+                this.logger.verbose(`PropLine webhook onScoreUpdate erro: ${innerErr instanceof Error ? innerErr.message : String(innerErr)}`);
               }
             }
             break;
@@ -445,9 +468,11 @@ export class ProplineWebhookService {
               }
             }
             break;
+          case 'steam':
+          case 'test':
           case 'ping':
             handled = true;
-            this.logger.verbose(`PropLine webhook ping recebido: deliveryId=${parsed.deliveryId}`);
+            this.logger.verbose(`PropLine webhook ${parsed.eventType} recebido: deliveryId=${parsed.deliveryId}`);
             break;
           case 'unknown':
           default:

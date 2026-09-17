@@ -87,7 +87,10 @@ export class CustomOddsProviderService extends AbstractOddsProvider {
 
   constructor(@Optional() config: CustomOddsProviderConfig = {}) {
     super();
-    this.baseUrl = (config.baseUrl ?? process.env.ODDS_PROVIDER_BASE_URL ?? '').replace(/\/+$/, '');
+    this.baseUrl = String(config.baseUrl ?? process.env.ODDS_PROVIDER_BASE_URL ?? '')
+      .trim()
+      .replace(/[,;\s]+$/g, '')
+      .replace(/\/+$/g, '');
     this.apiKey = config.apiKey ?? process.env.ODDS_PROVIDER_API_KEY ?? '';
     this.timeoutMs = config.timeoutMs ?? Number(process.env.ODDS_PROVIDER_TIMEOUT_MS ?? 10_000);
     this.customHeaders = config.customHeaders ?? {};

@@ -58,7 +58,7 @@ export class GoaldirHttpClient {
 
   constructor(config: GoaldirHttpClientConfig) {
     this.config = {
-      baseUrl: config.baseUrl.replace(/\/$/, ''),
+      baseUrl: String(config.baseUrl ?? '').trim().replace(/[,;\s]+$/g, '').replace(/\/+$/g, ''),
       apiKey: config.apiKey,
       timeoutMs: config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
       maxRetries429: config.maxRetries429 ?? DEFAULT_MAX_RETRIES_429,

@@ -381,7 +381,12 @@ export class ProplineDataAdapter {
       const mapped = marketToBet62Market(pmFiltered, eventId, bookiesMap, now);
       if (!mapped) return null;
       const resp: ProplineOddsResponse = {
+        id: eventId,
         event_id: eventId,
+        sport_key: 'unknown',
+        home_team: 'Home',
+        away_team: 'Away',
+        commence_time: now.toISOString(),
         markets: [pmFiltered],
       };
       const { markets } = this.runOddsPipeline(resp, opts);

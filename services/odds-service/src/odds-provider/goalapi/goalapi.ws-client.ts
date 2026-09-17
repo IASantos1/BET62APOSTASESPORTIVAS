@@ -51,16 +51,21 @@ export class GoalApiWsClient {
 
   async fetchWsToken(): Promise<string | null> {
     try {
-      const baseUrl =
-        (this.configService?.get<string>('GOAL_API_BASE_URL') ||
-          process.env.GOAL_API_BASE_URL ||
-          'https://api.goal-api.com/v1').replace(/\/$/, '');
+      const sanitize = (s: string | undefined | null): string =>
+        String(s ?? '').trim().replace(/[,;\s]+$/g, '').replace(/\/+$/g, '');
+      const baseUrl = sanitize(
+        this.configService?.get<string>('GOAL_API_BASE_URL') ??
+          process.env.GOAL_API_BASE_URL ??
+          'https://api.goal-api.com/v1',
+      );
       const apiKey =
         this.configService?.get<string>('GOAL_API_KEY') ||
         process.env.GOAL_API_KEY ||
         '';
       if (!apiKey) {
-        this.logger.verbose('fetchWsToken: GOAL_API_KEY vazio, sem token.');
+        this.logger.warn(
+          'fetchWsToken: GOAL_API_KEY vazia. WebSocket GOAL API NAO conecta. Configurar GOAL_API_KEY no Railway vars.',
+        );
         return null;
       }
       const url = `${baseUrl}/ws/token`;

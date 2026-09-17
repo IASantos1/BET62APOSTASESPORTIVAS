@@ -159,9 +159,7 @@ export class ProviderMappingService {
   ) {
     if (!goal && !prop) return null;
 
-    const sportCode =
-      prop?.sport_key?.toUpperCase() ||
-      (goal ? 'FOOTBALL' : 'FOOTBALL');
+    const sportCode = 'FOOTBALL';
 
     const goalLite: GoalFixtureLite | null = goal
       ? {

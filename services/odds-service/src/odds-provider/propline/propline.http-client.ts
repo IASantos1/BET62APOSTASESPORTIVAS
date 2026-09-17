@@ -15,6 +15,14 @@ import { PROPLINE_BOOKMAKERS } from './propline.bookmakers';
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 
+function slugifyKey(value: string): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
 @Injectable()
 export class ProplineHttpClient {
   private readonly logger = new Logger(ProplineHttpClient.name);
@@ -40,21 +48,19 @@ export class ProplineHttpClient {
       ?? process.env.PROPLINE_API_KEY
       ?? process.env[endpoint.apiKeyEnvName]
       ?? '';
-    this.baseUrl = (
+    const sanitize = (s: string | undefined | null): string =>
+      String(s ?? '').trim().replace(/[,;\s]+$/g, '').replace(/\/+$/g, '');
+    this.baseUrl = sanitize(
       this.configService.get<string>('PROPLINE_API_BASE_URL')
       ?? process.env.PROPLINE_API_BASE_URL
-      ?? endpoint.baseUrl
-    ).replace(/\/$/, '');
-    this.apiKey = envApiKey;
+      ?? endpoint.baseUrl,
+    ).replace(/\/v1$/, '');
+    this.apiKey = String(envApiKey ?? '').trim();
     this.timeoutMs = Number(
       this.configService.get<string>('PROPLINE_TIMEOUT_MS')
       ?? process.env.PROPLINE_TIMEOUT_MS
       ?? String(DEFAULT_TIMEOUT_MS),
     ) || DEFAULT_TIMEOUT_MS;
-
-    // #region debug-point H1:propline-api-key-status
-    (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'pre-fix', hypothesisId: 'H1', location: 'propline.http-client.ts:36', msg: '[DEBUG] ProplineHttpClient constructor config', data: { envNameChecked: endpoint.apiKeyEnvName, hasApiKey: Boolean(this.apiKey && this.apiKey.length > 0), isSetButPlaceholder: Boolean(this.apiKey && (this.apiKey.includes('coloca') || this.apiKey.includes('<<') || this.apiKey.includes('replace') || this.apiKey.length < 10)), baseUrl: this.baseUrl, timeoutMs: this.timeoutMs, apiKeyLength: this.apiKey.length, apiKeyFirst3: this.apiKey ? this.apiKey.slice(0, 3) : '' }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
-    // #endregion
   }
 
   private buildHeaders(): Record<string, string> {
@@ -123,9 +129,6 @@ export class ProplineHttpClient {
         return fallbackEmpty;
       }
       if (!this.apiKey) {
-        // #region debug-point H1:propline-api-key-empty-return
-        (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'post-fix', hypothesisId: 'H1', location: 'propline.http-client.ts:120', msg: '[DEBUG] PropLine API key EMPTY - retornado fallbackEmpty[] para path (Causa H1)', data: { path, params: params || null, returned: 'fallbackEmpty length=' + (Array.isArray(fallbackEmpty) ? fallbackEmpty.length : 'non-array') }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
-        // #endregion
         if (!this._emptyKeyWarnedOnce.get(path)) {
           this.logger.warn(
             `PropLine API key VAZIA ou PLACEHOLDER. endpoint=${path} retornara vazio. Configurar PROPLINE_API_KEY no .env / Railway vars.`,
@@ -135,9 +138,6 @@ export class ProplineHttpClient {
         return fallbackEmpty;
       }
       const url = this.buildUrl(path, params);
-      // #region debug-point H4:propline-request-url-sent
-      (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'pre-fix', hypothesisId: 'H4', location: 'propline.http-client.ts:124', msg: '[DEBUG] PropLine HTTP request vai ser enviado', data: { method, url, path, params: params || null, hasXApiKeyHeader: Boolean(this.apiKey) }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
-      // #endregion
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
@@ -147,9 +147,6 @@ export class ProplineHttpClient {
           signal: controller.signal,
           redirect: 'follow',
         });
-        // #region debug-point H4:propline-request-status-received
-        (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'pre-fix', hypothesisId: 'H4', location: 'propline.http-client.ts:134', msg: '[DEBUG] PropLine HTTP response recebido', data: { url, status: res.status, statusText: res.statusText, ok: res.ok, contentType: res.headers.get('content-type') || null, willReturnFallbackEmpty: res.status === 404 || res.status === 401 || res.status === 403 || res.status === 429 || !res.ok }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
-        // #endregion
         this.processResponseHeaders(res.headers);
         if (res.status === 429) {
           const retryAfterRaw = res.headers.get('Retry-After');
@@ -202,10 +199,20 @@ export class ProplineHttpClient {
 
   async getSports(): Promise<ProplineSport[]> {
     try {
-      const res = await this.request<ProplineSport[] | { sports?: ProplineSport[] }>('GET', '/sports', undefined, [], []);
-      if (Array.isArray(res)) return res;
+      const res = await this.request<ProplineSport[] | { sports?: ProplineSport[] }>('GET', '/v1/sports', undefined, [], []);
+      if (Array.isArray(res)) {
+        return res.map((sport) => ({
+          ...sport,
+          name: sport.name ?? sport.title ?? sport.key,
+          title: sport.title ?? sport.name ?? sport.key,
+        }));
+      }
       if (res && !Array.isArray(res) && Array.isArray((res as { sports?: ProplineSport[] }).sports)) {
-        return (res as { sports: ProplineSport[] }).sports;
+        return (res as { sports: ProplineSport[] }).sports.map((sport) => ({
+          ...sport,
+          name: sport.name ?? sport.title ?? sport.key,
+          title: sport.title ?? sport.name ?? sport.key,
+        }));
       }
       return [];
     } catch {
@@ -213,37 +220,36 @@ export class ProplineHttpClient {
     }
   }
 
-  async getLeagues(sportKey: string): Promise<ProplineLeague[]> {
+  async getEventsBySport(sportKey: string): Promise<ProplineEvent[]> {
     try {
-      const res = await this.request<ProplineLeague[] | { leagues?: ProplineLeague[] }>(
+      const res = await this.request<ProplineEvent[]>(
         'GET',
-        '/leagues',
-        { sport_key: sportKey },
+        `/v1/sports/${encodeURIComponent(sportKey)}/events`,
+        undefined,
         [],
         [],
       );
-      if (Array.isArray(res)) return res;
-      if (res && !Array.isArray(res) && Array.isArray((res as { leagues?: ProplineLeague[] }).leagues)) {
-        return (res as { leagues: ProplineLeague[] }).leagues;
-      }
-      return [];
-    } catch {
-      return [];
-    }
-  }
-
-  async getTeams(sportKey: string): Promise<ProplineTeam[]> {
-    try {
-      const res = await this.request<ProplineTeam[] | { teams?: ProplineTeam[] }>(
-        'GET',
-        '/teams',
-        { sport_key: sportKey },
-        [],
-        [],
-      );
-      if (Array.isArray(res)) return res;
-      if (res && !Array.isArray(res) && Array.isArray((res as { teams?: ProplineTeam[] }).teams)) {
-        return (res as { teams: ProplineTeam[] }).teams;
+      if (Array.isArray(res)) {
+        return res.map((event) => {
+          const eventId = event.id ?? event.event_id ?? '';
+          const homeTeam = event.home_team ?? event.home_team_name ?? event.home_team_key ?? 'Home';
+          const awayTeam = event.away_team ?? event.away_team_name ?? event.away_team_key ?? 'Away';
+          return {
+            ...event,
+            id: String(eventId),
+            event_id: String(eventId),
+            sport_key: event.sport_key ?? sportKey,
+            home_team: homeTeam,
+            away_team: awayTeam,
+            commence_time: event.commence_time ?? event.start_date ?? new Date().toISOString(),
+            start_date: event.start_date ?? event.commence_time ?? new Date().toISOString(),
+            home_team_name: event.home_team_name ?? homeTeam,
+            away_team_name: event.away_team_name ?? awayTeam,
+            home_team_key: event.home_team_key ?? slugifyKey(homeTeam),
+            away_team_key: event.away_team_key ?? slugifyKey(awayTeam),
+            status: event.status ?? (event.completed ? 'final' : event.live ? 'in_progress' : 'scheduled'),
+          };
+        });
       }
       return [];
     } catch {
@@ -253,97 +259,77 @@ export class ProplineHttpClient {
 
   async getBookmakers(): Promise<ProplineBookmaker[]> {
     try {
-      const res = await this.request<ProplineBookmaker[] | { bookmakers?: ProplineBookmaker[] }>(
-        'GET',
-        '/bookmakers',
-        undefined,
-        [...PROPLINE_BOOKMAKERS] as ProplineBookmaker[],
-        [...PROPLINE_BOOKMAKERS] as ProplineBookmaker[],
-      );
-      if (Array.isArray(res) && res.length > 0) return res;
-      if (res && !Array.isArray(res) && Array.isArray((res as { bookmakers?: ProplineBookmaker[] }).bookmakers)) {
-        const arr = (res as { bookmakers: ProplineBookmaker[] }).bookmakers;
-        if (arr.length > 0) return arr;
-      }
       return [...PROPLINE_BOOKMAKERS] as ProplineBookmaker[];
     } catch {
       return [...PROPLINE_BOOKMAKERS] as ProplineBookmaker[];
     }
   }
 
-  async getUpcomingEvents(sportKey?: string, nextHours = 24): Promise<ProplineEvent[]> {
+  async getLeagues(sportKey: string): Promise<ProplineLeague[]> {
+    try {
+      const events = await this.getEventsBySport(sportKey);
+      const byLeague = new Map<string, ProplineLeague>();
+      for (const event of events) {
+        const leagueKey = event.league_key ?? sportKey;
+        const current = byLeague.get(leagueKey);
+        if (current) continue;
+        byLeague.set(leagueKey, {
+          key: leagueKey,
+          sport_key: sportKey,
+          name: event.league_key ?? sportKey,
+          country_code: null,
+        });
+      }
+      return Array.from(byLeague.values());
+    } catch {
+      return [];
+    }
+  }
+
+  async getTeams(_sportKey: string): Promise<ProplineTeam[]> {
+    return [];
+  }
+
+  async getSportOdds(
+    sportKey: string,
+    markets: string[],
+    bookmakers?: (string | number)[],
+  ): Promise<ProplineOddsResponse[]> {
     try {
       const params: Record<string, string | number | boolean | undefined | null> = {
-        next_hours: nextHours,
+        markets: markets.join(','),
       };
-      if (sportKey) params.sport_key = sportKey;
-      const res = await this.request<ProplineEvent[] | { events?: ProplineEvent[] }>(
+      if (bookmakers && bookmakers.length > 0) {
+        params.bookmakers = bookmakers.join(',');
+      }
+      const res = await this.request<ProplineOddsResponse[]>(
         'GET',
-        '/events/upcoming',
+        `/v1/sports/${encodeURIComponent(sportKey)}/odds`,
         params,
         [],
         [],
       );
-      if (Array.isArray(res)) return res;
-      if (res && !Array.isArray(res) && Array.isArray((res as { events?: ProplineEvent[] }).events)) {
-        return (res as { events: ProplineEvent[] }).events;
-      }
-      return [];
+      return Array.isArray(res) ? res : [];
     } catch {
       return [];
     }
   }
 
-  async getLiveEvents(): Promise<ProplineEvent[]> {
-    try {
-      const res = await this.request<ProplineEvent[] | { events?: ProplineEvent[] }>(
-        'GET',
-        '/events/live',
-        undefined,
-        [],
-        [],
-      );
-      if (Array.isArray(res)) return res;
-      if (res && !Array.isArray(res) && Array.isArray((res as { events?: ProplineEvent[] }).events)) {
-        return (res as { events: ProplineEvent[] }).events;
-      }
-      return [];
-    } catch {
-      return [];
-    }
-  }
-
-  async getEventById(eventId: string): Promise<ProplineEvent | null> {
-    try {
-      const res = await this.request<ProplineEvent | null | { event?: ProplineEvent | null }>(
-        'GET',
-        `/events/${encodeURIComponent(eventId)}`,
-        undefined,
-        null,
-        null,
-      );
-      if (!res) return null;
-      if (res && typeof res === 'object' && !Array.isArray(res) && 'event_id' in (res as object)) {
-        return res as ProplineEvent;
-      }
-      if (res && typeof res === 'object' && !Array.isArray(res) && 'event' in (res as object)) {
-        return (res as { event?: ProplineEvent | null }).event ?? null;
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
-  async getOdds(eventId: string, bookmakers?: (string | number)[]): Promise<ProplineOddsResponse | null> {
+  async getEventOdds(
+    sportKey: string,
+    eventId: string,
+    markets: string[],
+    bookmakers?: (string | number)[],
+  ): Promise<ProplineOddsResponse | null> {
     try {
       const params: Record<string, string | number | boolean | undefined | null> = {};
+      params.markets = markets.join(',');
       if (bookmakers && bookmakers.length > 0) {
         params.bookmakers = bookmakers.join(',');
       }
       const res = await this.request<ProplineOddsResponse | null>(
         'GET',
-        `/odds/${encodeURIComponent(eventId)}`,
+        `/v1/sports/${encodeURIComponent(sportKey)}/events/${encodeURIComponent(eventId)}/odds`,
         params,
         null,
         null,
@@ -354,48 +340,39 @@ export class ProplineHttpClient {
     }
   }
 
-  async getScores(eventId: string): Promise<ProplineScoreResponse | null> {
+  async getUpcomingEvents(sportKey?: string, _nextHours = 24): Promise<ProplineEvent[]> {
+    if (!sportKey) return [];
+    const events = await this.getEventsBySport(sportKey);
+    return events.filter((event) => !event.live && !event.completed);
+  }
+
+  async getLiveEvents(sportKey?: string): Promise<ProplineEvent[]> {
+    if (!sportKey) return [];
+    const events = await this.getEventsBySport(sportKey);
+    return events.filter((event) => Boolean(event.live) && !event.completed);
+  }
+
+  async getEventById(sportKey: string, eventId: string): Promise<ProplineEvent | null> {
     try {
-      const res = await this.request<ProplineScoreResponse | null | { score?: ProplineScoreResponse | null }>(
-        'GET',
-        `/scores/${encodeURIComponent(eventId)}`,
-        undefined,
-        null,
-        null,
-      );
-      if (!res) return null;
-      if (res && typeof res === 'object' && !Array.isArray(res) && 'event_id' in (res as object)) {
-        return res as ProplineScoreResponse;
-      }
-      if (res && typeof res === 'object' && !Array.isArray(res) && 'score' in (res as object)) {
-        return (res as { score?: ProplineScoreResponse | null }).score ?? null;
-      }
-      return null;
+      const events = await this.getEventsBySport(sportKey);
+      return events.find((event) => String(event.id ?? event.event_id) === String(eventId)) ?? null;
     } catch {
       return null;
     }
   }
 
+  async getOdds(sportKey: string, eventId: string, bookmakers?: (string | number)[]): Promise<ProplineOddsResponse | null> {
+    return this.getEventOdds(sportKey, eventId, ['h2h', 'spreads', 'totals'], bookmakers);
+  }
+
+  async getScores(eventId: string): Promise<ProplineScoreResponse | null> {
+    this.logger.verbose(`PropLine getScores não implementado na integração oficial para eventId=${eventId}.`);
+    return null;
+  }
+
   async getStats(eventId: string, period: string = 'full'): Promise<ProplineStatsResponse | null> {
-    try {
-      const res = await this.request<ProplineStatsResponse | null | { stats?: ProplineStatsResponse | null }>(
-        'GET',
-        `/stats/${encodeURIComponent(eventId)}`,
-        { period },
-        null,
-        null,
-      );
-      if (!res) return null;
-      if (res && typeof res === 'object' && !Array.isArray(res) && 'event_id' in (res as object)) {
-        return res as ProplineStatsResponse;
-      }
-      if (res && typeof res === 'object' && !Array.isArray(res) && 'stats' in (res as object)) {
-        return (res as { stats?: ProplineStatsResponse | null }).stats ?? null;
-      }
-      return null;
-    } catch {
-      return null;
-    }
+    this.logger.verbose(`PropLine getStats não implementado na integração oficial para eventId=${eventId}, period=${period}.`);
+    return null;
   }
 
   getRateLimitSnapshot(): Readonly<{

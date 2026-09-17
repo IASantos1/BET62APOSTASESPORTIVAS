@@ -52,12 +52,17 @@ export class GoalApiHttpClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly timeoutMs: number;
+  private readonly _emptyKeyWarnedOnce: Map<string, boolean> = new Map();
+  private readonly _authFailWarnedOnce: Map<string, boolean> = new Map();
 
   constructor(private readonly configService: ConfigService) {
-    this.baseUrl =
-      (this.configService?.get<string>('GOAL_API_BASE_URL') ||
-        process.env.GOAL_API_BASE_URL ||
-        DEFAULT_BASE_URL).replace(/\/$/, '');
+    const sanitize = (s: string | undefined | null): string =>
+      String(s ?? '').trim().replace(/[,;\s]+$/g, '').replace(/\/+$/g, '');
+    this.baseUrl = sanitize(
+      this.configService?.get<string>('GOAL_API_BASE_URL') ??
+        process.env.GOAL_API_BASE_URL ??
+        DEFAULT_BASE_URL,
+    );
     this.apiKey =
       this.configService?.get<string>('GOAL_API_KEY') ||
       process.env.GOAL_API_KEY ||
@@ -67,6 +72,11 @@ export class GoalApiHttpClient {
         process.env.GOAL_API_TIMEOUT_MS ||
         String(DEFAULT_TIMEOUT_MS),
     );
+    if (!this.apiKey) {
+      this.logger.warn(
+        'GOAL_API_KEY VAZIA ou PLACEHOLDER. Futebol (SourceOfTruth = GOAL_API) retornara vazio. Configurar GOAL_API_KEY no .env / Railway vars.',
+      );
+    }
   }
 
   async safeFetch(
@@ -76,6 +86,15 @@ export class GoalApiHttpClient {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
+      if (!this.apiKey) {
+        const pathKey = new URL(url).pathname;
+        if (!this._emptyKeyWarnedOnce.get(pathKey)) {
+          this.logger.warn(
+            `GOAL_API_KEY vazia. Chamada a ${pathKey} retorna vazio (sem envio auth). Configurar GOAL_API_KEY no Railway.`,
+          );
+          this._emptyKeyWarnedOnce.set(pathKey, true);
+        }
+      }
       const baseHeaders: Record<string, string> = {
         Accept: 'application/json',
         ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
@@ -100,9 +119,19 @@ export class GoalApiHttpClient {
         redirect: 'follow',
       });
       if (!res.ok) {
-        this.logger.verbose(
-          `GOAL API HTTP ${res.status} em ${opts?.method ?? 'GET'} ${url}`,
-        );
+        if (res.status === 401 || res.status === 403) {
+          const pathKey = new URL(url).pathname;
+          if (!this._authFailWarnedOnce.get(pathKey)) {
+            this.logger.warn(
+              `GOAL API HTTP ${res.status} AUTH FAIL em ${opts?.method ?? 'GET'} ${url}. Verificar GOAL_API_KEY (key invalida, expirada ou permissoes insuficientes).`,
+            );
+            this._authFailWarnedOnce.set(pathKey, true);
+          }
+        } else {
+          this.logger.verbose(
+            `GOAL API HTTP ${res.status} em ${opts?.method ?? 'GET'} ${url}`,
+          );
+        }
       }
       let body: unknown = null;
       try {
@@ -164,16 +193,81 @@ export class GoalApiHttpClient {
 
   async getUpcomingFixtures(days?: number): Promise<GoalApiFixture[]> {
     try {
-      const params: Record<string, string | number> = {};
-      if (days !== undefined && days !== null) {
-        params.next = days;
+      const rangeDays = Math.max(1, Math.min(90, Number.isFinite(days) ? (days ?? 14) : 14));
+      const seenIds = new Set<string | number>();
+      const out: GoalApiFixture[] = [];
+      const dedupe = (list: GoalApiFixture[]) => {
+        for (const f of list) {
+          if (!f || f.id == null) continue;
+          const key = String(f.id);
+          if (seenIds.has(key)) continue;
+          seenIds.add(key);
+          out.push(f);
+        }
+      };
+      try {
+        const params: Record<string, string | number> = {};
+        params.next = rangeDays;
+        const urlUpcoming = this.buildUrl('/fixtures/upcoming', params);
+        const [, bodyUpcoming] = await this.safeFetch(urlUpcoming);
+        dedupe(extractData<GoalApiFixture>(bodyUpcoming));
+      } catch (err) {
+        this.logger.verbose(
+          `getUpcomingFixtures /upcoming skip (não fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
-      const url = this.buildUrl('/fixtures/upcoming', params);
-      const [, body] = await this.safeFetch(url);
-      return extractData<GoalApiFixture>(body);
+      const toPad = (n: number) => n < 10 ? `0${n}` : String(n);
+      const isoDate = (d: Date) => `${d.getUTCFullYear()}-${toPad(d.getUTCMonth() + 1)}-${toPad(d.getUTCDate())}`;
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      const minFixtures = rangeDays >= 14 ? 10 : 2;
+      for (let offset = 0; offset < rangeDays; offset++) {
+        if (out.length >= minFixtures * 4) break;
+        const d = new Date(today.getTime() + offset * 24 * 60 * 60 * 1000);
+        try {
+          const urlDate = this.buildUrl(`/fixtures/date/${isoDate(d)}`);
+          const [, bodyDate] = await this.safeFetch(urlDate);
+          dedupe(extractData<GoalApiFixture>(bodyDate));
+        } catch (err) {
+          this.logger.verbose(
+            `getUpcomingFixtures /date/${isoDate(d)} skip (não fatal): ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+      try {
+        const urlLive = this.buildUrl('/fixtures/live');
+        const [, bodyLive] = await this.safeFetch(urlLive);
+        dedupe(extractData<GoalApiFixture>(bodyLive));
+      } catch (err) {
+        this.logger.verbose(
+          `getUpcomingFixtures /live skip (não fatal): ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      const now = Date.now();
+      out.sort((a, b) => {
+        const ta = a.kickoff_at
+          ? new Date(String(a.kickoff_at)).getTime()
+          : a.date
+            ? new Date(String(a.date)).getTime()
+            : typeof a.timestamp === 'number'
+              ? a.timestamp * 1000
+              : now;
+        const tb = b.kickoff_at
+          ? new Date(String(b.kickoff_at)).getTime()
+          : b.date
+            ? new Date(String(b.date)).getTime()
+            : typeof b.timestamp === 'number'
+              ? b.timestamp * 1000
+              : now;
+        return ta - tb;
+      });
+      this.logger.log(
+        `getUpcomingFixtures GOAL: /upcoming?next=${rangeDays} + ${rangeDays}x /date/YYYY-MM-DD + /live => ${out.length} fixtures.`,
+      );
+      return out;
     } catch (err) {
-      this.logger.verbose(
-        `getUpcomingFixtures erro: ${err instanceof Error ? err.message : String(err)}`,
+      this.logger.warn(
+        `getUpcomingFixtures fallback vazio: ${err instanceof Error ? err.message : String(err)}`,
       );
       return [];
     }

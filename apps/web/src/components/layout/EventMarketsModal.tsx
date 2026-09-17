@@ -6,19 +6,19 @@ import { X, Radio } from 'lucide-react';
 import { formatOdds } from '../../lib/utils';
 import { Badge } from '../ui/Badge';
 
-export interface MarketsModalSelection {
+export interface MarketsEventSelection {
   id: string;
   name: string;
   odds: number;
   status?: string;
+  outcome?: string;
 }
 
-export interface MarketsModalMarket {
+export interface MarketsEventMarket {
   id: string;
   name: string;
-  type?: string;
   status?: string;
-  selections: MarketsModalSelection[];
+  selections: MarketsEventSelection[];
 }
 
 export interface MarketsEvent {
@@ -29,14 +29,14 @@ export interface MarketsEvent {
   minute?: number;
   period?: string;
   live?: boolean;
-  markets: MarketsModalMarket[];
+  markets: MarketsEventMarket[];
 }
 
 interface EventMarketsModalProps {
   event: MarketsEvent | null;
-  score?: [number | null | undefined, number | null | undefined];
+  score?: [number, number];
   onClose: () => void;
-  onSelect: (opts: { marketId: string; marketName: string; selectionId: string; selectionName: string; odds: number }) => void;
+  onSelect: (opts: { market: string; sel: string; odds: number; selName: string; marketName: string }) => void;
 }
 
 export function EventMarketsModal({ event, score, onClose, onSelect }: EventMarketsModalProps) {
@@ -72,7 +72,7 @@ export function EventMarketsModal({ event, score, onClose, onSelect }: EventMark
                   <h2 className="mt-2 text-lg md:text-xl font-black tracking-tight truncate">
                     {event.home} <span className="text-white/40 font-normal">vs</span> {event.away}
                   </h2>
-                  {score && (score[0] !== null && score[0] !== undefined) ? (
+                  {score ? (
                     <p className="mt-0.5 font-mono font-bold text-bet62-primary text-sm">{score[0]} – {score[1]}</p>
                   ) : null}
                 </div>
@@ -88,33 +88,45 @@ export function EventMarketsModal({ event, score, onClose, onSelect }: EventMark
 
             <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-5">
               {event.markets.length === 0 ? (
-                <p className="text-sm text-white/50 text-center py-8">Sem mercados disponíveis para este evento neste momento.</p>
-              ) : (
-                event.markets.map((market) => (
-                  <div key={market.id}>
-                    <p className="text-xs uppercase tracking-wider text-white/50 font-semibold mb-2">{market.name}</p>
-                    <div className={market.selections.length === 2 ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-3 gap-2'}>
-                      {market.selections.map((sel) => {
-                        const disabled = sel.status === 'suspended' || !sel.odds || sel.odds < 1.01;
-                        return (
-                          <button
-                            key={sel.id}
-                            type="button"
-                            disabled={disabled}
-                            onClick={() => onSelect({ marketId: market.id, marketName: market.name, selectionId: sel.id, selectionName: sel.name, odds: sel.odds })}
-                            className="rounded-xl py-3 px-2 border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/8 transition-all group disabled:opacity-40 disabled:pointer-events-none"
-                          >
-                            <p className="text-[10px] uppercase text-white/50 truncate">{sel.name}</p>
-                            <p className="font-mono font-bold text-bet62-primary group-hover:bg-bet62-primary group-hover:text-bet62-bg inline-block px-2 rounded-md mt-0.5 transition-all">
-                              {disabled ? '—' : formatOdds(sel.odds)}
-                            </p>
-                          </button>
-                        );
-                      })}
-                    </div>
+                <div className="rounded-xl border border-bet62-border bg-bet62-bg/40 p-4 text-sm text-white/55">
+                  Sem mercados publicados para este evento neste momento.
+                </div>
+              ) : null}
+              {event.markets.map((market) => (
+                <div key={market.id}>
+                  <p className="text-xs uppercase tracking-wider text-white/50 font-semibold mb-2">
+                    {market.name}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {market.selections.map((selection) => (
+                      <button
+                        key={selection.id}
+                        disabled={selection.status === 'SUSPENDED' || selection.odds < 1.01}
+                        onClick={() =>
+                          onSelect({
+                            market: market.id,
+                            sel: selection.id,
+                            odds: selection.odds,
+                            selName: selection.name,
+                            marketName: market.name,
+                          })
+                        }
+                        className="rounded-xl py-3 px-3 border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/8 transition-all group disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                      >
+                        <p className="text-[11px] uppercase text-white/50 truncate">
+                          {selection.outcome || selection.name}
+                        </p>
+                        <div className="mt-1 flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium truncate">{selection.name}</p>
+                          <p className="font-mono font-bold text-bet62-primary">
+                            {selection.odds >= 1.01 ? formatOdds(selection.odds) : '—'}
+                          </p>
+                        </div>
+                      </button>
+                    ))}
                   </div>
-                ))
-              )}
+                </div>
+              ))}
             </div>
           </motion.div>
         </>

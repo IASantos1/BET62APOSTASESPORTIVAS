@@ -2,6 +2,7 @@ export * from "./app.config";
 export * from "./bet.config";
 export * from "./bonus.config";
 export * from "./casino.config";
+export * from "./env-aliases";
 export * from "./kyc.config";
 export * from "./limits.config";
 export * from "./odds.config";

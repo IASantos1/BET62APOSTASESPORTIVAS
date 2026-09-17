@@ -27,6 +27,12 @@ import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { Avatar, AvatarFallback } from '../ui/Avatar';
 import { PaymentMethodLogo } from '../ui/PaymentMethodLogo';
+import {
+  DEFAULT_DEPOSIT_METHOD,
+  isPaymentMethodEnabled,
+  normalizeDepositMethod,
+  type PaymentMethod,
+} from '../../lib/payment-methods';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../stores/auth.store';
 import { formatCurrencyEUR } from '../../lib/utils';
@@ -54,8 +60,6 @@ export function Bet62Logo({ className }: { className?: string }) {
   );
 }
 
-type PaymentMethod = 'mbway' | 'multibanco' | 'card';
-
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
@@ -63,7 +67,7 @@ export function Header() {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [depositOpen, setDepositOpen] = React.useState(false);
   const [depositAmount, setDepositAmount] = React.useState<number>(20);
-  const [selectedMethod, setSelectedMethod] = React.useState<PaymentMethod>('mbway');
+  const [selectedMethod, setSelectedMethod] = React.useState<PaymentMethod>(DEFAULT_DEPOSIT_METHOD);
   const [depositLoading, setDepositLoading] = React.useState(false);
   const [depositError, setDepositError] = React.useState<string | null>(null);
   const { user, isAuthenticated, logout, isLoading } = useAuthStore();
@@ -71,6 +75,7 @@ export function Header() {
 
   const handleDeposit = async () => {
     if (depositAmount < 10) return;
+    const paymentMethod = normalizeDepositMethod(selectedMethod);
     setDepositLoading(true);
     setDepositError(null);
     try {
@@ -78,7 +83,7 @@ export function Header() {
         provider: 'STRIPE',
         amount: depositAmount,
         currency: 'EUR',
-        paymentMethod: selectedMethod,
+        paymentMethod,
         returnUrl: `${window.location.origin}/carteira`,
       });
       if (data?.checkoutUrl) {
@@ -358,15 +363,16 @@ export function Header() {
               onClick={() => setDepositOpen(false)}
               className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70]"
             />
-            <motion.div
-              initial={{ opacity: 0, y: 20, scale: 0.96 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.96 }}
-              transition={{ duration: 0.25, type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[71] w-[92vw] max-w-lg max-h-[90vh] overflow-y-auto"
-            >
-              <div className="rounded-3xl border border-bet62-border bg-bet62-surface/95 backdrop-blur-xl shadow-glass p-6 pt-[max(1.5rem,env(safe-area-inset-top))]">
-                <div className="flex items-center justify-between mb-5">
+            <div className="fixed inset-0 z-[71] flex items-end justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4">
+              <motion.div
+                initial={{ opacity: 0, y: 20, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 20, scale: 0.96 }}
+                transition={{ duration: 0.25, type: 'spring', damping: 25, stiffness: 300 }}
+                className="w-full max-w-[380px] sm:w-[92vw] sm:max-w-lg max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]"
+              >
+                <div className="rounded-[26px] sm:rounded-3xl border border-bet62-border bg-bet62-surface/95 backdrop-blur-xl shadow-glass p-4 sm:p-6 overflow-y-auto max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]">
+                <div className="flex items-center justify-between mb-4 sm:mb-5">
                   <div>
                     <h3 className="text-xl font-bold tracking-tight">Depósito Rápido</h3>
                     <p className="text-xs text-white/50 mt-0.5">Escolhe o método e valor</p>
@@ -382,18 +388,22 @@ export function Header() {
 
                 <div className="space-y-2.5 mb-5">
                   <button
-                    onClick={() => setSelectedMethod('mbway')}
+                    onClick={() => {
+                      if (isPaymentMethodEnabled('mbway')) setSelectedMethod('mbway');
+                    }}
+                    disabled={!isPaymentMethodEnabled('mbway')}
                     className={cn(
                       'w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all',
                       selectedMethod === 'mbway'
                         ? 'border-[#009688]/60 bg-[#009688]/10 shadow-[0_0_0_1px_rgba(0,150,136,0.25)]'
-                        : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
+                        : 'border-bet62-border bg-bet62-surface/50',
+                      !isPaymentMethodEnabled('mbway') && 'opacity-55 cursor-not-allowed',
                     )}
                   >
                     <PaymentMethodLogo method="mbway" size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm">MB WAY</p>
-                      <p className="text-xs text-white/50">Instantâneo · mín. €10</p>
+                      <p className="text-xs text-white/50">Em breve · usar Stripe ou Multibanco</p>
                     </div>
                     {selectedMethod === 'mbway' ? (
                       <div className="h-5 w-5 rounded-full bg-[#009688] flex items-center justify-center shrink-0">
@@ -438,8 +448,8 @@ export function Header() {
                   >
                     <PaymentMethodLogo method="card" size="sm" />
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm">Cartão Crédito / Débito</p>
-                      <p className="text-xs text-white/50">Visa / Mastercard · mín. €10</p>
+                      <p className="font-semibold text-sm">Stripe Checkout</p>
+                      <p className="text-xs text-white/50">Visa / Mastercard · 3D Secure</p>
                     </div>
                     {selectedMethod === 'card' ? (
                       <div className="h-5 w-5 rounded-full bg-slate-600 flex items-center justify-center shrink-0">
@@ -450,6 +460,10 @@ export function Header() {
                     )}
                   </button>
                 </div>
+
+                <p className="mb-4 text-[11px] leading-relaxed text-white/45">
+                  MB WAY ainda não está ativo como método nativo nesta conta Stripe, por isso fica marcado como indisponível até a ativação real.
+                </p>
 
                 <div className="mb-5">
                   <label className="block text-xs font-semibold text-white/60 uppercase tracking-wider mb-2">
@@ -501,8 +515,9 @@ export function Header() {
                 >
                   CONTINUAR
                 </Button>
-              </div>
-            </motion.div>
+                </div>
+              </motion.div>
+            </div>
           </>
         ) : null}
       </AnimatePresence>

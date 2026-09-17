@@ -24,6 +24,10 @@ import {
   CalendarDays,
   AlertTriangle,
   RefreshCw,
+  Info,
+  Server,
+  KeyRound,
+  ExternalLink,
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
@@ -62,6 +66,21 @@ const STATS = [
 const JACKPOT = 128459.22;
 
 type EventScore = { home?: number | null; away?: number | null };
+type BaseSelection = {
+  id?: string;
+  name: string;
+  label?: string;
+  code?: string;
+  odds: number;
+  status?: "active" | "suspended" | "settled" | "void";
+};
+type BaseMarket = {
+  id?: string;
+  code?: string;
+  name?: string;
+  status?: "active" | "suspended" | "settled" | "void";
+  selections: BaseSelection[];
+};
 type BaseEvent = {
   id: string;
   sportType: string;
@@ -74,7 +93,57 @@ type BaseEvent = {
   liveScoreJson?: EventScore | null;
   liveClockJson?: { minute?: number | null } | null;
   marketsCount?: number;
+  markets?: BaseMarket[];
+  selections?: BaseSelection[];
 };
+
+const MATCH_1X2_MARKET_CODES = new Set([
+  'MATCH_WINNER_1X2', 'MATCH_1X2', '1X2', 'FULL_TIME_1X2', 'FT_1X2',
+  'MATCH_WINNER', 'WINNER', 'FULL_TIME_RESULT', 'RESULT_FT',
+]);
+const HOME_SELECTION_CODES = new Set(['HOME', '1', 'HOME_TEAM', 'HOME_WIN', 'CASA']);
+const DRAW_SELECTION_CODES = new Set(['DRAW', 'X', 'DRAW_X', 'EMPATE', 'TIE']);
+const AWAY_SELECTION_CODES = new Set(['AWAY', '2', 'AWAY_TEAM', 'AWAY_WIN', 'FORA']);
+
+function findMatch1X2Odds(ev: BaseEvent): { home: number | null; draw: number | null; away: number | null } {
+  const markets = ev.markets ?? [];
+  let home: number | null = null;
+  let draw: number | null = null;
+  let away: number | null = null;
+  for (const m of markets) {
+    if (!m) continue;
+    const normalizedCode = String(m.code ?? m.name ?? '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '');
+    const isMatch =
+      MATCH_1X2_MARKET_CODES.has(normalizedCode) ||
+      normalizedCode.includes('1X2') ||
+      normalizedCode.includes('MATCHWINNER') ||
+      (normalizedCode.includes('WINNER') && !normalizedCode.includes('TOURNAMENT'));
+    if (!isMatch) continue;
+    if (m.status && m.status !== 'active') continue;
+    for (const s of m.selections ?? []) {
+      if (!s) continue;
+      if (s.status && s.status !== 'active') continue;
+      const code = String(s.code ?? s.name ?? '').trim().toUpperCase();
+      const clean = code.replace(/[^A-Z0-9]/g, '');
+      const oddsValue = Number(s.odds);
+      if (!Number.isFinite(oddsValue) || oddsValue <= 1) continue;
+      if (HOME_SELECTION_CODES.has(clean) || clean === '1' || code.endsWith(' 1')) {
+        if (home === null || oddsValue > home) home = oddsValue;
+      } else if (DRAW_SELECTION_CODES.has(clean) || clean === 'X' || /^X\b/.test(code) || /EMPA?TE/.test(code)) {
+        if (draw === null || oddsValue > draw) draw = oddsValue;
+      } else if (AWAY_SELECTION_CODES.has(clean) || clean === '2' || code.endsWith(' 2')) {
+        if (away === null || oddsValue > away) away = oddsValue;
+      }
+    }
+    if (home !== null || draw !== null || away !== null) break;
+  }
+  return { home, draw, away };
+}
+
+function formatOddsSafe(v: number | null, placeholder = ''): string {
+  if (v === null || !Number.isFinite(v) || v <= 1) return placeholder;
+  return formatOdds(v);
+}
 
 function FeaturedSkeleton({ i }: { i: number }) {
   return (
@@ -249,20 +318,27 @@ function FeaturedEventCard({ ev }: { ev: BaseEvent }) {
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2 pt-1">
-            {['Casa', 'Empate', 'Fora'].map((label, idx) => {
-              const defaultOdds = [1.85, 3.40, 4.20];
-              const odd = defaultOdds[idx];
-              return (
+            {(() => {
+              const odds = findMatch1X2Odds(ev);
+              const anyReal = odds.home !== null || odds.draw !== null || odds.away !== null;
+              return [
+                { label: 'Casa', value: formatOddsSafe(odds.home, anyReal ? '—' : 'Odds em atualização'), disabled: odds.home === null },
+                { label: 'Empate', value: formatOddsSafe(odds.draw, anyReal ? '—' : ''), disabled: odds.draw === null },
+                { label: 'Fora', value: formatOddsSafe(odds.away, anyReal ? '—' : ''), disabled: odds.away === null },
+              ].map((cell) => (
                 <Button
-                  key={label}
+                  key={cell.label}
                   variant="ghost"
-                  className="h-auto py-2 flex-col items-start text-left rounded-xl border border-bet62-border/60 hover:!border-bet62-primary/40 hover:!bg-bet62-primary/10"
+                  disabled={cell.disabled}
+                  className="h-auto py-2 flex-col items-start text-left rounded-xl border border-bet62-border/60 hover:!border-bet62-primary/40 hover:!bg-bet62-primary/10 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <span className="text-[10px] uppercase tracking-wider text-white/50">{label}</span>
-                  <span className="font-mono font-black text-bet62-primary mt-1">{formatOdds(odd)}</span>
+                  <span className="text-[10px] uppercase tracking-wider text-white/50">{cell.label}</span>
+                  <span className="font-mono font-black text-bet62-primary mt-1 leading-none break-all">
+                    {cell.value}
+                  </span>
                 </Button>
-              );
-            })}
+              ));
+            })()}
           </div>
         </CardContent>
       </Card>
@@ -274,10 +350,6 @@ function LiveEventCard({ ev }: { ev: BaseEvent }) {
   const home = ev.homeTeamName ?? ev.name.split(' vs ')[0] ?? 'Casa';
   const away = ev.awayTeamName ?? ev.name.split(' vs ')[1] ?? 'Fora';
   const score: EventScore = ev.liveScoreJson ?? {};
-  const minute = typeof (ev.liveClockJson as { minute?: number } | null)?.minute === 'number'
-    ? `${(ev.liveClockJson as { minute: number }).minute}'`
-    : ev.status;
-  void (minute);
 
   return (
     <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
@@ -315,19 +387,29 @@ function LiveEventCard({ ev }: { ev: BaseEvent }) {
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2 pt-1">
-            {['1', 'X', '2'].map((label, idx) => {
-              const defaultOdds = [1.95, 3.50, 4.05];
-              return (
+            {(() => {
+              const odds = findMatch1X2Odds(ev);
+              const anyReal = odds.home !== null || odds.draw !== null || odds.away !== null;
+              return [
+                { label: '1', value: formatOddsSafe(odds.home, anyReal ? '—' : 'Odds em atualização'), disabled: odds.home === null },
+                { label: 'X', value: formatOddsSafe(odds.draw, anyReal ? '—' : ''), disabled: odds.draw === null },
+                { label: '2', value: formatOddsSafe(odds.away, anyReal ? '—' : ''), disabled: odds.away === null },
+              ].map((cell) => (
                 <div
-                  key={label}
-                  className="rounded-lg bg-bet62-bg/60 border border-bet62-border/60 px-2 py-1.5 text-center"
+                  key={cell.label}
+                  className={
+                    'rounded-lg border px-2 py-1.5 text-center transition ' +
+                    (cell.disabled
+                      ? 'bg-bet62-bg/40 border-bet62-border/40 opacity-70'
+                      : 'bg-bet62-bg/60 border-bet62-border/60 hover:border-bet62-primary/50')
+                  }
                 >
-                  <p className="font-mono text-xs font-bold text-bet62-primary group-hover:text-bet62-primary/90">
-                    {formatOdds(defaultOdds[idx])}
+                  <p className="font-mono text-xs font-bold text-bet62-primary group-hover:text-bet62-primary/90 break-all">
+                    {cell.value}
                   </p>
                 </div>
-              );
-            })}
+              ));
+            })()}
           </div>
         </CardContent>
       </Card>
@@ -372,21 +454,27 @@ function UpcomingEventCard({ ev }: { ev: BaseEvent }) {
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2 pt-1">
-            {['1', 'X', '2'].map((label, idx) => {
-              const defaultOdds = [1.90, 3.30, 4.10];
-              return (
+            {(() => {
+              const odds = findMatch1X2Odds(ev);
+              const anyReal = odds.home !== null || odds.draw !== null || odds.away !== null;
+              return [
+                { label: '1', value: formatOddsSafe(odds.home, anyReal ? '—' : 'Odds em atualização'), disabled: odds.home === null },
+                { label: 'X', value: formatOddsSafe(odds.draw, anyReal ? '—' : ''), disabled: odds.draw === null },
+                { label: '2', value: formatOddsSafe(odds.away, anyReal ? '—' : ''), disabled: odds.away === null },
+              ].map((cell) => (
                 <Button
-                  key={label}
+                  key={cell.label}
                   variant="ghost"
-                  className="h-auto py-2 flex-col items-start text-left rounded-lg border border-bet62-border/60 hover:!border-bet62-primary/40 hover:!bg-bet62-primary/10"
+                  disabled={cell.disabled}
+                  className="h-auto py-2 flex-col items-start text-left rounded-lg border border-bet62-border/60 hover:!border-bet62-primary/40 hover:!bg-bet62-primary/10 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  <span className="text-[10px] uppercase tracking-wider text-white/50">{label}</span>
-                  <span className="font-mono font-black text-bet62-primary mt-1">
-                    {formatOdds(defaultOdds[idx])}
+                  <span className="text-[10px] uppercase tracking-wider text-white/50">{cell.label}</span>
+                  <span className="font-mono font-black text-bet62-primary mt-1 leading-none break-all">
+                    {cell.value}
                   </span>
                 </Button>
-              );
-            })}
+              ));
+            })()}
           </div>
         </CardContent>
       </Card>
@@ -401,6 +489,8 @@ export default function HomePage() {
   const [prematch, setPrematch] = React.useState<BaseEvent[]>([]);
   const [live, setLive] = React.useState<BaseEvent[]>([]);
   const [refetchAt, setRefetchAt] = React.useState<number>(Date.now());
+  const lastSetPrematchAt = React.useRef<number>(0);
+  const lastSetLiveAt = React.useRef<number>(0);
   const addToBetslip = useBetslipStore((s) => s.addSelection);
   void addToBetslip;
 
@@ -411,41 +501,126 @@ export default function HomePage() {
 
   React.useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
+    const firstRun = loading;
+    if (firstRun) setLoading(true);
     const runAll = async () => {
       try {
-        const [prematchRes, liveRes] = await Promise.all([
-          apiClient.get<{ events: BaseEvent[] }>('/odds/events/prematch?limit=50', { auth: false }),
-          apiClient.get<{ events: BaseEvent[] }>('/odds/events/live?limit=50', { auth: false }),
+        const [prematchRes, footballPrematchRes, footballLiveRes, liveRes] = await Promise.all([
+          apiClient.get<{ events: BaseEvent[]; total: number; page: number; limit: number }>('/odds/events/prematch?limit=50', { auth: false }),
+          (async () => {
+            try {
+              return await apiClient.get<{ events: BaseEvent[]; total: number; page: number; limit: number }>('/odds/events/prematch?sports=FOOTBALL&limit=50', { auth: false });
+            } catch {
+              return { events: [] as BaseEvent[], total: 0, page: 1, limit: 50 };
+            }
+          })(),
+          (async () => {
+            try {
+              return await apiClient.get<{ events: BaseEvent[]; total: number; page: number; limit: number }>('/odds/events/live?sports=FOOTBALL&limit=50', { auth: false });
+            } catch {
+              return { events: [] as BaseEvent[], total: 0, page: 1, limit: 50 };
+            }
+          })(),
+          apiClient.get<{ events: BaseEvent[]; total: number; page: number; limit: number }>('/odds/events/live?limit=50', { auth: false }),
         ]);
-        // #region debug-point H3,H5:home-success-count
-        (() => { const p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { if (typeof window !== 'undefined') { const e = ''; u = 'http://127.0.0.1:7777/event'; } } catch {} const d = { sessionId: s, runId: 'post-fix', hypothesisId: 'H3+H5', location: 'page.tsx:414', msg: '[DEBUG] home useEffect fetch SUCESSO (200 ok) - contagens recebidas', data: { prematchCount: prematchRes?.events?.length ?? 0, liveCount: liveRes?.events?.length ?? 0, hasPrematchTotalKey: Object.prototype.hasOwnProperty.call(prematchRes || {}, 'total'), hasLiveTotalKey: Object.prototype.hasOwnProperty.call(liveRes || {}, 'total') }, ts: Date.now() }; fetch(u, { method: 'POST', body: JSON.stringify(d), headers: { 'Content-Type': 'application/json' } }).catch(() => {}); })();
-        // #endregion
         if (cancelled) return;
-        setPrematch(prematchRes?.events ?? []);
-        setLive(liveRes?.events ?? []);
+        const now = Date.now();
+        const k = (ev: BaseEvent) => { const t = new Date(ev.kickoffAt).getTime(); return Number.isFinite(t) ? t : now; };
+        const seen = new Set<string>();
+        const merged: BaseEvent[] = [];
+        for (const src of [footballPrematchRes?.events ?? [], prematchRes?.events ?? []]) {
+          for (const ev of src) {
+            if (!ev || !ev.id) continue;
+            if (seen.has(ev.id)) {
+              const prev = merged.find((m) => m.id === ev.id);
+              if (prev && (!prev.markets || prev.markets.length === 0) && ev.markets && ev.markets.length > 0) {
+                prev.markets = ev.markets;
+                if (typeof (ev.marketsCount as unknown) === 'number') prev.marketsCount = ev.marketsCount;
+              }
+              continue;
+            }
+            seen.add(ev.id);
+            merged.push(ev);
+          }
+        }
+        const liveSeen = new Set<string>();
+        const liveMerged: BaseEvent[] = [];
+        for (const src of [footballLiveRes?.events ?? [], liveRes?.events ?? []]) {
+          for (const ev of src) {
+            if (!ev || !ev.id) continue;
+            if (liveSeen.has(ev.id)) {
+              const prev = liveMerged.find((m) => m.id === ev.id);
+              if (prev && (!prev.markets || prev.markets.length === 0) && ev.markets && ev.markets.length > 0) {
+                prev.markets = ev.markets;
+                if (typeof (ev.marketsCount as unknown) === 'number') prev.marketsCount = ev.marketsCount;
+              }
+              continue;
+            }
+            liveSeen.add(ev.id);
+            liveMerged.push(ev);
+          }
+        }
+        const isLiveStatus = (s: string) => s === 'LIVE' || s === 'HALF_TIME' || s === 'HT' || s === 'IN_PLAY';
+        const liveAll = liveMerged.filter((ev) => isLiveStatus(ev.status));
+        const sortedLiveAll = liveAll.length > 0
+          ? liveAll
+          : liveMerged.slice().sort((a, b) => k(b) - k(a)).slice(0, 10);
+        const futureCutoffMs = now - 180 * 60 * 1000;
+        const futurePrematch = merged.filter((ev) => {
+          if (isLiveStatus(ev.status)) return false;
+          const t = k(ev);
+          return t >= futureCutoffMs;
+        }).sort((a, b) => k(a) - k(b));
+        const fallbackPrematch = futurePrematch.length === 0
+          ? merged.slice().sort((a, b) => k(b) - k(a)).slice(0, 18)
+          : futurePrematch;
+        const nowTs = Date.now();
+        if (firstRun || fallbackPrematch.length > 0 || nowTs - lastSetPrematchAt.current > 60_000) {
+          setPrematch(fallbackPrematch);
+          lastSetPrematchAt.current = nowTs;
+        }
+        if (firstRun || sortedLiveAll.length > 0 || nowTs - lastSetLiveAt.current > 60_000) {
+          setLive(sortedLiveAll);
+          lastSetLiveAt.current = nowTs;
+        }
+        const pCount = fallbackPrematch.length;
+        const lCount = sortedLiveAll.length;
+        if (typeof console !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.table({
+            'Home fetch 200 OK': firstRun ? '1ª carga OK' : 'Refresh OK',
+            'Prematch (geral)': prematchRes?.events?.length ?? 0,
+            'Prematch Goal API football EXTRA': footballPrematchRes?.events?.length ?? 0,
+            'Ao vivo Goal API football EXTRA': footballLiveRes?.events?.length ?? 0,
+            'Ao vivo (geral)': liveRes?.events?.length ?? 0,
+            'Prematch unicos final (merge + dedupe + odds cross-over)': merged.length,
+            'Prematch futuro ou recente (<=3h pass.)': pCount,
+            'Ao vivo status LIVE/HT': lCount,
+            'Prematch.total backend': prematchRes?.total ?? 'N/A',
+            'Football.total backend': footballPrematchRes?.total ?? 'N/A',
+            'Live.total backend': liveRes?.total ?? 'N/A',
+            'API Keys?': pCount + lCount === 0 ? '⚠️  VERIFICAR RAILWAY PROPLINE_API_KEY + GOAL_API_KEY' : '✅ OK',
+          });
+        }
+        if (!firstRun) setError(null);
       } catch (err) {
-        // #region debug-point H3,H2a:home-silent-catch
-        (() => { const p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { if (typeof window !== 'undefined') { const e = ''; u = 'http://127.0.0.1:7777/event'; } } catch {} const d = { sessionId: s, runId: 'post-fix', hypothesisId: 'H3+H2a', location: 'page.tsx:421', msg: '[DEBUG] home useEffect fetch FALHOU - agora com setError + banner', data: { errorMessage: err instanceof Error ? err.message : String(err), errorName: err instanceof Error ? err.name : typeof err, expectedPostFixH2a: 'NAO deve mais ser 404 se o globalPrefix+Controller foram corrigidos' }, ts: Date.now() }; fetch(u, { method: 'POST', body: JSON.stringify(d), headers: { 'Content-Type': 'application/json' } }).catch(() => {}); })();
-        // #endregion
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : String(err);
-        setError(msg || 'Falha ao carregar jogos. A tentar novamente em 30 segundos...');
-        setPrematch([]);
-        setLive([]);
+        if (firstRun || prematch.length === 0) {
+          setError(msg || 'Falha ao carregar jogos. A tentar novamente em 30 segundos...');
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     };
-    runAll();
+    void runAll();
     return () => {
       cancelled = true;
     };
   }, [refetchAt]);
 
   const featured = prematch.slice(0, 6);
-  const upcoming = prematch.slice(0, 6);
+  const upcoming = prematch.slice(6, 18);
   const liveNow = live.slice(0, 5);
 
   return (
@@ -480,6 +655,63 @@ export default function HomePage() {
               >
                 <RefreshCw size={14} /> Tentar novamente
               </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {!loading && !error && prematch.length === 0 && live.length === 0 ? (
+        <div className="relative z-39 mx-4 mt-4 max-w-[1400px] lg:mx-auto lg:px-8">
+          <Card className="border-amber-500/30 bg-amber-500/5 backdrop-blur-xl shadow-xl shadow-amber-900/10">
+            <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+              <div className="shrink-0 w-11 h-11 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mt-0.5">
+                <Info size={20} className="text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0 space-y-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="amber" className="uppercase tracking-widest text-[10px] px-2 py-0.5">
+                    <Server size={10} className="mr-1" /> Sincronização em curso
+                  </Badge>
+                  <span className="text-xs text-white/45 font-mono">HTTP 200 · events.length=0</span>
+                </div>
+                <p className="font-bold text-amber-200 text-sm">
+                  Nenhum evento recebido dos provedores de odds ainda
+                </p>
+                <ol className="list-decimal pl-4 marker:text-amber-400 marker:font-bold space-y-1.5 text-xs text-white/70 leading-relaxed">
+                  <li>
+                    <span className="font-semibold text-white/85">Railway Dashboard:</span> Serviços <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">odds-service</code>, <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">api-gateway</code>, <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">web</code> → ⟳ <span className="font-semibold">Redeploy</span> com <span className="underline decoration-dashed decoration-amber-400/80">☑️ Clear build cache before redeploying</span> LIGADO (obrigatório).
+                  </li>
+                  <li>
+                    <span className="font-semibold text-white/85">Depois do redeploy:</span> a primeira sincronização Goal API + PropLine demora 1-3 minutos. Clica em "Tentar novamente" ou aguarda 2 minutos e faz Hard Refresh.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-white/85"><KeyRound size={12} className="inline mr-1" /> Variáveis obrigatórias:</span> <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">PROPLINE_API_KEY</code>, <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">GOAL_API_KEY</code>, <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">ENABLE_GOAL=true</code>, <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">ENABLE_PROPLINE=true</code> (serviço odds-service).
+                  </li>
+                  <li>
+                    <span className="font-semibold text-white/85">DevTools → Console:</span> procura por <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">console.table</code> BET62 — tem a contagem exata de "Goal API football extra" e "Futuro ou recente".
+                  </li>
+                </ol>
+                <div className="pt-1 flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setRefetchAt(Date.now())}
+                    className="border-amber-500/30 hover:!bg-amber-500/10 hover:!border-amber-500/60 transition text-amber-100"
+                  >
+                    <RefreshCw size={14} /> Tentar novamente agora
+                  </Button>
+                  <Link href="/ajuda" className="inline-flex">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-white/70"
+                      asChild
+                    >
+                      <span><ExternalLink size={14} /> Central de Ajuda</span>
+                    </Button>
+                  </Link>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>

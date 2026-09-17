@@ -17,6 +17,12 @@ import {
   Activity,
   Star,
   CircleUser,
+  Info,
+  Server,
+  KeyRound,
+  ExternalLink,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { Footer } from '../../components/layout/Footer';
@@ -29,25 +35,28 @@ import { Tabs, TabsList, TabsTrigger } from '../../components/ui/Tabs';
 import { Button } from '../../components/ui/Button';
 import { cn, formatOdds } from '../../lib/utils';
 import { apiClient } from '../../lib/api-client';
+import { eventToUiModal } from '../../lib/odds-adapters';
 import { useBetslipStore, type BetslipSelection } from '../../stores/betslip.store';
 
 const SPORTS = [
   { label: 'Todos', icon: Star, id: 'all' },
-  { label: 'Futebol', icon: CircleDot, id: 'football' },
-  { label: 'Basquete', icon: CircleDot, id: 'basketball' },
-  { label: 'Tênis', icon: Target, id: 'tennis' },
-  { label: 'Voleibol', icon: CircleDot, id: 'volleyball' },
-  { label: 'Hóquei', icon: CircleDot, id: 'hockey' },
-  { label: 'MMA / UFC', icon: Swords, id: 'mma' },
-  { label: 'Dardos', icon: Trophy, id: 'darts' },
+  { label: 'Futebol', icon: CircleDot, id: 'FOOTBALL' },
+  { label: 'Basquete', icon: CircleDot, id: 'BASKETBALL' },
+  { label: 'Tênis', icon: Target, id: 'TENNIS' },
+  { label: 'Voleibol', icon: CircleDot, id: 'VOLLEYBALL' },
+  { label: 'Hóquei', icon: CircleDot, id: 'HOCKEY' },
+  { label: 'MMA / UFC', icon: Swords, id: 'UFC' },
+  { label: 'Dardos', icon: Trophy, id: 'DARTS' },
 ];
 
 type LiveScore = { home?: number | null; away?: number | null; homeHalf?: number | null; awayHalf?: number | null };
 type LiveClock = { minute?: number | null; injuryMinutes?: number | null; status?: string };
 type LiveMarketSelection = { id: string; name: string; odds: number; outcome?: string; status?: string };
 type LiveMarket = { id: string; type?: string; name: string; status?: string; selections: LiveMarketSelection[] };
+type EventSources = { data: string; stats: string; odds: string; settlement: string };
 type LiveEvent = {
   id: string;
+  matchId?: string;
   providerEventId?: string;
   sportType: string;
   name: string;
@@ -63,6 +72,7 @@ type LiveEvent = {
   liveStreamAvailable?: boolean;
   markets?: LiveMarket[];
   marketsCount?: number;
+  sources?: EventSources;
 };
 
 function SkeletonMatchCard({ i }: { i: number }) {
@@ -127,12 +137,12 @@ function SkeletonMatchCard({ i }: { i: number }) {
   );
 }
 
-interface MarketSelectPayload {
-  marketId: string;
-  marketName: string;
-  selectionId: string;
-  selectionName: string;
+interface QuickSelectPayload {
+  market: string;
+  sel: string;
   odds: number;
+  selName: string;
+  marketName: string;
 }
 
 function LiveEventCard({
@@ -142,7 +152,7 @@ function LiveEventCard({
 }: {
   event: LiveEvent;
   onOpenMarkets: (e: LiveEvent) => void;
-  onSelect: (event: LiveEvent, payload: MarketSelectPayload) => void;
+  onSelect: (event: LiveEvent, payload: QuickSelectPayload) => void;
 }) {
   const score: LiveScore = event.liveScoreJson ?? ({} as LiveScore);
   const clock: LiveClock = event.liveClockJson ?? ({} as LiveClock);
@@ -152,6 +162,12 @@ function LiveEventCard({
   const mainMarket: LiveMarket | undefined = event.markets?.[0];
   const selections: LiveMarketSelection[] = mainMarket?.selections ?? [];
   while (selections.length < 3) selections.push({ id: `f${selections.length}`, name: '-', odds: 0, status: 'suspended' });
+  const sourceLabel =
+    event.sportType === 'FOOTBALL'
+      ? 'Goal API + PropLine'
+      : event.sources?.odds === 'propline'
+        ? 'PropLine'
+        : event.sportType;
 
   return (
     <motion.article
@@ -171,6 +187,9 @@ function LiveEventCard({
                 <Timer size={12} /> {min}
               </Badge>
             </div>
+            <p className="text-[11px] uppercase tracking-wider text-white/40 font-semibold">
+              Fontes: {sourceLabel}
+            </p>
             <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
               <div className="space-y-3 min-w-0">
                 <div className="flex items-center gap-3">
@@ -202,11 +221,11 @@ function LiveEventCard({
                   variant="ghost"
                   onClick={() =>
                     onSelect(event, {
-                      marketId: mainMarket?.id ?? 'main',
-                      marketName: mainMarket?.name ?? 'Resultado Final',
-                      selectionId: s.id,
-                      selectionName: s.name,
+                      market: mainMarket?.id ?? 'main',
+                      sel: s.id,
                       odds: s.odds,
+                      selName: s.name,
+                      marketName: mainMarket?.name ?? 'Resultado Final',
                     })
                   }
                   className="h-auto py-3 flex-col items-start text-left group/sel hover:!bg-bet62-primary/10 hover:!border-bet62-primary/40 border border-bet62-border rounded-2xl"
@@ -273,33 +292,111 @@ export default function LivePage() {
   const [error, setError] = React.useState<string | null>(null);
   const [events, setEvents] = React.useState<LiveEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = React.useState<LiveEvent | null>(null);
+  const [selectedEventDetail, setSelectedEventDetail] = React.useState<(LiveEvent & { markets: LiveMarket[] }) | null>(null);
+  const [selectedEventLoading, setSelectedEventLoading] = React.useState(false);
   const [refetchAt, setRefetchAt] = React.useState<number>(Date.now());
+  const lastSetEventsAt = React.useRef<number>(0);
+  const lastSportRef = React.useRef<string>('all');
 
   React.useEffect(() => {
-    const t = window.setInterval(() => setRefetchAt(Date.now()), 15_000);
+    const t = window.setInterval(() => setRefetchAt(Date.now()), 30_000);
     return () => window.clearInterval(t);
   }, []);
 
   React.useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError(null);
-    const searchParams: Record<string, string> = { limit: '100' };
-    if (sport !== 'all') searchParams.sports = `["${sport.toUpperCase()}"]`;
-    const q = new URLSearchParams(searchParams).toString();
-    apiClient
-      .get<{ events: LiveEvent[]; total: number }>(`/odds/events/live${q ? `?${q}` : ''}`, { auth: false })
-      .then((res) => {
+    const firstRun = loading || lastSportRef.current !== sport;
+    lastSportRef.current = sport;
+    if (firstRun) setLoading(true);
+    const run = async () => {
+      try {
+        const mainReq = apiClient.get<{ events: LiveEvent[]; total: number }>('/odds/events/live', {
+          auth: false,
+          params: sport !== 'all'
+            ? { limit: 100, sports: [sport] }
+            : { limit: 100 },
+        });
+        const footballLiveReq = sport !== 'all' && sport !== 'FOOTBALL'
+          ? Promise.resolve({ events: [] as LiveEvent[], total: 0 })
+          : (async () => {
+              try {
+                return await apiClient.get<{ events: LiveEvent[]; total: number }>('/odds/events/live?sports=FOOTBALL&limit=50', { auth: false });
+              } catch {
+                return { events: [] as LiveEvent[], total: 0 };
+              }
+            })();
+        const footballPrematchReq = sport !== 'all' && sport !== 'FOOTBALL'
+          ? Promise.resolve({ events: [] as LiveEvent[], total: 0 })
+          : (async () => {
+              try {
+                return await apiClient.get<{ events: LiveEvent[]; total: number }>('/odds/events/prematch?sports=FOOTBALL&limit=30', { auth: false });
+              } catch {
+                return { events: [] as LiveEvent[], total: 0 };
+              }
+            })();
+        const [res, footballLiveExtra, footballPrematchExtra] = await Promise.all([mainReq, footballLiveReq, footballPrematchReq]);
         if (cancelled) return;
-        setEvents(res?.events ?? []);
-      })
-      .catch((err) => {
+        const now = Date.now();
+        const isLiveStatus = (s: string) => s === 'LIVE' || s === 'HALF_TIME' || s === 'HT' || s === 'IN_PLAY';
+        const k = (ev: LiveEvent) => { const t = new Date(ev.kickoffAt).getTime(); return Number.isFinite(t) ? t : now; };
+        const hasMarkets = (ev: LiveEvent): boolean => {
+          const m = (ev as unknown as { markets?: unknown[] }).markets;
+          return Array.isArray(m) && m.length > 0;
+        };
+        const seen = new Set<string>();
+        const merged: LiveEvent[] = [];
+        for (const ev of [...(footballLiveExtra?.events ?? []), ...(footballPrematchExtra?.events ?? []), ...(res?.events ?? [])]) {
+          if (!ev || !ev.id) continue;
+          if (seen.has(ev.id)) {
+            const prev = merged.find((m) => m.id === ev.id);
+            if (prev && !hasMarkets(prev) && hasMarkets(ev)) {
+              (prev as unknown as { markets: unknown[] }).markets = (ev as unknown as { markets: unknown[] }).markets;
+            }
+            continue;
+          }
+          seen.add(ev.id);
+          merged.push(ev);
+        }
+        const liveOnly = merged.filter(ev => isLiveStatus(ev.status));
+        const futureCutoffMs = now - 180 * 60 * 1000;
+        const futureOrRecent = merged.filter(ev => {
+          if (isLiveStatus(ev.status)) return false;
+          const t = k(ev);
+          return t >= futureCutoffMs;
+        }).sort((a, b) => k(a) - k(b));
+        const final = liveOnly.length > 0
+          ? liveOnly
+          : [...futureOrRecent].slice(0, 30);
+        const count = final.length;
+        const nowTs = Date.now();
+        if (firstRun || count > 0 || nowTs - lastSetEventsAt.current > 60_000) {
+          setEvents(final);
+          lastSetEventsAt.current = nowTs;
+        }
+        if (typeof console !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.table({
+            'Live fetch (200 OK)': firstRun ? '1ª carga OK' : 'Refresh OK',
+            'Desporto selecionado': sport,
+            'Ao vivo (status LIVE/HT)': liveOnly.length,
+            'Futebol Goal API extra LIVE': footballLiveExtra?.events?.length ?? 0,
+            'Futebol Goal API extra PRÉ-JOGO': footballPrematchExtra?.events?.length ?? 0,
+            'Total unicos merge + odds cross-over': merged.length,
+            'Total mostrados (fallback incluso)': count,
+            'Total backend': res?.total ?? 'N/A',
+            'API Keys?': count === 0 ? '⚠️  VERIFICAR RAILWAY PROPLINE_API_KEY + GOAL_API_KEY' : '✅ OK',
+          });
+        }
+        if (!firstRun) setError(null);
+      } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Erro ao carregar jogos ao vivo');
-      })
-      .finally(() => {
+        const msg = err instanceof Error ? err.message : 'Erro ao carregar jogos ao vivo';
+        if (firstRun || events.length === 0) setError(msg);
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    };
+    void run();
     return () => {
       cancelled = true;
     };
@@ -320,47 +417,131 @@ export default function LivePage() {
 
   const liveCount = filtered.length;
 
-  const handleSelect = (event: LiveEvent, payload: MarketSelectPayload) => {
+  const handleOpenMarkets = React.useCallback((event: LiveEvent) => {
+    setSelectedEvent(event);
+    setSelectedEventDetail(null);
+    setSelectedEventLoading(true);
+    apiClient
+      .get<LiveEvent & { markets: LiveMarket[] }>(`/odds/events/${encodeURIComponent(event.id)}`, {
+        auth: false,
+      })
+      .then((detail) => {
+        setSelectedEventDetail(detail);
+      })
+      .catch(() => {
+        setSelectedEventDetail({
+          ...event,
+          markets: [],
+        });
+      })
+      .finally(() => setSelectedEventLoading(false));
+  }, []);
+
+  const handleSelect = (event: LiveEvent, payload: QuickSelectPayload) => {
     const homeName = event.homeTeamName ?? event.name.split(' vs ')[0] ?? 'Casa';
     const awayName = event.awayTeamName ?? event.name.split(' vs ')[1] ?? 'Fora';
     const sel: BetslipSelection = {
-      id: `${event.id}-${payload.marketId}-${payload.selectionId}`,
+      id: `${event.id}-${payload.market}-${payload.sel}`,
       eventId: event.id,
-      marketId: `${event.id}-${payload.marketId}`,
-      selectionId: `${event.id}-${payload.marketId}-${payload.selectionId}`,
-      selectionName: payload.selectionName,
+      marketId: `${event.id}-${payload.market}`,
+      selectionId: `${event.id}-${payload.market}-${payload.sel}`,
+      selectionName: payload.selName,
       marketName: payload.marketName,
       eventName: `${homeName} vs ${awayName} · ${event.leagueName ?? event.sportType}`,
       kickoffAt: new Date(event.kickoffAt).toISOString(),
       odds: payload.odds,
       marketType: '1X2',
-      outcome: payload.selectionId,
+      outcome: payload.sel,
     };
     addSelection(sel);
     setBetslipOpen(true);
   };
 
-  const selectedMarketsEvent = selectedEvent
-    ? {
-        id: selectedEvent.id,
-        home: selectedEvent.homeTeamName ?? selectedEvent.name.split(' vs ')[0] ?? 'Casa',
-        away: selectedEvent.awayTeamName ?? selectedEvent.name.split(' vs ')[1] ?? 'Fora',
-        league: selectedEvent.leagueName ?? selectedEvent.sportType,
-        minute: selectedEvent.liveClockJson?.minute ?? undefined,
-        live: true,
-        markets: (selectedEvent.markets ?? []).map((m) => ({
-          id: m.id,
-          name: m.name,
-          type: m.type,
-          status: m.status,
-          selections: m.selections,
-        })),
-      }
-    : null;
-
   return (
     <div className="min-h-screen bg-bet62-bg">
       <Header />
+      {error ? (
+        <div className="relative z-40 mx-4 mt-4 max-w-[1700px] lg:mx-auto lg:px-8">
+          <Card className="border-red-500/40 bg-red-500/5 backdrop-blur-xl shadow-xl shadow-red-900/20">
+            <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="shrink-0 w-11 h-11 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center">
+                  <AlertTriangle size={20} className="text-red-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-red-300 text-sm flex items-center gap-2">
+                    <span className="uppercase tracking-widest text-[10px] px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20">Erro</span>
+                    Não foi possível carregar jogos ao vivo
+                  </p>
+                  <p className="mt-1 text-xs sm:text-sm text-white/65 font-mono truncate max-w-full">
+                    {error}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-white/40">
+                    Tentativa automática em 15s · Clica em "Tentar novamente"
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRefetchAt(Date.now())}
+                className="shrink-0 w-full sm:w-auto border-red-500/30 hover:!bg-red-500/10 hover:!border-red-500/60 transition"
+              >
+                <RefreshCw size={14} /> Tentar novamente
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {!loading && !error && filtered.length === 0 ? (
+        <div className="relative z-39 mx-4 mt-4 max-w-[1700px] lg:mx-auto lg:px-8">
+          <Card className="border-amber-500/30 bg-amber-500/5 backdrop-blur-xl shadow-xl shadow-amber-900/10">
+            <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-4">
+              <div className="shrink-0 w-11 h-11 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center mt-0.5">
+                <Info size={20} className="text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0 space-y-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="amber" className="uppercase tracking-widest text-[10px] px-2 py-0.5">
+                    <Server size={10} className="mr-1" /> Sem eventos ao vivo
+                  </Badge>
+                  <span className="text-xs text-white/45 font-mono">
+                    HTTP 200 · filtered.length=0 · sport="{sport}"
+                  </span>
+                </div>
+                <p className="font-bold text-amber-200 text-sm">
+                  Nenhum jogo ao vivo neste momento (HTTP 200, sem erro de rede)
+                </p>
+                <ol className="list-decimal pl-4 marker:text-amber-400 marker:font-bold space-y-1.5 text-xs text-white/70 leading-relaxed">
+                  <li>
+                    <span className="font-semibold text-white/85">Muda para o separador "Todos":</span> o filtro "{sport}" pode estar a excluir jogos. Clica em <Badge variant="outline" className="!py-0 text-[10px] px-1.5 mx-1 inline-flex align-middle">Todos</Badge> nas tabs acima.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-white/85">Aguarda sincronização inicial Railway:</span> a primeira carga (cold start) demora 60-120s. Clica em "Tentar novamente" ao fim de 2 minutos.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-white/85"><KeyRound size={12} className="inline mr-1" /> Variáveis Railway:</span> confirmar que <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">PROPLINE_API_KEY</code> e <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">GOAL_API_KEY</code> são reais, não placeholder.
+                  </li>
+                  <li>
+                    <span className="font-semibold text-white/85">DevTools Console:</span> procura por <code className="font-mono text-[11px] bg-bet62-surface border border-bet62-border rounded px-1.5 py-0.5">console.table</code> (BET62) com contagens e sugestões.
+                  </li>
+                </ol>
+                <div className="pt-1 flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setSport('all'); setRefetchAt(Date.now()); }}
+                    className="border-amber-500/30 hover:!bg-amber-500/10 hover:!border-amber-500/60 transition text-amber-100"
+                  >
+                    <RefreshCw size={14} /> Mostrar Todos + Re-sincronizar
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
       <main className="relative">
         <div className="absolute inset-x-0 top-0 h-[420px] bg-gradient-to-b from-bet62-primary/10 via-bet62-accent/5 to-transparent pointer-events-none" />
         <div className="relative max-w-[1700px] mx-auto px-4 lg:px-8 py-8">
@@ -448,7 +629,7 @@ export default function LivePage() {
             ) : null}
             {!loading && !error && filtered.length > 0
               ? filtered.map((ev) => (
-                  <LiveEventCard key={ev.id} event={ev} onOpenMarkets={setSelectedEvent} onSelect={handleSelect} />
+                  <LiveEventCard key={ev.id} event={ev} onOpenMarkets={handleOpenMarkets} onSelect={handleSelect} />
                 ))
               : null}
           </div>
@@ -458,14 +639,34 @@ export default function LivePage() {
       <Betslip open={betslipOpen} onClose={() => setBetslipOpen(false)} />
       <FloatingBetslipToggle onClick={() => setBetslipOpen(true)} open={betslipOpen} />
       <EventMarketsModal
-        event={selectedMarketsEvent}
-        score={selectedEvent ? [selectedEvent.liveScoreJson?.home, selectedEvent.liveScoreJson?.away] : undefined}
-        onClose={() => setSelectedEvent(null)}
-        onSelect={(payload) => {
-          if (selectedEvent) handleSelect(selectedEvent, payload);
+        event={selectedEventDetail ? eventToUiModal(selectedEventDetail) : null}
+        score={
+          selectedEventDetail?.liveScoreJson
+            ? [
+                ((selectedEventDetail.liveScoreJson as LiveScore).home ?? 0),
+                ((selectedEventDetail.liveScoreJson as LiveScore).away ?? 0),
+              ]
+            : undefined
+        }
+        onClose={() => {
           setSelectedEvent(null);
+          setSelectedEventDetail(null);
+          setSelectedEventLoading(false);
+        }}
+        onSelect={(payload) => {
+          if (selectedEventDetail) handleSelect(selectedEventDetail, payload);
+          setSelectedEvent(null);
+          setSelectedEventDetail(null);
+          setSelectedEventLoading(false);
         }}
       />
+      {selectedEvent && selectedEventLoading ? (
+        <div className="fixed inset-x-0 bottom-6 z-[82] flex justify-center pointer-events-none">
+          <Badge variant="blue" className="px-3 py-1.5">
+            A carregar mercados reais...
+          </Badge>
+        </div>
+      ) : null}
     </div>
   );
 }

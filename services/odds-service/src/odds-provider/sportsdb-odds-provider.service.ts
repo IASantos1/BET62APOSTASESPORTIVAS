@@ -58,7 +58,10 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
   constructor() {
     super();
     this.apiKey = process.env.SPORTSDB_API_KEY || TEST_KEY;
-    this.baseUrl = process.env.SPORTSDB_BASE_URL || SPORTSDB_BASE;
+    this.baseUrl = String(process.env.SPORTSDB_BASE_URL ?? SPORTSDB_BASE ?? '')
+      .trim()
+      .replace(/[,;\s]+$/g, '')
+      .replace(/\/+$/g, '');
   }
 
   private async safeFetch<T>(url: string): Promise<T | null> {
