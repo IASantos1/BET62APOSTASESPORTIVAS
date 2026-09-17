@@ -337,40 +337,50 @@ export class ProplineOddsProviderService
   ): Promise<ProviderEvent[]> {
     if (this.fatalInitFailed) return [];
     try {
-      const out: ProviderEvent[] = [];
       const sportKeys = await this.resolveRequestedSportKeys(opts.sport);
-      for (const sportKey of sportKeys) {
-        const rawList = await this.http.getEventsBySport(sportKey);
-        const sportType = mapPropLineSportKeyToSportType(sportKey);
-        if (!sportType) continue;
-        const oddsBySportKey = rawList.length > 0
-          ? await this.fetchOddsMapForSportKey(sportKey, opts.live)
-          : new Map<string, ProviderMarket[]>();
-        for (const pe of rawList) {
-          if (opts.live) {
-            if (!pe.live || pe.completed) continue;
-          } else {
-            if (pe.live || pe.completed) continue;
+      // Cada sportKey dispara 2 chamadas HTTP (eventos + odds em lote). Com
+      // dezenas de sportKeys (ex: uma liga por chave), rodar isso em serie
+      // (for..of com await) somava os timeouts de todas as chamadas e podia
+      // deixar a listagem de pré-jogo/ao vivo travada por minutos no
+      // frontend. Buscando tudo em paralelo, o tempo total fica limitado ao
+      // timeout de uma unica chamada lenta, nao a soma de todas.
+      const perSportKeyResults = await Promise.all(
+        sportKeys.map(async (sportKey): Promise<ProviderEvent[]> => {
+          const sportType = mapPropLineSportKeyToSportType(sportKey);
+          if (!sportType) return [];
+          const [rawList, oddsBySportKey] = await Promise.all([
+            this.http.getEventsBySport(sportKey),
+            this.fetchOddsMapForSportKey(sportKey, opts.live),
+          ]);
+          const events: ProviderEvent[] = [];
+          for (const pe of rawList) {
+            if (opts.live) {
+              if (!pe.live || pe.completed) continue;
+            } else {
+              if (pe.live || pe.completed) continue;
+            }
+            const pev = this.mapProplineEventToProviderEvent(pe, sportType, true);
+            const markets = oddsBySportKey.get(String(pe.id ?? '')) ?? oddsBySportKey.get(String(pe.event_id ?? ''));
+            if (markets && markets.length > 0) {
+              pev.markets = markets;
+              pev.marketsCount = markets.length;
+            }
+            if (opts.league) {
+              const leagueKey = String(opts.league).toLowerCase();
+              const leagueName = (pev.leagueName ?? '').toLowerCase();
+              const leagueId = (pev.leagueId ?? '').toLowerCase();
+              if (leagueName !== leagueKey && leagueId !== leagueKey) continue;
+            }
+            if (!opts.live) {
+              if (opts.from && pev.kickoffAt < opts.from) continue;
+              if (opts.to && pev.kickoffAt > opts.to) continue;
+            }
+            events.push(pev);
           }
-          const pev = this.mapProplineEventToProviderEvent(pe, sportType, true);
-          const markets = oddsBySportKey.get(String(pe.id ?? '')) ?? oddsBySportKey.get(String(pe.event_id ?? ''));
-          if (markets && markets.length > 0) {
-            pev.markets = markets;
-            pev.marketsCount = markets.length;
-          }
-          if (opts.league) {
-            const leagueKey = String(opts.league).toLowerCase();
-            const leagueName = (pev.leagueName ?? '').toLowerCase();
-            const leagueId = (pev.leagueId ?? '').toLowerCase();
-            if (leagueName !== leagueKey && leagueId !== leagueKey) continue;
-          }
-          if (!opts.live) {
-            if (opts.from && pev.kickoffAt < opts.from) continue;
-            if (opts.to && pev.kickoffAt > opts.to) continue;
-          }
-          out.push(pev);
-        }
-      }
+          return events;
+        }),
+      );
+      const out = perSportKeyResults.flat();
       out.sort((a, b) => a.kickoffAt.getTime() - b.kickoffAt.getTime());
       return opts.limit ? out.slice(0, opts.limit) : out;
     } catch (err) {
@@ -485,10 +495,11 @@ export class ProplineOddsProviderService
       if (this.fatalInitFailed) return [];
       const keys = await this.resolveRequestedSportKeys(sport as unknown as string | undefined);
       const leagues = new Map<string, ProviderLeague>();
-      for (const key of keys) {
-        const sportType = mapPropLineSportKeyToSportType(key);
+      const perKeyEvents = await Promise.all(
+        keys.map(async (key) => ({ key, sportType: mapPropLineSportKeyToSportType(key), events: await this.http.getEventsBySport(key) })),
+      );
+      for (const { key, sportType, events } of perKeyEvents) {
         if (!sportType) continue;
-        const events = await this.http.getEventsBySport(key);
         for (const event of events) {
           const providerLeagueId = event.league_key ?? key;
           const leagueId = buildCompositeId(key, providerLeagueId);
