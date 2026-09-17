@@ -62,4 +62,32 @@ export class OddsController {
   async getEventMarkets(@Param('id') eventId: string): Promise<MarketDto[]> {
     return this.oddsService.getEventMarkets(eventId);
   }
+
+  @Get('events/:id/statistics')
+  @ApiOperation({ summary: 'Estatísticas do evento (futebol: Goal API com xG; outros esportes: PropLine)' })
+  @ApiParam({ name: 'id', type: String, description: 'ID do evento (composite SPORT:id ou goal:fixtureId)' })
+  async getEventStatistics(@Param('id') eventId: string) {
+    return this.oddsService.getEventStatistics(eventId);
+  }
+
+  @Get('events/:id/h2h')
+  @ApiOperation({ summary: 'Confrontos diretos entre as equipas (apenas futebol, via Goal API)' })
+  @ApiParam({ name: 'id', type: String, description: 'ID do evento (goal:fixtureId)' })
+  async getEventH2H(@Param('id') eventId: string) {
+    return this.oddsService.getEventH2H(eventId);
+  }
+
+  @Get('events/:id/commentary')
+  @ApiOperation({ summary: 'Comentários da partida minuto a minuto (apenas futebol, via Goal API)' })
+  @ApiParam({ name: 'id', type: String, description: 'ID do evento (goal:fixtureId)' })
+  async getEventCommentary(@Param('id') eventId: string) {
+    return this.oddsService.getEventCommentary(eventId);
+  }
+
+  @Get('events/:id/timeline')
+  @ApiOperation({ summary: 'Linha do tempo de eventos: golos, cartões, substituições (apenas futebol, via Goal API)' })
+  @ApiParam({ name: 'id', type: String, description: 'ID do evento (goal:fixtureId)' })
+  async getEventTimeline(@Param('id') eventId: string) {
+    return this.oddsService.getEventTimeline(eventId);
+  }
 }

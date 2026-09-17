@@ -365,14 +365,34 @@ export class ProplineHttpClient {
     return this.getEventOdds(sportKey, eventId, ['h2h', 'spreads', 'totals'], bookmakers);
   }
 
-  async getScores(eventId: string): Promise<ProplineScoreResponse | null> {
-    this.logger.verbose(`PropLine getScores não implementado na integração oficial para eventId=${eventId}.`);
-    return null;
+  async getScores(sportKey: string, eventId: string): Promise<ProplineScoreResponse | null> {
+    try {
+      const res = await this.request<ProplineScoreResponse | null>(
+        'GET',
+        `/v1/sports/${encodeURIComponent(sportKey)}/events/${encodeURIComponent(eventId)}/scores`,
+        undefined,
+        null,
+        null,
+      );
+      return res ?? null;
+    } catch {
+      return null;
+    }
   }
 
-  async getStats(eventId: string, period: string = 'full'): Promise<ProplineStatsResponse | null> {
-    this.logger.verbose(`PropLine getStats não implementado na integração oficial para eventId=${eventId}, period=${period}.`);
-    return null;
+  async getStats(sportKey: string, eventId: string, period: string = 'full'): Promise<ProplineStatsResponse | null> {
+    try {
+      const res = await this.request<ProplineStatsResponse | null>(
+        'GET',
+        `/v1/sports/${encodeURIComponent(sportKey)}/events/${encodeURIComponent(eventId)}/stats`,
+        { period },
+        null,
+        null,
+      );
+      return res ?? null;
+    } catch {
+      return null;
+    }
   }
 
   getRateLimitSnapshot(): Readonly<{
