@@ -176,25 +176,45 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
 
               <div className="lg:col-span-5 xl:col-span-4 min-w-0">
                 <Tabs defaultValue="tracker">
-                  <TabsList className="w-full h-auto flex flex-wrap gap-1 p-1">
-                    <TabsTrigger value="tracker" className="shrink-0 px-2.5 py-1.5 text-xs">
-                      <span className="inline-flex items-center gap-1">
-                        <PlayCircle size={13} /> Match Tracker
+                  <TabsList className="w-full h-auto grid grid-cols-4 gap-1 p-1 sm:flex sm:flex-wrap">
+                    <TabsTrigger
+                      value="tracker"
+                      className="px-1 sm:px-2.5 py-2 sm:py-1.5 text-[10px] sm:text-xs leading-tight"
+                    >
+                      <span className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 w-full">
+                        <PlayCircle size={17} className="sm:hidden" />
+                        <PlayCircle size={13} className="hidden sm:inline" />
+                        <span className="truncate max-w-full">Match Tracker</span>
                       </span>
                     </TabsTrigger>
-                    <TabsTrigger value="stats" className="shrink-0 px-2.5 py-1.5 text-xs">
-                      <span className="inline-flex items-center gap-1">
-                        <BarChart3 size={13} /> Estatísticas
+                    <TabsTrigger
+                      value="stats"
+                      className="px-1 sm:px-2.5 py-2 sm:py-1.5 text-[10px] sm:text-xs leading-tight"
+                    >
+                      <span className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 w-full">
+                        <BarChart3 size={17} className="sm:hidden" />
+                        <BarChart3 size={13} className="hidden sm:inline" />
+                        <span className="truncate max-w-full">Estatísticas</span>
                       </span>
                     </TabsTrigger>
-                    <TabsTrigger value="h2h" className="shrink-0 px-2.5 py-1.5 text-xs">
-                      <span className="inline-flex items-center gap-1">
-                        <Swords size={13} /> H2H
+                    <TabsTrigger
+                      value="h2h"
+                      className="px-1 sm:px-2.5 py-2 sm:py-1.5 text-[10px] sm:text-xs leading-tight"
+                    >
+                      <span className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 w-full">
+                        <Swords size={17} className="sm:hidden" />
+                        <Swords size={13} className="hidden sm:inline" />
+                        <span className="truncate max-w-full">H2H</span>
                       </span>
                     </TabsTrigger>
-                    <TabsTrigger value="standings" className="shrink-0 px-2.5 py-1.5 text-xs">
-                      <span className="inline-flex items-center gap-1">
-                        <ListOrdered size={13} /> Classificação
+                    <TabsTrigger
+                      value="standings"
+                      className="px-1 sm:px-2.5 py-2 sm:py-1.5 text-[10px] sm:text-xs leading-tight"
+                    >
+                      <span className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 w-full">
+                        <ListOrdered size={17} className="sm:hidden" />
+                        <ListOrdered size={13} className="hidden sm:inline" />
+                        <span className="truncate max-w-full">Classificação</span>
                       </span>
                     </TabsTrigger>
                   </TabsList>
