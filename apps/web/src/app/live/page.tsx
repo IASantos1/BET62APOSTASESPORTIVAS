@@ -174,7 +174,7 @@ function LiveEventCard({
       transition={{ duration: 0.35 }}
     >
       <Card
-        role="but ou ton"
+        role="button"
         tabIndex={0}
         onClick={() => onOpenMarkets(event)}
         onKeyDown={(e) => {
