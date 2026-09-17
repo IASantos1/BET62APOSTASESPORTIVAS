@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120" width="200" height="120">
+  <defs>
+    <linearGradient id="visaBg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1A1F71"/>
+      <stop offset="50%" stop-color="#0A4B9F"/>
+      <stop offset="100%" stop-color="#1A1F71"/>
+    </linearGradient>
+    <linearGradient id="visaGold" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#F7B600"/>
+      <stop offset="50%" stop-color="#FFD700"/>
+      <stop offset="100%" stop-color="#E5A000"/>
+    </linearGradient>
+  </defs>
+  <rect width="200" height="120" rx="16" fill="url(#visaBg)"/>
+  <g transform="translate(20, 20)">
+    <rect x="0" y="0" width="160" height="80" rx="10" fill="white"/>
+    <rect x="0" y="0" width="160" height="18" rx="10" fill="url(#visaGold)"/>
+    <rect x="0" y="62" width="160" height="18" rx="10" fill="url(#visaGold)"/>
+    <path d="M58 36 L64 58 L70 36 L76 58 L82 36" stroke="#1A1F71" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M92 58 L100 36 L108 58 M94 49 L106 49" stroke="#1A1F71" stroke-width="3.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M118 58 L118 36 L132 36 Q140 36 140 45 Q140 53 132 54 L124 54 L124 58 Z M124 42 L124 48 L130 48 Q134 48 134 45 Q134 42 130 42 Z" fill="#1A1F71"/>
+    <path d="M28 58 L40 36 L46 36 L36 58 L28 58 Z" fill="#1A1F71"/>
+    <rect x="30" y="24" width="10" height="6" rx="1" fill="#1A1F71"/>
+  </g>
+  <text x="100" y="108" text-anchor="middle" fontFamily="Georgia, 'Times New Roman', serif" fontSize="18" fontWeight="900" fill="white" letter-spacing="4" font-style="italic">VISA</text>
+</svg>

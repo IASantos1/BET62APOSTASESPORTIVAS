@@ -198,6 +198,7 @@ model Event {
   providerEventId         String      @unique
   name                    String
   sportId                 String
+  sportCode               String?
   leagueId                String
   homeTeamId              String?
   awayTeamId              String?
@@ -229,6 +230,8 @@ model Event {
   settledAt               DateTime?
   winner                  String?
   slug                    String?     @unique
+  goalFixtureId           String?
+  proplineEventId         String?
 
   sport                   Sport       @relation(fields: [sportId], references: [id], onDelete: Cascade)
   league                  League      @relation(fields: [leagueId], references: [id], onDelete: Cascade)
@@ -363,4 +366,199 @@ model ProviderSyncState {
 
   @@schema("odds")
   @@map("provider_sync_state")
+}
+
+enum ProviderName {
+  GOAL_API
+  PROPLINE
+  GOALDIR
+  SPORTSDB
+  MOCK
+  @@schema("odds")
+}
+
+model ProviderMatchMapping {
+  id                  String   @id @default(uuid())
+  sportCode           String
+  bet62MatchId        String?
+  stableKey           String
+
+  goalApiFixtureId    String?
+  goalApiLeagueId     String?
+  goalApiHomeTeamId   String?
+  goalApiAwayTeamId   String?
+  goalApiHomeName     String?
+  goalApiAwayName     String?
+  goalApiKickoffAt    DateTime?
+
+  proplineEventId     String?
+  proplineSportKey    String?
+  proplineLeagueKey   String?
+  proplineHomeKey     String?
+  proplineAwayKey     String?
+  proplineHomeName    String?
+  proplineAwayName    String?
+  proplineKickoffAt   DateTime?
+
+  confidence          Decimal  @db.Decimal(5, 4)
+  confidenceSource    String
+  status              String   @default("pending")
+  locked              Boolean  @default(false)
+  lastMismatchAt      DateTime?
+  mismatchCount       Int      @default(0)
+  metadata            Json?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  reconciledAt        DateTime?
+
+  providerEvents      ProviderEvent[]
+  oddsSnapshots       OddsSnapshot[]
+  matchStatsSnapshots MatchStatsSnapshot[]
+
+  @@unique([sportCode, goalApiFixtureId])
+  @@unique([sportCode, proplineEventId])
+  @@unique([sportCode, stableKey])
+  @@index([bet62MatchId])
+  @@index([sportCode, confidence, status])
+  @@schema("odds")
+  @@map("provider_match_mapping")
+}
+
+model ProviderEvent {
+  id                  String   @id @default(uuid())
+  provider            ProviderName
+  externalProviderId  String?
+  providerEventId     String
+  sequence            Int?
+  eventType           String
+  matchId             String?
+  mappingId           String?
+  sportCode           String
+  leagueKey           String?
+  homeKey             String?
+  awayKey             String?
+  kickoffAt           DateTime?
+
+  payloadRaw          Json
+  payloadNormalised   Json?
+  ingestSource        String   @default("REST")
+  receivedAt          DateTime @default(now())
+  timestampProvider   DateTime?
+  deduplicationKey    String
+
+  processingStatus    String   @default("NEW")
+  processedAt         DateTime?
+  processingError     String?
+  retries             Int      @default(0)
+
+  mapping             ProviderMatchMapping? @relation(fields: [mappingId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerEventId, sequence])
+  @@index([matchId])
+  @@index([sportCode, ingestSource, receivedAt])
+  @@index([provider, processingStatus, receivedAt])
+  @@index([provider, deduplicationKey])
+  @@schema("odds")
+  @@map("provider_events")
+}
+
+model OddsSnapshot {
+  id                  String   @id @default(uuid())
+  mappingId           String?
+  bet62MatchId        String?
+  sportCode           String
+  marketCode          String
+  period              String?
+  selectionId         String
+  outcome             String
+  line                Decimal?
+  handicap            Decimal?
+
+  provider            ProviderName
+  bookmakerId         String?
+  bookmakerCode       String?
+
+  price               Decimal  @db.Decimal(10, 4)
+  pricePrevious       Decimal? @db.Decimal(10, 4)
+  marginApplied       Decimal? @db.Decimal(5, 4)
+  isBestPrice         Boolean
+  trend               String   @default("flat")
+
+  recordedAt          DateTime?
+  bookUpdatedAt       DateTime?
+  lastChangeAt        DateTime?
+  lastSeenAt          DateTime?
+  liquidity           Int?
+  payoutMultiplier    Decimal?
+  lineGap             Decimal?
+  bookVersion         String?
+
+  status              String   @default("ACTIVE")
+  stale               Boolean  @default(false)
+  staleReason         String?
+  ageMs               Int?
+
+  createdAt           DateTime @default(now())
+
+  mapping             ProviderMatchMapping? @relation(fields: [mappingId], references: [id], onDelete: SetNull)
+
+  @@index([bet62MatchId, marketCode, status])
+  @@index([mappingId, createdAt])
+  @@index([sportCode, bookmakerCode, createdAt])
+  @@index([provider, bookUpdatedAt])
+  @@schema("odds")
+  @@map("odds_snapshots")
+}
+
+model MatchStatsSnapshot {
+  id                  String   @id @default(uuid())
+  mappingId           String?
+  bet62MatchId        String?
+  sportCode           String
+  provider            ProviderName
+  minuteOfMatch       Int?
+  period              String?
+
+  possessionHome      Int?
+  possessionAway      Int?
+  shotsHome           Int?
+  shotsAway           Int?
+  shotsOnTargetHome   Int?
+  shotsOnTargetAway   Int?
+  cornersHome         Int?
+  cornersAway         Int?
+  foulsHome           Int?
+  foulsAway           Int?
+  offsidesHome        Int?
+  offsidesAway        Int?
+  yellowCardsHome     Int?
+  yellowCardsAway     Int?
+  redCardsHome        Int?
+  redCardsAway        Int?
+  savesHome           Int?
+  savesAway           Int?
+  xgHome              Decimal? @db.Decimal(4, 2)
+  xgAway              Decimal? @db.Decimal(4, 2)
+  attacksHome         Int?
+  attacksAway         Int?
+  dangerousAttacksHome Int?
+  dangerousAttacksAway Int?
+
+  commentaryLastText  String?
+  commentaryLastZone  String?
+  commentarySide      String?
+
+  rawPayload          Json?
+  timestampProvider   DateTime?
+
+  createdAt           DateTime @default(now())
+
+  mapping             ProviderMatchMapping? @relation(fields: [mappingId], references: [id], onDelete: SetNull)
+
+  @@index([bet62MatchId, createdAt])
+  @@index([sportCode, provider, createdAt])
+  @@index([mappingId, minuteOfMatch])
+  @@schema("odds")
+  @@map("match_stats_snapshots")
 }

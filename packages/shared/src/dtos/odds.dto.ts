@@ -34,7 +34,7 @@ export class PrematchEventsQueryDto {
 
   @IsOptional()
   @IsArray()
-  @IsUUID("4", { each: true })
+  @IsString({ each: true })
   leagueIds?: string[];
 
   @IsOptional()
@@ -84,7 +84,7 @@ export class LiveEventsQueryDto {
 
   @IsOptional()
   @IsArray()
-  @IsUUID("4", { each: true })
+  @IsString({ each: true })
   leagueIds?: string[];
 
   @IsOptional()
@@ -108,8 +108,9 @@ export class LiveEventsQueryDto {
 }
 
 export class EventDetailQueryDto {
-  @IsUUID("4")
-  eventId!: string;
+  @IsOptional()
+  @IsString()
+  eventId?: string;
 
   @IsOptional()
   @IsEnum(MarketStatus, { each: true })
@@ -140,7 +141,7 @@ export class LeagueQueryDto {
 }
 
 export class OddsUpdatePayloadDto {
-  @IsUUID("4")
+  @IsString()
   selectionId!: string;
 
   @IsNumber()
@@ -161,7 +162,7 @@ export class OddsUpdatePayloadDto {
 }
 
 export class MarketSelectionDto {
-  @IsUUID("4")
+  @IsString()
   id!: string;
 
   @IsString()
@@ -192,7 +193,7 @@ export class MarketSelectionDto {
 }
 
 export class MarketDto {
-  @IsUUID("4")
+  @IsString()
   id!: string;
 
   @IsEnum(MarketType)
@@ -223,7 +224,7 @@ export class MarketDto {
 }
 
 export class EventDto {
-  @IsUUID("4")
+  @IsString()
   id!: string;
 
   @IsEnum(SportType)
@@ -241,7 +242,7 @@ export class EventDto {
   awayTeamName?: string;
 
   @IsOptional()
-  @IsUUID("4")
+  @IsString()
   leagueId?: string;
 
   @IsOptional()
@@ -291,7 +292,7 @@ export class EventDto {
 }
 
 export class LiveMatchUpdateDto {
-  @IsUUID("4")
+  @IsString()
   eventId!: string;
 
   @IsEnum(EventStatus)

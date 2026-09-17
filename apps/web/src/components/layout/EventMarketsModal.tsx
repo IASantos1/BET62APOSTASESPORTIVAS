@@ -2,9 +2,24 @@
 
 import * as React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ArrowRightLeft, Shield, Radio } from 'lucide-react';
-import { cn, formatOdds } from '../../lib/utils';
+import { X, Radio } from 'lucide-react';
+import { formatOdds } from '../../lib/utils';
 import { Badge } from '../ui/Badge';
+
+export interface MarketsModalSelection {
+  id: string;
+  name: string;
+  odds: number;
+  status?: string;
+}
+
+export interface MarketsModalMarket {
+  id: string;
+  name: string;
+  type?: string;
+  status?: string;
+  selections: MarketsModalSelection[];
+}
 
 export interface MarketsEvent {
   id: string;
@@ -14,21 +29,14 @@ export interface MarketsEvent {
   minute?: number;
   period?: string;
   live?: boolean;
-  odds: {
-    o1?: number;
-    oX?: number;
-    o2?: number;
-    ou?: [number, number];
-    btts?: [number, number];
-    dc?: [number, number, number];
-  };
+  markets: MarketsModalMarket[];
 }
 
 interface EventMarketsModalProps {
   event: MarketsEvent | null;
-  score?: [number, number];
+  score?: [number | null | undefined, number | null | undefined];
   onClose: () => void;
-  onSelect: (opts: { market: string; sel: string; odds: number; selName: string; marketName: string }) => void;
+  onSelect: (opts: { marketId: string; marketName: string; selectionId: string; selectionName: string; odds: number }) => void;
 }
 
 export function EventMarketsModal({ event, score, onClose, onSelect }: EventMarketsModalProps) {
@@ -64,7 +72,7 @@ export function EventMarketsModal({ event, score, onClose, onSelect }: EventMark
                   <h2 className="mt-2 text-lg md:text-xl font-black tracking-tight truncate">
                     {event.home} <span className="text-white/40 font-normal">vs</span> {event.away}
                   </h2>
-                  {score ? (
+                  {score && (score[0] !== null && score[0] !== undefined) ? (
                     <p className="mt-0.5 font-mono font-bold text-bet62-primary text-sm">{score[0]} – {score[1]}</p>
                   ) : null}
                 </div>
@@ -79,97 +87,34 @@ export function EventMarketsModal({ event, score, onClose, onSelect }: EventMark
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-5">
-              <div>
-                <p className="text-xs uppercase tracking-wider text-white/50 font-semibold mb-2">Resultado Final (1X2)</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {([
-                    ['1', event.home, event.odds.o1],
-                    ['X', 'Empate', event.odds.oX],
-                    ['2', event.away, event.odds.o2],
-                  ] as const).map(([key, selName, v]) =>
-                    v === undefined ? null : (
-                      <button
-                        key={key}
-                        onClick={() => onSelect({ market: '1x2', sel: key, odds: v, selName, marketName: 'Resultado Final' })}
-                        className="rounded-xl py-3 border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/8 transition-all group"
-                      >
-                        <p className="text-[10px] uppercase text-white/50">{key}</p>
-                        <p className="font-mono font-bold text-bet62-primary group-hover:bg-bet62-primary group-hover:text-bet62-bg inline-block px-2 rounded-md mt-0.5 transition-all">
-                          {formatOdds(v)}
-                        </p>
-                      </button>
-                    ),
-                  )}
-                </div>
-              </div>
-
-              {event.odds.dc ? (
-                <div>
-                  <p className="text-xs uppercase tracking-wider text-white/50 font-semibold mb-2">Dupla Hipótese</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {([
-                      ['1X', `${event.home} ou Empate`, event.odds.dc[0]],
-                      ['12', `${event.home} ou ${event.away}`, event.odds.dc[1]],
-                      ['X2', `Empate ou ${event.away}`, event.odds.dc[2]],
-                    ] as const).map(([key, selName, v]) => (
-                      <button
-                        key={key}
-                        onClick={() => onSelect({ market: 'dc', sel: key, odds: v, selName, marketName: 'Dupla Hipótese' })}
-                        className="rounded-xl py-3 border border-bet62-border hover:border-bet62-accent hover:bg-bet62-accent/8 transition-all group"
-                      >
-                        <p className="text-[10px] uppercase text-white/50">{key}</p>
-                        <p className="font-mono font-bold text-bet62-accent group-hover:bg-bet62-accent group-hover:text-bet62-bg inline-block px-2 rounded-md mt-0.5 transition-all">
-                          {formatOdds(v)}
-                        </p>
-                      </button>
-                    ))}
+              {event.markets.length === 0 ? (
+                <p className="text-sm text-white/50 text-center py-8">Sem mercados disponíveis para este evento neste momento.</p>
+              ) : (
+                event.markets.map((market) => (
+                  <div key={market.id}>
+                    <p className="text-xs uppercase tracking-wider text-white/50 font-semibold mb-2">{market.name}</p>
+                    <div className={market.selections.length === 2 ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-3 gap-2'}>
+                      {market.selections.map((sel) => {
+                        const disabled = sel.status === 'suspended' || !sel.odds || sel.odds < 1.01;
+                        return (
+                          <button
+                            key={sel.id}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => onSelect({ marketId: market.id, marketName: market.name, selectionId: sel.id, selectionName: sel.name, odds: sel.odds })}
+                            className="rounded-xl py-3 px-2 border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/8 transition-all group disabled:opacity-40 disabled:pointer-events-none"
+                          >
+                            <p className="text-[10px] uppercase text-white/50 truncate">{sel.name}</p>
+                            <p className="font-mono font-bold text-bet62-primary group-hover:bg-bet62-primary group-hover:text-bet62-bg inline-block px-2 rounded-md mt-0.5 transition-all">
+                              {disabled ? '—' : formatOdds(sel.odds)}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ) : null}
-
-              {event.odds.ou ? (
-                <div>
-                  <p className="text-xs uppercase tracking-wider text-white/50 font-semibold mb-2">Mais/Menos 2.5 Golos</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => onSelect({ market: 'ou', sel: 'over', odds: event.odds.ou![0], selName: 'Mais de 2.5', marketName: 'Mais/Menos 2.5 Golos' })}
-                      className="rounded-xl py-2.5 border border-bet62-border hover:border-bet62-accent hover:bg-bet62-accent/8 transition text-sm"
-                    >
-                      <span className="text-white/60 text-xs">+2.5 </span>
-                      <span className="font-mono font-bold text-bet62-accent">{formatOdds(event.odds.ou[0])}</span>
-                    </button>
-                    <button
-                      onClick={() => onSelect({ market: 'ou', sel: 'under', odds: event.odds.ou![1], selName: 'Menos de 2.5', marketName: 'Mais/Menos 2.5 Golos' })}
-                      className="rounded-xl py-2.5 border border-bet62-border hover:border-bet62-accent hover:bg-bet62-accent/8 transition text-sm"
-                    >
-                      <span className="text-white/60 text-xs">-2.5 </span>
-                      <span className="font-mono font-bold text-bet62-accent">{formatOdds(event.odds.ou[1])}</span>
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-
-              {event.odds.btts ? (
-                <div>
-                  <p className="text-xs uppercase tracking-wider text-white/50 font-semibold mb-2">Ambas as Equipas Marcam</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => onSelect({ market: 'btts', sel: 'yes', odds: event.odds.btts![0], selName: 'Sim', marketName: 'Ambas Marcam' })}
-                      className={cn('rounded-xl py-2.5 border border-bet62-border hover:border-bet62-secondary hover:bg-bet62-secondary/8 transition text-sm flex items-center justify-center gap-2')}
-                    >
-                      <ArrowRightLeft size={13} className="text-bet62-secondary" />
-                      <span className="font-mono font-bold text-bet62-secondary">Sim {formatOdds(event.odds.btts[0])}</span>
-                    </button>
-                    <button
-                      onClick={() => onSelect({ market: 'btts', sel: 'no', odds: event.odds.btts![1], selName: 'Não', marketName: 'Ambas Marcam' })}
-                      className="rounded-xl py-2.5 border border-bet62-border hover:border-bet62-secondary hover:bg-bet62-secondary/8 transition text-sm flex items-center justify-center gap-2"
-                    >
-                      <Shield size={13} className="text-white/60" />
-                      <span className="font-mono font-bold text-white/75">Não {formatOdds(event.odds.btts[1])}</span>
-                    </button>
-                  </div>
-                </div>
-              ) : null}
+                ))
+              )}
             </div>
           </motion.div>
         </>

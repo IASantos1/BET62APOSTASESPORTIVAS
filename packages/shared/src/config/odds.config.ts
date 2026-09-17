@@ -1,5 +1,5 @@
 export interface OddsProviderConfig {
-  type: "mock" | "custom" | "sportradar" | "thesportsdb" | "apifootball";
+  type: "propline" | "goal_api" | "custom" | "sportradar" | "thesportsdb" | "apifootball";
   baseUrl: string;
   apiKey?: string;
   apiSecret?: string;
@@ -43,8 +43,8 @@ export interface OddsProviderConfig {
 }
 
 export const DEFAULT_ODDS_PROVIDER_CONFIG: OddsProviderConfig = {
-  type: "mock",
-  baseUrl: "https://api.mock-odds.local",
+  type: "propline",
+  baseUrl: "https://api.prop-line.com/v1",
   rateLimitPerMin: 300,
   rateLimitPerHour: 18000,
   rateLimitPerDay: 250000,

@@ -21,17 +21,16 @@ import {
   LogIn,
   Gift,
   Plus,
-  Banknote,
-  CreditCard,
-  Smartphone,
   Percent,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { Avatar, AvatarFallback } from '../ui/Avatar';
+import { PaymentMethodLogo } from '../ui/PaymentMethodLogo';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../stores/auth.store';
 import { formatCurrencyEUR } from '../../lib/utils';
+import { apiClient, ApiError } from '../../lib/api-client';
 
 const NAV = [
   { href: '/', label: 'Destaques', icon: Trophy },
@@ -66,28 +65,30 @@ export function Header() {
   const [depositAmount, setDepositAmount] = React.useState<number>(20);
   const [selectedMethod, setSelectedMethod] = React.useState<PaymentMethod>('mbway');
   const [depositLoading, setDepositLoading] = React.useState(false);
+  const [depositError, setDepositError] = React.useState<string | null>(null);
   const { user, isAuthenticated, logout, isLoading } = useAuthStore();
   const balance = 0;
 
   const handleDeposit = async () => {
     if (depositAmount < 10) return;
     setDepositLoading(true);
+    setDepositError(null);
     try {
-      const res = await fetch('/api/client/deposit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: depositAmount,
-          method: selectedMethod,
-        }),
+      const data = await apiClient.post<{ checkoutUrl?: string }>('/wallet/deposit/stripe/create-intent', {
+        provider: 'STRIPE',
+        amount: depositAmount,
+        currency: 'EUR',
+        paymentMethod: selectedMethod,
+        returnUrl: `${window.location.origin}/carteira`,
       });
-      const data = await res.json().catch(() => ({}));
-      if (data?.url) {
-        window.location.href = data.url;
-      } else if (data?.checkoutUrl) {
+      if (data?.checkoutUrl) {
         window.location.href = data.checkoutUrl;
+      } else {
+        setDepositError('Não foi possível iniciar o pagamento. Tenta novamente.');
       }
-    } catch {
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Erro ao iniciar o depósito.';
+      setDepositError(message);
     } finally {
       setDepositLoading(false);
     }
@@ -362,9 +363,9 @@ export function Header() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.96 }}
               transition={{ duration: 0.25, type: 'spring', damping: 25, stiffness: 300 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[71] w-[92vw] max-w-lg"
+              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[71] w-[92vw] max-w-lg max-h-[90vh] overflow-y-auto"
             >
-              <div className="rounded-3xl border border-bet62-border bg-bet62-surface/95 backdrop-blur-xl shadow-glass p-6">
+              <div className="rounded-3xl border border-bet62-border bg-bet62-surface/95 backdrop-blur-xl shadow-glass p-6 pt-[max(1.5rem,env(safe-area-inset-top))]">
                 <div className="flex items-center justify-between mb-5">
                   <div>
                     <h3 className="text-xl font-bold tracking-tight">Depósito Rápido</h3>
@@ -389,9 +390,7 @@ export function Header() {
                         : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
                     )}
                   >
-                    <div className="h-11 w-11 rounded-xl bg-[#009688] flex items-center justify-center text-white shrink-0">
-                      <Smartphone size={20} />
-                    </div>
+                    <PaymentMethodLogo method="mbway" size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm">MB WAY</p>
                       <p className="text-xs text-white/50">Instantâneo · mín. €10</p>
@@ -414,9 +413,7 @@ export function Header() {
                         : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
                     )}
                   >
-                    <div className="h-11 w-11 rounded-xl bg-[#0070c9] flex items-center justify-center text-white shrink-0">
-                      <Banknote size={20} />
-                    </div>
+                    <PaymentMethodLogo method="multibanco" size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm">Multibanco</p>
                       <p className="text-xs text-white/50">Referência · mín. €10</p>
@@ -439,9 +436,7 @@ export function Header() {
                         : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
                     )}
                   >
-                    <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center text-white shrink-0">
-                      <CreditCard size={20} />
-                    </div>
+                    <PaymentMethodLogo method="card" size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm">Cartão Crédito / Débito</p>
                       <p className="text-xs text-white/50">Visa / Mastercard · mín. €10</p>
@@ -488,6 +483,12 @@ export function Header() {
                     ))}
                   </div>
                 </div>
+
+                {depositError ? (
+                  <p className="mb-3 text-sm text-bet62-danger bg-bet62-danger/10 border border-bet62-danger/30 rounded-xl px-3 py-2">
+                    {depositError}
+                  </p>
+                ) : null}
 
                 <Button
                   variant="primary"

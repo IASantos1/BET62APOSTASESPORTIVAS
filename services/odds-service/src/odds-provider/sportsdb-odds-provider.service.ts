@@ -10,8 +10,6 @@ import {
   SettlementResult,
   UpcomingEvent,
 } from './abstract-odds-provider.service';
-import { MockOddsProviderService } from './mock-odds-provider.service';
-import { SchedulerRegistry } from '@nestjs/schedule';
 
 interface SportsDBEvent {
   idEvent: string;
@@ -39,18 +37,6 @@ interface SportsDBLeague {
 const SPORTSDB_BASE = 'https://www.thesportsdb.com/api/v1/json/3';
 const TEST_KEY = '3';
 
-const DEFAULT_LEAGUES = [
-  { id: '4328', name: 'English Premier League', sport: 'Soccer', sportCode: 'FOOTBALL' },
-  { id: '4331', name: 'French Ligue 1', sport: 'Soccer', sportCode: 'FOOTBALL' },
-  { id: '4332', name: 'Italian Serie A', sport: 'Soccer', sportCode: 'FOOTBALL' },
-  { id: '4334', name: 'Spanish La Liga', sport: 'Soccer', sportCode: 'FOOTBALL' },
-  { id: '4335', name: 'German Bundesliga', sport: 'Soccer', sportCode: 'FOOTBALL' },
-  { id: '4344', name: 'Portuguese Primeira Liga', sport: 'Soccer', sportCode: 'FOOTBALL' },
-  { id: '4350', name: 'Serie A Brasil', sport: 'Soccer', sportCode: 'FOOTBALL' },
-  { id: '4387', name: 'NBA', sport: 'Basketball', sportCode: 'BASKETBALL' },
-  { id: '4424', name: 'ATP Masters', sport: 'Tennis', sportCode: 'TENNIS' },
-];
-
 const SPORT_MAP: Record<string, { code: string; type: SportType; name: string }> = {
   Soccer: { code: 'FOOTBALL', type: SportType.FOOTBALL, name: 'Futebol' },
   Football: { code: 'FOOTBALL', type: SportType.FOOTBALL, name: 'Futebol' },
@@ -62,103 +48,17 @@ function sportCodeFromSport(sport: string): string {
   return SPORT_MAP[sport]?.code ?? sport.toUpperCase();
 }
 
-function randomOdds(min = 1.4, max = 4.5): number {
-  const val = Math.random() * (max - min) + min;
-  return Math.round(val * 100) / 100;
-}
-
-function pairSecondOdd(o1: number): number {
-  const vig = 1.06;
-  const implied = 1 / o1;
-  const remaining = Math.max(0.3, vig - implied);
-  return Math.round((1 / remaining) * 100) / 100;
-}
-
-function pairThirdOdd(o1: number, o2: number): number {
-  const vig = 1.09;
-  const remaining = Math.max(0.22, vig - (1 / o1) - (1 / o2));
-  return Math.round((1 / remaining) * 100) / 100;
-}
-
-function buildDefaultMarkets(eventId: string, home: string, away: string, sport = 'FOOTBALL'): LiveOddsMarket[] {
-  const isFootball = sport === 'FOOTBALL';
-  const markets: LiveOddsMarket[] = [];
-  let counter = 1;
-
-  const mkMkt = (type: string, name: string) => ({
-    id: `${eventId}-m${counter.toString().padStart(3, '0')}`,
-    type,
-    name,
-    selections: [] as LiveOddsSelection[],
-  });
-
-  if (isFootball) {
-    const m1x2 = mkMkt('MATCH_WINNER_1X2', 'Resultado Final (1X2)');
-    const h = randomOdds(1.8, 3.6);
-    const d = randomOdds(3.0, 4.5);
-    const a = pairThirdOdd(h, d);
-    m1x2.selections = [
-      { id: `${m1x2.id}-s1`, name: home, odds: h, outcome: 'HOME', status: 'ACTIVE' },
-      { id: `${m1x2.id}-s2`, name: 'Empate', odds: d, outcome: 'DRAW', status: 'ACTIVE' },
-      { id: `${m1x2.id}-s3`, name: away, odds: a, outcome: 'AWAY', status: 'ACTIVE' },
-    ];
-    markets.push(m1x2);
-    counter++;
-
-    const mOU = mkMkt('OVER_UNDER_TOTAL', 'Mais/Menos 2.5 gols');
-    const ov = randomOdds(1.8, 2.1);
-    const un = pairSecondOdd(ov);
-    mOU.selections = [
-      { id: `${mOU.id}-s1`, name: 'Mais de 2.5', odds: ov, outcome: 'OVER', status: 'ACTIVE' },
-      { id: `${mOU.id}-s2`, name: 'Menos de 2.5', odds: un, outcome: 'UNDER', status: 'ACTIVE' },
-    ];
-    markets.push(mOU);
-    counter++;
-
-    const mBtts = mkMkt('BTTS_YES_NO', 'Ambas Marcam (BTTS)');
-    const y = randomOdds(1.7, 2.1);
-    const n = pairSecondOdd(y);
-    mBtts.selections = [
-      { id: `${mBtts.id}-s1`, name: 'Sim', odds: y, outcome: 'YES', status: 'ACTIVE' },
-      { id: `${mBtts.id}-s2`, name: 'Não', odds: n, outcome: 'NO', status: 'ACTIVE' },
-    ];
-    markets.push(mBtts);
-    counter++;
-  } else {
-    const mW = mkMkt('MATCH_WINNER_12', 'Vencedor do Jogo');
-    const h = randomOdds(1.4, 2.8);
-    const a = pairSecondOdd(h);
-    mW.selections = [
-      { id: `${mW.id}-s1`, name: home, odds: h, outcome: 'HOME', status: 'ACTIVE' },
-      { id: `${mW.id}-s2`, name: away, odds: a, outcome: 'AWAY', status: 'ACTIVE' },
-    ];
-    markets.push(mW);
-    counter++;
-  }
-
-  return markets;
-}
-
 @Injectable()
 export class SportsDbOddsProviderService extends AbstractOddsProvider {
   override readonly providerName = 'THESPORTSDB';
 
   private readonly apiKey: string;
   private readonly baseUrl: string;
-  private readonly mockFallback: MockOddsProviderService;
 
   constructor() {
     super();
     this.apiKey = process.env.SPORTSDB_API_KEY || TEST_KEY;
     this.baseUrl = process.env.SPORTSDB_BASE_URL || SPORTSDB_BASE;
-    try {
-      const schedulerRegistry = new SchedulerRegistry();
-      this.mockFallback = new MockOddsProviderService(schedulerRegistry);
-      this.mockFallback.onModuleInit();
-    } catch {
-      const schedulerRegistry = new SchedulerRegistry();
-      this.mockFallback = new MockOddsProviderService(schedulerRegistry);
-    }
   }
 
   private async safeFetch<T>(url: string): Promise<T | null> {
@@ -216,8 +116,15 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
     return true;
   }
 
-  private selectLeagues(sport?: string, league?: string) {
-    return DEFAULT_LEAGUES.filter((l) => this.leagueFilterMatches(sport, league, l));
+  private async selectLeagues(sport?: string, league?: string): Promise<Array<{id: string; name: string; sport: string; sportCode: string;}>> {
+    const apiLeagues = await this.fetchAllLeaguesFromApi();
+    const normalised = apiLeagues.map((l) => ({
+      id: l.idLeague,
+      name: l.strLeague,
+      sport: l.strSport,
+      sportCode: sportCodeFromSport(l.strSport || ''),
+    }));
+    return normalised.filter((l) => this.leagueFilterMatches(sport, league, l));
   }
 
   private async fetchEventsNextForLeague(leagueId: string): Promise<SportsDBEvent[]> {
@@ -240,15 +147,15 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
 
   async fetchLiveOdds(sport?: string, league?: string): Promise<LiveOddsEvent[]> {
     try {
-      const leagues = this.selectLeagues(sport, league);
+      const leagues = await this.selectLeagues(sport, league);
       const allEvents: SportsDBEvent[] = [];
       const results = await Promise.allSettled(leagues.map((l) => this.fetchEventsLastForLeague(l.id)));
       for (const r of results) {
         if (r.status === 'fulfilled') allEvents.push(...r.value);
       }
       if (allEvents.length === 0) {
-        this.logger.debug('SportsDB live: no events from API, using mock fallback');
-        return this.mockFallback.fetchLiveOdds(sport, league);
+        this.logger.debug('SportsDB live: no events from API');
+        return [];
       }
       const live: LiveOddsEvent[] = [];
       const now = Date.now();
@@ -256,10 +163,10 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
         const ko = this.parseKickoff(ev.dateEvent, ev.strTime || '12:00:00');
         const elapsedMs = now - ko.getTime();
         if (elapsedMs < -1800_000 || elapsedMs > 4 * 3600_000) continue;
-        const sportCode = sportCodeFromSport(ev.strSport || DEFAULT_LEAGUES[0].sport);
+        const sportCode = sportCodeFromSport(ev.strSport || '');
         const { status, minute } = this.mapStatus(ev.strStatus, ko);
         if (status !== 'LIVE' && status !== 'HALF_TIME') continue;
-        const markets = buildDefaultMarkets(ev.idEvent, ev.strHomeTeam, ev.strAwayTeam, sportCode);
+        const markets: LiveOddsMarket[] = [];
         live.push({
           id: ev.idEvent,
           providerEventId: ev.idEvent,
@@ -278,39 +185,35 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
           updatedAt: new Date(),
         });
       }
-      if (live.length === 0) {
-        this.logger.debug('SportsDB live: none matched live filter, using mock fallback');
-        return this.mockFallback.fetchLiveOdds(sport, league);
-      }
       this.logger.log(`SportsDB live: returned ${live.length} events`);
       return live;
     } catch (err) {
-      this.logger.error(`SportsDB fetchLiveOdds failed, fallback to mock: ${err instanceof Error ? err.message : String(err)}`);
-      return this.mockFallback.fetchLiveOdds(sport, league);
+      this.logger.error(`SportsDB fetchLiveOdds failed: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
     }
   }
 
   async fetchUpcomingEvents(sport?: string, league?: string, from?: Date, to?: Date): Promise<UpcomingEvent[]> {
     try {
-      const leagues = this.selectLeagues(sport, league);
+      const leagues = await this.selectLeagues(sport, league);
       const allEvents: SportsDBEvent[] = [];
       const results = await Promise.allSettled(leagues.map((l) => this.fetchEventsNextForLeague(l.id)));
       for (const r of results) {
         if (r.status === 'fulfilled') allEvents.push(...r.value);
       }
       if (allEvents.length === 0) {
-        this.logger.debug('SportsDB upcoming: no events from API, using mock fallback');
-        return this.mockFallback.fetchUpcomingEvents(sport, league, from, to);
+        this.logger.debug('SportsDB upcoming: no events from API');
+        return [];
       }
       const upcoming: UpcomingEvent[] = [];
       for (const ev of allEvents) {
         const ko = this.parseKickoff(ev.dateEvent, ev.strTime || '12:00:00');
         if (from && ko < from) continue;
         if (to && ko > to) continue;
-        const sportCode = sportCodeFromSport(ev.strSport || DEFAULT_LEAGUES[0].sport);
+        const sportCode = sportCodeFromSport(ev.strSport || '');
         const { status } = this.mapStatus(ev.strStatus, ko);
         if (status === 'LIVE' || status === 'HALF_TIME') continue;
-        const markets = buildDefaultMarkets(ev.idEvent, ev.strHomeTeam, ev.strAwayTeam, sportCode);
+        const markets: LiveOddsMarket[] = [];
         upcoming.push({
           id: ev.idEvent,
           providerEventId: ev.idEvent,
@@ -322,21 +225,17 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
           awayTeamName: ev.strAwayTeam,
           kickoffAt: ko,
           status: status === 'PRE_LIVE' ? 'PRE_LIVE' : 'PRE_MATCH',
-          isTop: Math.random() < 0.2,
+          isTop: false,
           isFeatured: false,
           markets,
         });
-      }
-      if (upcoming.length === 0) {
-        this.logger.debug('SportsDB upcoming: none matched filter, using mock fallback');
-        return this.mockFallback.fetchUpcomingEvents(sport, league, from, to);
       }
       upcoming.sort((a, b) => a.kickoffAt.getTime() - b.kickoffAt.getTime());
       this.logger.log(`SportsDB upcoming: returned ${upcoming.length} events`);
       return upcoming;
     } catch (err) {
-      this.logger.error(`SportsDB fetchUpcomingEvents failed, fallback to mock: ${err instanceof Error ? err.message : String(err)}`);
-      return this.mockFallback.fetchUpcomingEvents(sport, league, from, to);
+      this.logger.error(`SportsDB fetchUpcomingEvents failed: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
     }
   }
 
@@ -346,8 +245,15 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
       const data = await this.safeFetch<{ events: SportsDBEvent[] | null }>(url);
       const ev = data?.events?.[0];
       if (!ev || ev.intHomeScore == null || ev.intAwayScore == null) {
-        this.logger.debug(`SportsDB settlement: event ${eventId} not finished, fallback`);
-        return this.mockFallback.fetchSettlementOutcome(eventId, selectionId);
+        this.logger.debug(`SportsDB settlement: event ${eventId} not finished or missing scores`);
+        const pending: SettlementResult = 'PENDING';
+        return {
+          eventId,
+          selectionId,
+          result: pending,
+          settledAt: undefined,
+          finalScore: undefined,
+        };
       }
       const finalScore = {
         home: Number(ev.intHomeScore),
@@ -359,13 +265,12 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
       const isAway = sLower.includes('away') || sLower.includes('-s3') || selectionId.endsWith('s3');
       const isDraw = sLower.includes('draw') || sLower.includes('empate') || sLower.includes('-s2') || selectionId.endsWith('s2');
       if (finalScore.home > finalScore.away) {
-        result = isHome ? 'WIN' : isAway || isDraw ? 'LOSE' : (Math.random() < 0.5 ? 'WIN' : 'LOSE');
+        result = isHome ? 'WIN' : isAway || isDraw ? 'LOSE' : 'PENDING';
       } else if (finalScore.home < finalScore.away) {
-        result = isAway ? 'WIN' : isHome || isDraw ? 'LOSE' : (Math.random() < 0.5 ? 'WIN' : 'LOSE');
+        result = isAway ? 'WIN' : isHome || isDraw ? 'LOSE' : 'PENDING';
       } else {
         if (isDraw) result = 'WIN';
         else if (isHome || isAway) result = 'LOSE';
-        else result = Math.random() < 0.5 ? 'WIN' : 'LOSE';
       }
       return {
         eventId,
@@ -375,8 +280,8 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
         finalScore,
       };
     } catch (err) {
-      this.logger.error(`SportsDB fetchSettlementOutcome failed, fallback: ${err instanceof Error ? err.message : String(err)}`);
-      return this.mockFallback.fetchSettlementOutcome(eventId, selectionId);
+      this.logger.error(`SportsDB fetchSettlementOutcome failed: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
     }
   }
 
@@ -384,9 +289,10 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
     try {
       const prematch = await this.fetchUpcomingEvents();
       const live = await this.fetchLiveOdds();
+      const merged = await this.selectLeagues();
       const unique = new Map<string, { code: string; type: SportType; name: string }>();
-      for (const l of DEFAULT_LEAGUES) {
-        const info = SPORT_MAP[l.sport] ?? { code: l.sportCode, type: SportType.FOOTBALL, name: l.sport };
+      for (const l of merged) {
+        const info = SPORT_MAP[l.sport] ?? { code: l.sportCode, type: SportType.FOOTBALL, name: l.sportCode };
         unique.set(info.code, info);
       }
       const out: Sport[] = [];
@@ -409,10 +315,10 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
         });
         idx++;
       }
-      return out.length > 0 ? out : this.mockFallback.getSports();
+      return out;
     } catch (err) {
-      this.logger.error(`SportsDB getSports failed, fallback: ${err instanceof Error ? err.message : String(err)}`);
-      return this.mockFallback.getSports();
+      this.logger.error(`SportsDB getSports failed: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
     }
   }
 
@@ -421,7 +327,7 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
       const prematch = await this.fetchUpcomingEvents(sport);
       const live = await this.fetchLiveOdds(sport);
       const apiLeagues = await this.fetchAllLeaguesFromApi();
-      const selected = this.selectLeagues(sport);
+      const selected = await this.selectLeagues(sport);
       const merged = selected.length > 0 ? selected : apiLeagues
         .filter((l) => sportCodeFromSport(l.strSport || '') === sport || l.strSport === sport)
         .slice(0, 30)
@@ -431,7 +337,6 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
           sport: l.strSport,
           sportCode: sportCodeFromSport(l.strSport || ''),
         }));
-      if (merged.length === 0) return this.mockFallback.getLeagues(sport);
       return merged.map((l, idx) => ({
         id: l.id,
         sportId: sport,
@@ -450,8 +355,8 @@ export class SportsDbOddsProviderService extends AbstractOddsProvider {
         updatedAt: new Date(),
       }));
     } catch (err) {
-      this.logger.error(`SportsDB getLeagues failed, fallback: ${err instanceof Error ? err.message : String(err)}`);
-      return this.mockFallback.getLeagues(sport);
+      this.logger.error(`SportsDB getLeagues failed: ${err instanceof Error ? err.message : String(err)}`);
+      throw err;
     }
   }
 }

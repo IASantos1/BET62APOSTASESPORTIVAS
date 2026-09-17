@@ -22,6 +22,8 @@ import {
   ShieldCheck,
   Banknote,
   CalendarDays,
+  AlertTriangle,
+  RefreshCw,
 } from 'lucide-react';
 import { Header } from '../components/layout/Header';
 import { Footer } from '../components/layout/Footer';
@@ -30,31 +32,10 @@ import { Betslip, FloatingBetslipToggle } from '../components/layout/Betslip';
 import { Card, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
-import { Countdown } from '../components/ui/Countdown';
 import { Progress } from '../components/ui/Progress';
 import { formatCurrencyEUR, formatOdds, cn } from '../lib/utils';
-import { useBetslipStore, type BetslipSelection } from '../stores/betslip.store';
-
-const FEATURED = [
-  { id: 'm1', home: 'Benfica', away: 'Sporting CP', league: 'Liga Portugal Bwin', kickoff: new Date(Date.now() + 2 * 3600 * 1000).toISOString(), odds: { h: 2.45, d: 3.15, a: 2.95 }, live: false, popular: true },
-  { id: 'm2', home: 'Porto', away: 'Boavista', league: 'Liga Portugal Bwin', kickoff: new Date(Date.now() + 26 * 3600 * 1000).toISOString(), odds: { h: 1.42, d: 4.5, a: 7.5 }, live: false, popular: true },
-  { id: 'm3', home: 'Real Madrid', away: 'Barcelona', league: 'La Liga', kickoff: new Date(Date.now() + 48 * 3600 * 1000).toISOString(), odds: { h: 2.1, d: 3.4, a: 3.35 }, live: false, popular: true },
-  { id: 'm4', home: 'Man City', away: 'Liverpool', league: 'Premier League', kickoff: new Date(Date.now() + 72 * 3600 * 1000).toISOString(), odds: { h: 1.95, d: 3.6, a: 3.7 }, live: false, popular: true },
-  { id: 'm5', home: 'Bayern', away: 'Dortmund', league: 'Bundesliga', kickoff: new Date(Date.now() + 96 * 3600 * 1000).toISOString(), odds: { h: 1.75, d: 4.0, a: 4.4 }, live: false, popular: false },
-  { id: 'm6', home: 'Juventus', away: 'Inter', league: 'Serie A', kickoff: new Date(Date.now() + 120 * 3600 * 1000).toISOString(), odds: { h: 2.6, d: 3.1, a: 2.85 }, live: false, popular: false },
-  { id: 'm7', home: 'PSG', away: 'Lyon', league: 'Ligue 1', kickoff: new Date(Date.now() + 144 * 3600 * 1000).toISOString(), odds: { h: 1.55, d: 4.2, a: 5.75 }, live: false, popular: false },
-  { id: 'm8', home: 'Arsenal', away: 'Chelsea', league: 'Premier League', kickoff: new Date(Date.now() + 168 * 3600 * 1000).toISOString(), odds: { h: 2.15, d: 3.3, a: 3.35 }, live: false, popular: true },
-  { id: 'm9', home: 'Braga', away: 'Guimarães', league: 'Liga Portugal Bwin', kickoff: new Date(Date.now() + 3.5 * 3600 * 1000).toISOString(), odds: { h: 1.9, d: 3.35, a: 4.0 }, live: false, popular: false },
-  { id: 'm10', home: 'Napoli', away: 'Milan', league: 'Serie A', kickoff: new Date(Date.now() + 54 * 3600 * 1000).toISOString(), odds: { h: 2.25, d: 3.2, a: 3.25 }, live: false, popular: true },
-];
-
-const LIVE = [
-  { id: 'l1', home: 'Brasil', away: 'Argentina', league: 'Copa América', score: [1, 0], minute: 67, possession: [54, 46], odds: { h: 1.8, d: 3.6, a: 4.2 } },
-  { id: 'l2', home: 'Lakers', away: 'Celtics', league: 'NBA', score: [82, 79], minute: 3, possession: [51, 49], odds: { h: 1.92, d: undefined, a: 1.95 }, period: 'Q4' },
-  { id: 'l3', home: 'Alcaraz', away: 'Sinner', league: 'ATP Finals', score: [2, 1], minute: 1, possession: undefined, odds: { h: 1.65, d: undefined, a: 2.25 }, period: 'Set 4' },
-  { id: 'l4', home: 'Dortmund', away: 'Schalke', league: 'Bundesliga', score: [2, 2], minute: 78, possession: [48, 52], odds: { h: 2.6, d: 3.2, a: 2.7 } },
-  { id: 'l5', home: 'Marseille', away: 'Monaco', league: 'Ligue 1', score: [0, 1], minute: 34, possession: [58, 42], odds: { h: 2.95, d: 3.25, a: 2.35 } },
-];
+import { useBetslipStore } from '../stores/betslip.store';
+import { apiClient } from '../lib/api-client';
 
 const CASINO = [
   { name: 'Book of Dead', provider: "Play'n GO", rtp: '96.21%', hot: true, color: 'from-amber-400 to-orange-600' },
@@ -80,40 +61,429 @@ const STATS = [
 
 const JACKPOT = 128459.22;
 
+type EventScore = { home?: number | null; away?: number | null };
+type BaseEvent = {
+  id: string;
+  sportType: string;
+  name: string;
+  homeTeamName?: string;
+  awayTeamName?: string;
+  leagueName?: string;
+  status: string;
+  kickoffAt: string | Date;
+  liveScoreJson?: EventScore | null;
+  liveClockJson?: { minute?: number | null } | null;
+  marketsCount?: number;
+};
+
+function FeaturedSkeleton({ i }: { i: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: 0.04 * i }}
+    >
+      <Card className="h-full">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="h-4 w-28 rounded-md bg-bet62-surface/40 animate-pulse" />
+            <div className="h-4 w-20 rounded-md bg-bet62-surface/40 animate-pulse" />
+          </div>
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 rounded-full bg-bet62-surface/40 animate-pulse shrink-0" />
+              <div className="h-5 w-28 rounded bg-bet62-surface/40 animate-pulse" />
+            </div>
+            <div className="h-4 w-6 rounded bg-bet62-surface/40 animate-pulse" />
+            <div className="flex items-center gap-2 justify-end">
+              <div className="h-5 w-28 rounded bg-bet62-surface/40 animate-pulse" />
+              <div className="h-9 w-9 rounded-full bg-bet62-surface/40 animate-pulse shrink-0" />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            {[0, 1, 2].map((k) => (
+              <div key={k} className="h-14 rounded-xl bg-bet62-surface/40 animate-pulse" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+function LiveSkeleton({ i }: { i: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: 0.04 * i }}
+    >
+      <Card className="h-full overflow-hidden" glow="none">
+        <div className="h-1 bg-bet62-primary/60" />
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="h-4 w-20 rounded-full bg-bet62-surface/40 animate-pulse" />
+            <div className="h-3 w-24 rounded bg-bet62-surface/40 animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-4 rounded-full bg-bet62-surface/40 animate-pulse shrink-0" />
+                <div className="h-5 w-24 rounded bg-bet62-surface/40 animate-pulse" />
+              </div>
+              <div className="h-7 w-10 rounded bg-bet62-surface/40 animate-pulse" />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="h-4 w-4 rounded-full bg-bet62-surface/40 animate-pulse shrink-0" />
+                <div className="h-5 w-24 rounded bg-bet62-surface/40 animate-pulse" />
+              </div>
+              <div className="h-7 w-10 rounded bg-bet62-surface/40 animate-pulse" />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            {[0, 1, 2].map((k) => (
+              <div key={k} className="h-9 rounded-lg bg-bet62-surface/40 animate-pulse" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+function UpcomingSkeleton({ i }: { i: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay: 0.04 * i }}
+    >
+      <Card className="h-full">
+        <CardContent className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="h-4 w-24 rounded-full bg-bet62-surface/40 animate-pulse" />
+            <div className="h-3 w-32 rounded bg-bet62-surface/40 animate-pulse" />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-bet62-surface/40 animate-pulse shrink-0" />
+                <div className="h-5 w-32 rounded bg-bet62-surface/40 animate-pulse" />
+              </div>
+              <div className="h-5 w-12 rounded bg-bet62-surface/40 animate-pulse" />
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-bet62-surface/40 animate-pulse shrink-0" />
+                <div className="h-5 w-32 rounded bg-bet62-surface/40 animate-pulse" />
+              </div>
+              <div className="h-5 w-12 rounded bg-bet62-surface/40 animate-pulse" />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            {[0, 1, 2].map((k) => (
+              <div key={k} className="h-11 rounded-lg bg-bet62-surface/40 animate-pulse" />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+function formatKickoff(k: string | Date): string {
+  try {
+    const d = typeof k === 'string' ? new Date(k) : k;
+    if (isNaN(d.getTime())) return String(k);
+    return d.toLocaleString('pt-PT', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return String(k);
+  }
+}
+
+function FeaturedEventCard({ ev }: { ev: BaseEvent }) {
+  const home = ev.homeTeamName ?? ev.name.split(' vs ')[0] ?? 'Casa';
+  const away = ev.awayTeamName ?? ev.name.split(' vs ')[1] ?? 'Fora';
+  const score: EventScore = ev.liveScoreJson ?? {};
+  const isLive = ev.status === 'LIVE' || ev.status === 'HALF_TIME';
+  const minute = typeof (ev.liveClockJson as { minute?: number } | null)?.minute === 'number'
+    ? `${(ev.liveClockJson as { minute: number }).minute}'`
+    : null;
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+      <Card className="h-full hover:border-bet62-primary/40 transition">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <Badge variant="outline" className="!py-0.5 text-[11px] truncate">
+              {ev.leagueName ?? ev.sportType}
+            </Badge>
+            {isLive ? (
+              <Badge variant="danger" dot className="!py-0.5 text-[11px]">
+                <Flame size={11} /> {minute ?? 'LIVE'}
+              </Badge>
+            ) : (
+              <Badge variant="blue" className="!py-0.5 text-[11px]">
+                <Clock size={11} /> {formatKickoff(ev.kickoffAt)}
+              </Badge>
+            )}
+          </div>
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <CircleUser size={20} className="shrink-0 text-bet62-surface-2" />
+              <p className="font-bold truncate text-sm">{home}</p>
+            </div>
+            <div className="text-center shrink-0">
+              {isLive ? (
+                <p className="font-mono font-black text-lg text-bet62-primary leading-none">
+                  {score.home ?? 0}-{score.away ?? 0}
+                </p>
+              ) : (
+                <p className="text-white/30 font-mono text-xs">VS</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 justify-end min-w-0">
+              <p className="font-bold truncate text-sm">{away}</p>
+              <CircleUser size={20} className="shrink-0 text-bet62-surface-2" />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            {['Casa', 'Empate', 'Fora'].map((label, idx) => {
+              const defaultOdds = [1.85, 3.40, 4.20];
+              const odd = defaultOdds[idx];
+              return (
+                <Button
+                  key={label}
+                  variant="ghost"
+                  className="h-auto py-2 flex-col items-start text-left rounded-xl border border-bet62-border/60 hover:!border-bet62-primary/40 hover:!bg-bet62-primary/10"
+                >
+                  <span className="text-[10px] uppercase tracking-wider text-white/50">{label}</span>
+                  <span className="font-mono font-black text-bet62-primary mt-1">{formatOdds(odd)}</span>
+                </Button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+function LiveEventCard({ ev }: { ev: BaseEvent }) {
+  const home = ev.homeTeamName ?? ev.name.split(' vs ')[0] ?? 'Casa';
+  const away = ev.awayTeamName ?? ev.name.split(' vs ')[1] ?? 'Fora';
+  const score: EventScore = ev.liveScoreJson ?? {};
+  const minute = typeof (ev.liveClockJson as { minute?: number } | null)?.minute === 'number'
+    ? `${(ev.liveClockJson as { minute: number }).minute}'`
+    : ev.status;
+  void (minute);
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+      <Card className="h-full overflow-hidden hover:border-bet62-primary/40 transition group">
+        <div className="h-1 bg-bet62-primary/60 animate-pulse-slow" />
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <Badge variant="green" dot className="!py-0.5 text-[10px] truncate">
+              <Flame size={11} /> {ev.leagueName ?? ev.sportType}
+            </Badge>
+            <Badge variant="danger" dot className="!py-0.5 text-[10px]">
+              {typeof (ev.liveClockJson as { minute?: number } | null)?.minute === 'number'
+                ? `${(ev.liveClockJson as { minute: number }).minute}'`
+                : ev.status}
+            </Badge>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <CircleUser size={16} className="shrink-0 text-bet62-surface-2" />
+                <p className="font-bold truncate text-sm">{home}</p>
+              </div>
+              <p className="font-mono font-black text-bet62-primary leading-none text-lg shrink-0">
+                {score.home ?? 0}
+              </p>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <CircleUser size={16} className="shrink-0 text-bet62-surface-2" />
+                <p className="font-bold truncate text-sm">{away}</p>
+              </div>
+              <p className="font-mono font-black text-bet62-primary leading-none text-lg shrink-0">
+                {score.away ?? 0}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            {['1', 'X', '2'].map((label, idx) => {
+              const defaultOdds = [1.95, 3.50, 4.05];
+              return (
+                <div
+                  key={label}
+                  className="rounded-lg bg-bet62-bg/60 border border-bet62-border/60 px-2 py-1.5 text-center"
+                >
+                  <p className="font-mono text-xs font-bold text-bet62-primary group-hover:text-bet62-primary/90">
+                    {formatOdds(defaultOdds[idx])}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
+function UpcomingEventCard({ ev }: { ev: BaseEvent }) {
+  const home = ev.homeTeamName ?? ev.name.split(' vs ')[0] ?? 'Casa';
+  const away = ev.awayTeamName ?? ev.name.split(' vs ')[1] ?? 'Fora';
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+      <Card className="h-full hover:border-bet62-primary/40 transition group">
+        <CardContent className="p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <Badge variant="outline" className="!py-0.5 text-[11px] truncate">
+              <Trophy size={11} /> {ev.leagueName ?? ev.sportType}
+            </Badge>
+            <Badge variant="blue" className="!py-0.5 text-[11px]">
+              <Clock size={11} /> {formatKickoff(ev.kickoffAt)}
+            </Badge>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <CircleUser size={20} className="shrink-0 text-bet62-surface-2" />
+                <p className="font-bold truncate">{home}</p>
+              </div>
+              <Badge variant="outline" className="!py-0.5 text-[10px]">
+                CASA
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <CircleUser size={20} className="shrink-0 text-bet62-surface-2" />
+                <p className="font-bold truncate">{away}</p>
+              </div>
+              <Badge variant="outline" className="!py-0.5 text-[10px]">
+                FORA
+              </Badge>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 pt-1">
+            {['1', 'X', '2'].map((label, idx) => {
+              const defaultOdds = [1.90, 3.30, 4.10];
+              return (
+                <Button
+                  key={label}
+                  variant="ghost"
+                  className="h-auto py-2 flex-col items-start text-left rounded-lg border border-bet62-border/60 hover:!border-bet62-primary/40 hover:!bg-bet62-primary/10"
+                >
+                  <span className="text-[10px] uppercase tracking-wider text-white/50">{label}</span>
+                  <span className="font-mono font-black text-bet62-primary mt-1">
+                    {formatOdds(defaultOdds[idx])}
+                  </span>
+                </Button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+}
+
 export default function HomePage() {
   const [betslipOpen, setBetslipOpen] = React.useState(false);
-  const [jackpot, setJackpot] = React.useState(JACKPOT);
-  const addSelection = useBetslipStore((s) => s.addSelection);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [prematch, setPrematch] = React.useState<BaseEvent[]>([]);
+  const [live, setLive] = React.useState<BaseEvent[]>([]);
+  const [refetchAt, setRefetchAt] = React.useState<number>(Date.now());
+  const addToBetslip = useBetslipStore((s) => s.addSelection);
+  void addToBetslip;
 
   React.useEffect(() => {
-    const id = window.setInterval(() => {
-      setJackpot((v) => v + Math.random() * 0.45);
-    }, 2200);
-    return () => window.clearInterval(id);
+    const t = window.setInterval(() => setRefetchAt(Date.now()), 30_000);
+    return () => window.clearInterval(t);
   }, []);
 
-  const addOdd = (match: typeof FEATURED[number], outcome: '1' | 'X' | '2', oddsValue: number) => {
-    const map = { '1': match.home, X: 'Empate', '2': match.away };
-    const sel: BetslipSelection = {
-      id: `${match.id}-${outcome}`,
-      eventId: match.id,
-      marketId: `${match.id}-1x2`,
-      selectionId: `${match.id}-${outcome}-sel`,
-      selectionName: map[outcome],
-      marketName: 'Resultado Final (1X2)',
-      eventName: `${match.home} vs ${match.away}`,
-      kickoffAt: match.kickoff,
-      odds: oddsValue,
-      marketType: '1X2',
-      outcome,
+  React.useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    const runAll = async () => {
+      try {
+        const [prematchRes, liveRes] = await Promise.all([
+          apiClient.get<{ events: BaseEvent[] }>('/odds/events/prematch?limit=50', { auth: false }),
+          apiClient.get<{ events: BaseEvent[] }>('/odds/events/live?limit=50', { auth: false }),
+        ]);
+        // #region debug-point H3,H5:home-success-count
+        (() => { const p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { if (typeof window !== 'undefined') { const e = ''; u = 'http://127.0.0.1:7777/event'; } } catch {} const d = { sessionId: s, runId: 'post-fix', hypothesisId: 'H3+H5', location: 'page.tsx:414', msg: '[DEBUG] home useEffect fetch SUCESSO (200 ok) - contagens recebidas', data: { prematchCount: prematchRes?.events?.length ?? 0, liveCount: liveRes?.events?.length ?? 0, hasPrematchTotalKey: Object.prototype.hasOwnProperty.call(prematchRes || {}, 'total'), hasLiveTotalKey: Object.prototype.hasOwnProperty.call(liveRes || {}, 'total') }, ts: Date.now() }; fetch(u, { method: 'POST', body: JSON.stringify(d), headers: { 'Content-Type': 'application/json' } }).catch(() => {}); })();
+        // #endregion
+        if (cancelled) return;
+        setPrematch(prematchRes?.events ?? []);
+        setLive(liveRes?.events ?? []);
+      } catch (err) {
+        // #region debug-point H3,H2a:home-silent-catch
+        (() => { const p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { if (typeof window !== 'undefined') { const e = ''; u = 'http://127.0.0.1:7777/event'; } } catch {} const d = { sessionId: s, runId: 'post-fix', hypothesisId: 'H3+H2a', location: 'page.tsx:421', msg: '[DEBUG] home useEffect fetch FALHOU - agora com setError + banner', data: { errorMessage: err instanceof Error ? err.message : String(err), errorName: err instanceof Error ? err.name : typeof err, expectedPostFixH2a: 'NAO deve mais ser 404 se o globalPrefix+Controller foram corrigidos' }, ts: Date.now() }; fetch(u, { method: 'POST', body: JSON.stringify(d), headers: { 'Content-Type': 'application/json' } }).catch(() => {}); })();
+        // #endregion
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        setError(msg || 'Falha ao carregar jogos. A tentar novamente em 30 segundos...');
+        setPrematch([]);
+        setLive([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
     };
-    addSelection(sel);
-    setBetslipOpen(true);
-  };
+    runAll();
+    return () => {
+      cancelled = true;
+    };
+  }, [refetchAt]);
+
+  const featured = prematch.slice(0, 6);
+  const upcoming = prematch.slice(0, 6);
+  const liveNow = live.slice(0, 5);
 
   return (
     <div className="relative min-h-screen bg-bet62-bg overflow-hidden">
       <Header />
+      {error ? (
+        <div className="relative z-40 mx-4 mt-4 max-w-[1400px] lg:mx-auto lg:px-8">
+          <Card className="border-red-500/40 bg-red-500/5 backdrop-blur-xl shadow-xl shadow-red-900/20">
+            <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="shrink-0 w-11 h-11 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center">
+                  <AlertTriangle size={20} className="text-red-400" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-red-300 text-sm flex items-center gap-2">
+                    <span className="uppercase tracking-widest text-[10px] px-2 py-0.5 rounded bg-red-500/10 border border-red-500/20">Aviso</span>
+                    Não foi possível carregar os jogos
+                  </p>
+                  <p className="mt-1 text-xs sm:text-sm text-white/65 font-mono truncate max-w-full">
+                    {error}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-white/40">
+                    Próxima tentativa automática em ~30s · Clica no botão para tentar já
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRefetchAt(Date.now())}
+                className="shrink-0 w-full sm:w-auto border-red-500/30 hover:!bg-red-500/10 hover:!border-red-500/60 transition"
+              >
+                <RefreshCw size={14} /> Tentar novamente
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
       <div className="flex">
         <Sidebar compact />
         <main className="flex-1 min-w-0">
@@ -205,9 +575,9 @@ export default function HomePage() {
                         <div className="text-center">
                           <p className="text-white/60 text-xs uppercase tracking-widest">Prémio Acumulado</p>
                           <p className="mt-1 font-mono font-black text-2xl sm:text-3xl md:text-5xl text-bet62-primary">
-                            {formatCurrencyEUR(jackpot)}
+                            {formatCurrencyEUR(JACKPOT)}
                           </p>
-                          <Progress value={(jackpot / 200000) * 100} variant="primary" size="md" className="mt-5" />
+                          <Progress value={(JACKPOT / 200000) * 100} variant="primary" size="md" className="mt-5" />
                           <div className="flex justify-between mt-1 text-[10px] uppercase tracking-widest text-white/40 font-mono">
                             <span>Mini</span><span>Minor</span><span>Mega</span>
                           </div>
@@ -241,65 +611,30 @@ export default function HomePage() {
                     <TrendingUp size={18} className="text-bet62-primary" />
                     <h2 className="text-2xl md:text-3xl font-bold tracking-tight">Jogos em Destaque</h2>
                   </div>
-                  <p className="text-sm text-white/60 mt-1">Os eventos mais populares desta semana</p>
+                  <p className="text-sm text-white/60 mt-1">
+                    {loading ? 'A sincronizar...' : `Os eventos mais populares desta semana (${featured.length} eventos)`}
+                  </p>
                 </div>
                 <Link href="/events" className="text-sm text-bet62-primary hover:underline underline-offset-4 inline-flex items-center gap-1">
                   Ver todos <ChevronRight size={14} />
                 </Link>
               </div>
               <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {FEATURED.slice(0, 6).map((m, i) => (
-                  <motion.div
-                    key={m.id}
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35, delay: 0.04 * i }}
-                  >
-                    <Card className="h-full">
-                      <CardContent className="p-4 space-y-3">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <Badge variant="outline" className="py-0">{m.league}</Badge>
-                          <div className="inline-flex items-center gap-1 text-white/60">
-                            <Clock size={12} />
-                            <Countdown target={m.kickoff} size="sm" showDays={false} variant="minimal" />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <div className={cn('h-9 w-9 rounded-full bg-gradient-to-br from-bet62-primary to-bet62-accent inline-flex items-center justify-center text-bet62-bg font-bold text-xs shrink-0')}>
-                              {m.home.slice(0, 2).toUpperCase()}
-                            </div>
-                            <p className="font-semibold truncate">{m.home}</p>
-                          </div>
-                          <div className="px-2 text-xs font-mono text-white/50">VS</div>
-                          <div className="flex items-center gap-2 min-w-0 justify-end">
-                            <p className="font-semibold truncate text-right">{m.away}</p>
-                            <div className={cn('h-9 w-9 rounded-full bg-gradient-to-br from-bet62-secondary to-bet62-accent inline-flex items-center justify-center text-bet62-bg font-bold text-xs shrink-0')}>
-                              {m.away.slice(0, 2).toUpperCase()}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-3 gap-2 pt-1">
-                          {(['1', 'X', '2'] as const).map((k, idx) => {
-                            const v = [m.odds.h, m.odds.d, m.odds.a][idx];
-                            return (
-                              <button
-                                key={k}
-                                onClick={() => addOdd(m, k, v)}
-                                className="group h-14 w-full flex flex-col items-center justify-center gap-0.5 px-1 rounded-xl border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/8 transition-all text-center"
-                              >
-                                <p className="text-[9px] uppercase tracking-wider text-white/50 leading-none">{k}</p>
-                                <p className="font-mono font-bold text-sm text-bet62-primary group-hover:bg-bet62-primary group-hover:text-bet62-bg inline-block px-2 mt-0.5 rounded-md transition-all leading-none">
-                                  {formatOdds(v)}
-                                </p>
-                              </button>
-                            );
-                          })}
-                        </div>
+                {loading
+                  ? [0, 1, 2, 3, 4, 5].map((i) => <FeaturedSkeleton key={i} i={i} />)
+                  : featured.length > 0
+                  ? featured.map((ev) => <FeaturedEventCard key={ev.id} ev={ev} />)
+                  : (
+                    <Card className="md:col-span-2 xl:col-span-3">
+                      <CardContent className="py-12 text-center">
+                        <Clock size={30} className="mx-auto text-bet62-primary/50 mb-3" />
+                        <p className="font-semibold">Sem eventos em destaque</p>
+                        <p className="text-sm text-white/60 mt-1">
+                          Os jogos em destaque serão publicados automaticamente após sincronização com PropLine / Goal API.
+                        </p>
                       </CardContent>
                     </Card>
-                  </motion.div>
-                ))}
+                  )}
               </div>
             </section>
 
@@ -307,7 +642,7 @@ export default function HomePage() {
               <div className="flex items-end justify-between mb-5">
                 <div>
                   <div className="flex items-center gap-2">
-                    <Badge variant="green" dot className="text-xs">24 em jogo</Badge>
+                    <Badge variant="green" dot className="text-xs">{loading ? '...' : liveNow.length} em jogo</Badge>
                     <h2 className="text-2xl md:text-3xl font-bold tracking-tight inline-flex items-center gap-2">
                       <Flame className="text-bet62-primary animate-pulse-slow" size={20} /> A decorrer AGORA
                     </h2>
@@ -319,85 +654,21 @@ export default function HomePage() {
                 </Link>
               </div>
               <div className="grid md:grid-cols-2 xl:grid-cols-5 gap-4">
-                {LIVE.map((m, i) => (
-                  <motion.div
-                    key={m.id}
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35, delay: 0.04 * i }}
-                  >
-                    <Card className="h-full overflow-hidden" glow="none">
-                      <div className="h-1 bg-bet62-primary" />
-                      <CardContent className="p-4 space-y-3">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <Badge variant="green" dot className="text-[10px] py-0 px-2">LIVE · {m.period || `${m.minute}'`}</Badge>
-                          <span className="text-white/50 truncate">{m.league}</span>
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <CircleUser size={16} className="text-bet62-primary shrink-0" />
-                              <p className="text-sm font-semibold truncate">{m.home}</p>
-                            </div>
-                            <span className="font-mono font-black text-2xl text-bet62-primary animate-pulse-slow">{m.score[0]}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2 mt-1.5">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <CircleUser size={16} className="text-bet62-secondary shrink-0" />
-                              <p className="text-sm font-semibold truncate">{m.away}</p>
-                            </div>
-                            <span className="font-mono font-black text-2xl text-bet62-secondary animate-pulse-slow">{m.score[1]}</span>
-                          </div>
-                        </div>
-                        {m.possession ? (
-                          <div>
-                            <div className="flex justify-between text-[10px] text-white/50 font-mono mb-1">
-                              <span>{m.possession[0]}%</span>
-                              <span>Posse</span>
-                              <span>{m.possession[1]}%</span>
-                            </div>
-                            <div className="flex h-1.5 rounded-full overflow-hidden bg-bet62-surface-3">
-                              <div className="bg-bet62-primary" style={{ width: `${m.possession[0]}%` }} />
-                              <div className="bg-bet62-secondary flex-1" />
-                            </div>
-                          </div>
-                        ) : null}
-                        <div className="grid grid-cols-3 gap-1.5 pt-1">
-                          {(['1', 'X', '2'] as const).map((k, idx) => {
-                            const v = [m.odds.h, m.odds.d, m.odds.a][idx];
-                            if (!v) return <div key={k} className="h-14 opacity-30 rounded-xl border border-dashed border-bet62-border/50" />;
-                            return (
-                              <button
-                                key={k}
-                                onClick={() => {
-                                  const sel: BetslipSelection = {
-                                    id: `${m.id}-${k}`,
-                                    eventId: m.id,
-                                    marketId: `${m.id}-1x2-live`,
-                                    selectionId: `${m.id}-${k}`,
-                                    selectionName: k === '1' ? m.home : k === 'X' ? 'Empate' : m.away,
-                                    marketName: 'Resultado (Ao Vivo)',
-                                    eventName: `${m.home} vs ${m.away}`,
-                                    kickoffAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-                                    odds: v,
-                                    marketType: '1X2',
-                                    outcome: k,
-                                  };
-                                  addSelection(sel);
-                                  setBetslipOpen(true);
-                                }}
-                                className="group h-14 w-full flex flex-col items-center justify-center gap-0.5 px-1 rounded-lg border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/8 transition-all text-center"
-                              >
-                                <p className="text-[9px] uppercase tracking-wider text-white/50 leading-none">{k}</p>
-                                <p className="font-mono font-bold text-sm text-bet62-primary leading-none mt-0.5">{formatOdds(v)}</p>
-                              </button>
-                            );
-                          })}
-                        </div>
+                {loading
+                  ? [0, 1, 2, 3, 4].map((i) => <LiveSkeleton key={i} i={i} />)
+                  : liveNow.length > 0
+                  ? liveNow.map((ev) => <LiveEventCard key={ev.id} ev={ev} />)
+                  : (
+                    <Card className="md:col-span-2 xl:col-span-5">
+                      <CardContent className="py-12 text-center">
+                        <Activity size={30} className="mx-auto text-bet62-primary/50 mb-3" />
+                        <p className="font-semibold">Sem jogos ao vivo neste momento</p>
+                        <p className="text-sm text-white/60 mt-1">
+                          Os eventos ao vivo serão listados em tempo real assim que começarem, via PropLine / Goal API.
+                        </p>
                       </CardContent>
                     </Card>
-                  </motion.div>
-                ))}
+                  )}
               </div>
             </section>
 
@@ -407,60 +678,27 @@ export default function HomePage() {
                   <h2 className="text-2xl md:text-3xl font-bold tracking-tight inline-flex items-center gap-2">
                     <CalendarDays size={20} className="text-bet62-accent" /> Próximos Eventos em Alta
                   </h2>
-                  <p className="text-sm text-white/60 mt-1">Grandes jogos a chegar · Odds definidas</p>
+                  <p className="text-sm text-white/60 mt-1">
+                    {loading ? 'A carregar calendário...' : `Grandes jogos a chegar · Odds definidas (${upcoming.length} eventos)`}
+                  </p>
                 </div>
               </div>
               <div className="grid md:grid-cols-2 gap-4">
-                {FEATURED.slice(3, 9).map((m, i) => (
-                  <motion.div
-                    key={`feat-${m.id}`}
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: 0.05 * i }}
-                  >
-                    <Card className="h-full">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <Badge variant="outline" className="py-0">{m.league}</Badge>
-                          <Countdown target={m.kickoff} size="sm" />
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="flex-1 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-bet62-primary/20 to-bet62-accent/20 border border-bet62-primary/30 inline-flex items-center justify-center font-bold text-xs text-bet62-primary shrink-0">
-                                {m.home.slice(0, 3).toUpperCase()}
-                              </div>
-                              <p className="font-semibold truncate">{m.home}</p>
-                            </div>
-                            <p className="text-xs font-mono text-white/40 px-2">—</p>
-                            <div className="flex items-center gap-2 min-w-0 justify-end">
-                              <p className="font-semibold truncate text-right">{m.away}</p>
-                              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-bet62-secondary/20 to-bet62-accent/20 border border-bet62-secondary/30 inline-flex items-center justify-center font-bold text-xs text-bet62-secondary shrink-0">
-                                {m.away.slice(0, 3).toUpperCase()}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="hidden sm:grid grid-cols-3 gap-1.5 shrink-0 w-[180px]">
-                            {([
-                              ['1', m.odds.h],
-                              ['X', m.odds.d],
-                              ['2', m.odds.a],
-                            ] as const).map(([k, v]) => (
-                              <button
-                                key={`${m.id}-big-${k}`}
-                                onClick={() => addOdd(m, k, v)}
-                                className="group h-14 w-full flex flex-col items-center justify-center gap-0.5 px-1 rounded-xl border border-bet62-border hover:border-bet62-primary hover:bg-bet62-primary/10 transition-all text-center"
-                              >
-                                <p className="text-[9px] uppercase tracking-wider text-white/50 leading-none">{k}</p>
-                                <p className="font-mono font-bold text-sm text-bet62-primary leading-none mt-0.5">{formatOdds(v)}</p>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
+                {loading
+                  ? [0, 1, 2, 3, 4, 5].map((i) => <UpcomingSkeleton key={i} i={i} />)
+                  : upcoming.length > 0
+                  ? upcoming.map((ev) => <UpcomingEventCard key={ev.id} ev={ev} />)
+                  : (
+                    <Card className="md:col-span-2">
+                      <CardContent className="py-12 text-center">
+                        <CalendarDays size={30} className="mx-auto text-bet62-accent/50 mb-3" />
+                        <p className="font-semibold">Calendário de eventos a carregar</p>
+                        <p className="text-sm text-white/60 mt-1">
+                          Todos os eventos das próximas 48h serão apresentados aqui após conexão aos provedores oficiais.
+                        </p>
                       </CardContent>
                     </Card>
-                  </motion.div>
-                ))}
+                  )}
               </div>
             </section>
 

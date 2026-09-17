@@ -25,7 +25,6 @@ import type {
   ProviderMarket,
   ProviderMarketSelection,
 } from '../odds-provider/odds-provider.interface';
-import { MockOddsProviderService } from '../odds-provider/mock-odds-provider.service';
 import { AbstractOddsProvider } from '../odds-provider/abstract-odds-provider.service';
 
 interface SportDto {
@@ -61,7 +60,6 @@ export class OddsService {
     @Inject(ODDS_PROVIDER_TOKEN) private readonly provider: OddsProvider,
     @Inject(ABSTRACT_ODDS_PROVIDER_TOKEN)
     private readonly abstractProvider: AbstractOddsProvider,
-    private readonly mockProvider: MockOddsProviderService,
   ) {}
 
   private readonly cache = new SimpleCache();
@@ -70,34 +68,24 @@ export class OddsService {
     return `odds:${parts.filter((p) => p !== undefined && p !== null).join(':')}`;
   }
 
-  private async withMockFallback<T>(
+  private async withProviderOnly<T>(
     operationName: string,
     fn: () => Promise<T>,
-    fallbackFn: () => Promise<T>,
   ): Promise<T> {
     try {
       return await fn();
     } catch (err) {
-      this.logger.warn(
-      `${operationName} falhou no provider (${this.abstractProvider.providerName}). Usando mock fallback. Erro: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      this.logger.error(
+        `${operationName} falhou no provider (${this.abstractProvider.providerName}). Sem fallback. Erro: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
       );
-      try {
-        return await fallbackFn();
-      } catch (fallbackErr) {
-        this.logger.error(
-          `${operationName} também falhou no mock fallback: ${
-            fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
-          }`,
-        );
-        throw fallbackErr;
-      }
+      throw err;
     }
   }
 
   async getSports(): Promise<SportDto[]> {
-    return this.withMockFallback(
+    return this.withProviderOnly(
       'getSports',
       async () => {
         const cacheKey = this.key(['sports']);
@@ -124,35 +112,11 @@ export class OddsService {
         await this.cache.set(cacheKey, result, this.CACHE_PREMATCH_TTL_MS / 1000);
         return result;
       },
-      async () => {
-        const cacheKey = this.key(['sports', 'fallback']);
-        const cached = (await this.cache.get(cacheKey)) as SportDto[];
-        if (cached) return cached;
-        const internalSports = this.mockProvider.getSportsInternal();
-        const { events: prematch } = await this.mockProvider.getPrematchEvents({ limit: 2000 });
-        const { events: live } = await this.mockProvider.getLiveEvents({ limit: 2000 });
-        const result: SportDto[] = internalSports.map((sp, idx) => {
-          const prematchCount = prematch.filter((e) => e.sportCode === sp.code).length;
-          const liveCount = live.filter((e) => e.sportCode === sp.code).length;
-          return {
-            id: sp.code,
-            code: sp.code,
-            name: sp.name,
-            active: true,
-            orderIndex: idx,
-            iconUrl: null,
-            liveCount,
-            prematchCount,
-          };
-        });
-        await this.cache.set(cacheKey, result, this.CACHE_PREMATCH_TTL_MS / 1000);
-        return result;
-      },
     );
   }
 
   async getLeagues(query: LeagueQueryDto): Promise<LeagueDto[]> {
-    return this.withMockFallback(
+    return this.withProviderOnly(
       'getLeagues',
       async () => {
         const cacheKey = this.key(['leagues', JSON.stringify(query)]);
@@ -196,40 +160,16 @@ export class OddsService {
         await this.cache.set(cacheKey, result, this.CACHE_PREMATCH_TTL_MS / 1000);
         return result;
       },
-      async () => {
-        const cacheKey = this.key(['leagues', 'fallback', JSON.stringify(query)]);
-        const cached = (await this.cache.get(cacheKey)) as LeagueDto[];
-        if (cached) return cached;
-        const leagues = await this.mockProvider.getActiveLeagues(query.sportType);
-        const { events: prematch } = await this.mockProvider.getPrematchEvents({
-          limit: 2000,
-          sports: query.sportType ? [query.sportType] : undefined,
-        });
-        const { events: live } = await this.mockProvider.getLiveEvents({
-          limit: 2000,
-          sports: query.sportType ? [query.sportType] : undefined,
-        });
-        let filtered = leagues;
-        if (query.onlyTop) {
-          filtered = filtered.filter((l) => !!l.isTop);
-        }
-        const result: LeagueDto[] = filtered.map((l) => ({
-          ...l,
-          id: l.providerLeagueId,
-          liveCount: live.filter((e) => e.leagueId === l.providerLeagueId).length,
-          prematchCount: prematch.filter((e) => e.leagueId === l.providerLeagueId).length,
-        }));
-        if (query.limit) result.length = Math.min(result.length, query.limit);
-        await this.cache.set(cacheKey, result, this.CACHE_PREMATCH_TTL_MS / 1000);
-        return result;
-      },
     );
   }
 
   async getPrematchEvents(query: PrematchEventsQueryDto): Promise<{ events: EventDto[]; total: number; page: number; limit: number }> {
-    return this.withMockFallback(
+    return this.withProviderOnly(
       'getPrematchEvents',
       async () => {
+        // #region debug-point H6:prematch-query-sport-empty
+        (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'pre-fix', hypothesisId: 'H6', location: 'odds.service.ts:166', msg: '[DEBUG] OddsService.getPrematchEvents chamado', data: { querySports: (query as unknown as { sports?: unknown[] }).sports ?? null, querySportsCount: Array.isArray((query as unknown as { sports?: unknown[] }).sports) ? (query as unknown as { sports: unknown[] }).sports.length : 0, queryLimit: query.limit, queryPage: query.page ?? 1 }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
+        // #endregion
         const cacheKey = this.key(['prematch', JSON.stringify(query)]);
         const cached = (await this.cache.get(cacheKey)) as { events: EventDto[]; total: number; page: number; limit: number };
         if (cached) return cached;
@@ -241,23 +181,11 @@ export class OddsService {
         await this.cache.set(cacheKey, result, this.CACHE_PREMATCH_TTL_MS / 1000);
         return result;
       },
-      async () => {
-        const cacheKey = this.key(['prematch', 'fallback', JSON.stringify(query)]);
-        const cached = (await this.cache.get(cacheKey)) as { events: EventDto[]; total: number; page: number; limit: number };
-        if (cached) return cached;
-        const { events, total } = await this.mockProvider.getPrematchEvents(query);
-        const page = query.page ?? 1;
-        const limit = query.limit ?? 50;
-        const dtos = events.map((ev) => this.buildEventDto(ev));
-        const result = { events: dtos, total, page, limit };
-        await this.cache.set(cacheKey, result, this.CACHE_PREMATCH_TTL_MS / 1000);
-        return result;
-      },
     );
   }
 
   async getLiveEvents(query: LiveEventsQueryDto): Promise<{ events: EventDto[]; total: number; page: number; limit: number }> {
-    return this.withMockFallback(
+    return this.withProviderOnly(
       'getLiveEvents',
       async () => {
         const cacheKey = this.key(['live', JSON.stringify(query)]);
@@ -271,23 +199,11 @@ export class OddsService {
         await this.cache.set(cacheKey, result, this.CACHE_LIVE_TTL_MS / 1000);
         return result;
       },
-      async () => {
-        const cacheKey = this.key(['live', 'fallback', JSON.stringify(query)]);
-        const cached = (await this.cache.get(cacheKey)) as { events: EventDto[]; total: number; page: number; limit: number };
-        if (cached) return cached;
-        const { events, total } = await this.mockProvider.getLiveEvents(query);
-        const page = query.page ?? 1;
-        const limit = query.limit ?? 50;
-        const dtos = events.map((ev) => this.mergeLiveScoreboardIntoEvent(this.buildEventDto(ev), ev));
-        const result = { events: dtos, total, page, limit };
-        await this.cache.set(cacheKey, result, this.CACHE_LIVE_TTL_MS / 1000);
-        return result;
-      },
     );
   }
 
   async getEventDetail(_query: EventDetailQueryDto, eventId: string): Promise<EventDto & { markets: MarketDto[] } | null> {
-    return this.withMockFallback(
+    return this.withProviderOnly(
       'getEventDetail',
       async () => {
         const cacheKey = this.key(['event', eventId]);
@@ -303,42 +219,17 @@ export class OddsService {
         await this.cache.set(cacheKey, result, ttl / 1000);
         return result;
       },
-      async () => {
-        const cacheKey = this.key(['event', 'fallback', eventId]);
-        const cached = (await this.cache.get(cacheKey)) as EventDto & { markets: MarketDto[] };
-        if (cached) return cached;
-        const detail = await this.mockProvider.getEventDetail(eventId, true);
-        if (!detail) return null;
-        const ttl = detail.status === 'LIVE' || detail.status === 'HALF_TIME' ? this.CACHE_LIVE_TTL_MS : this.CACHE_PREMATCH_TTL_MS;
-        const base = this.buildEventDto(detail);
-        const withLive = this.mergeLiveScoreboardIntoEvent(base, detail);
-        const markets = this.formatMarketSelections(detail.markets ?? []);
-        const result = { ...withLive, markets };
-        await this.cache.set(cacheKey, result, ttl / 1000);
-        return result;
-      },
     );
   }
 
   async getEventMarkets(eventId: string): Promise<MarketDto[]> {
-    return this.withMockFallback(
+    return this.withProviderOnly(
       'getEventMarkets',
       async () => {
         const cacheKey = this.key(['event', eventId, 'markets']);
         const cached = (await this.cache.get(cacheKey)) as MarketDto[];
         if (cached) return cached;
         const detail = await this.provider.getEventDetail(eventId, true);
-        if (!detail) return [];
-        const ttl = detail.status === 'LIVE' || detail.status === 'HALF_TIME' ? this.CACHE_LIVE_TTL_MS : this.CACHE_PREMATCH_TTL_MS;
-        const result = this.formatMarketSelections(detail.markets ?? []);
-        await this.cache.set(cacheKey, result, ttl / 1000);
-        return result;
-      },
-      async () => {
-        const cacheKey = this.key(['event', 'fallback', eventId, 'markets']);
-        const cached = (await this.cache.get(cacheKey)) as MarketDto[];
-        if (cached) return cached;
-        const detail = await this.mockProvider.getEventDetail(eventId, true);
         if (!detail) return [];
         const ttl = detail.status === 'LIVE' || detail.status === 'HALF_TIME' ? this.CACHE_LIVE_TTL_MS : this.CACHE_PREMATCH_TTL_MS;
         const result = this.formatMarketSelections(detail.markets ?? []);
@@ -410,29 +301,10 @@ export class OddsService {
   }
 
   async getLiveSnapshot(eventId: string): Promise<LiveMatchUpdateDto | null> {
-    return this.withMockFallback(
+    return this.withProviderOnly(
       'getLiveSnapshot',
       async () => {
         const detail = await this.provider.getEventDetail(eventId, false);
-        if (!detail) return null;
-        return {
-          eventId,
-          status: (detail.status as unknown as EventStatus) ?? EventStatus.PRE_MATCH,
-          scoreBoard: {
-            home: detail.homeScore ?? 0,
-            away: detail.awayScore ?? 0,
-            homeHalf: detail.homeHalfScore,
-            awayHalf: detail.awayHalfScore,
-          },
-          matchClock: {
-            minute: detail.minuteOfMatch,
-            injuryMinutes: detail.injuryMinutes,
-          },
-          updatedAt: detail.liveUpdatedAt ?? new Date(),
-        };
-      },
-      async () => {
-        const detail = await this.mockProvider.getEventDetail(eventId, false);
         if (!detail) return null;
         return {
           eventId,
@@ -454,14 +326,10 @@ export class OddsService {
   }
 
   async getAllLiveEventIds(): Promise<string[]> {
-    return this.withMockFallback(
+    return this.withProviderOnly(
       'getAllLiveEventIds',
       async () => {
         const { events } = await this.provider.getLiveEvents({ limit: 2000 });
-        return events.map((e) => e.id);
-      },
-      async () => {
-        const { events } = await this.mockProvider.getLiveEvents({ limit: 2000 });
         return events.map((e) => e.id);
       },
     );

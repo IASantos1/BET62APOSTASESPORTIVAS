@@ -43,7 +43,12 @@ async function bootstrap() {
     // IoAdapter unavailable
   }
 
-  app.setGlobalPrefix('api/odds');
+  const ODD_GLOBAL_PREFIX = 'api/odds';
+  app.setGlobalPrefix(ODD_GLOBAL_PREFIX);
+
+  // #region debug-point H2a:odds-service-global-prefix
+  (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'post-fix', hypothesisId: 'H2a', location: 'odds-service/main.ts:46', msg: '[DEBUG] odds-service setGlobalPrefix POST-FIX: @Controller vazio resolve duplo prefixo', data: { globalPrefix: ODD_GLOBAL_PREFIX, controllerDecorator: '@Controller() vazio [FIX H2a]', finalExpectedRoute: ODD_GLOBAL_PREFIX + '/events/prematch', frontendRequestPath: '/api/odds/events/prematch', mismatch: ODD_GLOBAL_PREFIX + '/events/prematch' !== '/api/odds/events/prematch', fixH2aApplied: true, routesMatch: ODD_GLOBAL_PREFIX + '/events/prematch' === '/api/odds/events/prematch' }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
+  // #endregion
 
   app.useGlobalPipes(
     new ValidationPipe({
