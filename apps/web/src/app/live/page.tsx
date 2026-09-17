@@ -451,26 +451,6 @@ export default function LivePage() {
     setBetslipOpen(true);
   };
 
-  const handleSelect = (event: LiveEvent, payload: QuickSelectPayload) => {
-    const homeName = event.homeTeamName ?? event.name.split(' vs ')[0] ?? 'Casa';
-    const awayName = event.awayTeamName ?? event.name.split(' vs ')[1] ?? 'Fora';
-    const sel: BetslipSelection = {
-      id: `${event.id}-${payload.market}-${payload.sel}`,
-      eventId: event.id,
-      marketId: `${event.id}-${payload.market}`,
-      selectionId: `${event.id}-${payload.market}-${payload.sel}`,
-      selectionName: payload.selName,
-      marketName: payload.marketName,
-      eventName: `${homeName} vs ${awayName} · ${event.leagueName ?? event.sportType}`,
-      kickoffAt: new Date(event.kickoffAt).toISOString(),
-      odds: payload.odds,
-      marketType: '1X2',
-      outcome: payload.sel,
-    };
-    addSelection(sel);
-    setBetslipOpen(true);
-  };
-
   return (
     <div className="min-h-screen bg-bet62-bg">
       <Header />
@@ -651,6 +631,7 @@ export default function LivePage() {
         <Footer />
       </main>
       <Betslip open={betslipOpen} onClose={() => setBetslipOpen(false)} />
+      <FloatingBetslipToggle onClick={() => setBetslipOpen(true)} open={betslipOpen} />
     </div>
   );
 }
