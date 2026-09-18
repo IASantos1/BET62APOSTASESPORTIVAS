@@ -29,9 +29,17 @@ export interface MatchPreview {
 interface MatchHeaderCardProps {
   matchId: string;
   match?: MatchPreview | null;
+  /**
+   * Em mobile, quando definido, substitui o corpo deste cartao (placar +
+   * nomes das equipas) pelo conteudo da tab ativa (Match Tracker,
+   * Estatisticas, H2H, Classificacao), em vez de a tab aparecer numa
+   * caixa separada abaixo. Em desktop o placar continua sempre visivel
+   * (a tab tem a sua propria coluna ao lado).
+   */
+  mobileOverride?: React.ReactNode;
 }
 
-export function MatchHeaderCard({ matchId, match }: MatchHeaderCardProps) {
+export function MatchHeaderCard({ matchId, match, mobileOverride }: MatchHeaderCardProps) {
   const [data, setData] = React.useState<MatchPreview | null>(match ?? null);
   const [showEvents, setShowEvents] = React.useState(true);
 
@@ -41,17 +49,34 @@ export function MatchHeaderCard({ matchId, match }: MatchHeaderCardProps) {
     }
   }, [matchId, match]);
 
-  if (!data) {
-    return (
-      <Card className="overflow-hidden">
-        <CardContent className="p-8 flex flex-col items-center justify-center min-h-[240px] gap-2 text-white/40">
-          <Clock size={28} className="animate-pulse" />
-          <p className="text-sm font-semibold">A carregar dados da partida...</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const scoreboard = !data ? (
+    <div className="flex flex-col items-center justify-center min-h-[240px] gap-2 text-white/40">
+      <Clock size={28} className="animate-pulse" />
+      <p className="text-sm font-semibold">A carregar dados da partida...</p>
+    </div>
+  ) : (
+    <MatchScoreboard data={data} showEvents={showEvents} setShowEvents={setShowEvents} />
+  );
 
+  return (
+    <Card className="overflow-hidden">
+      <CardContent className="p-5">
+        {mobileOverride ? <div className="lg:hidden">{mobileOverride}</div> : null}
+        <div className={cn(mobileOverride ? 'hidden lg:block' : undefined, 'space-y-5')}>{scoreboard}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MatchScoreboard({
+  data,
+  showEvents,
+  setShowEvents,
+}: {
+  data: MatchPreview;
+  showEvents: boolean;
+  setShowEvents: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
   const { homeTeam, awayTeam, score, league, clock, events } = data;
 
   const formatClock = () => {
@@ -66,8 +91,7 @@ export function MatchHeaderCard({ matchId, match }: MatchHeaderCardProps) {
   const isLive = clock?.running || data.status === 'LIVE' || data.status === 'HALF_TIME';
 
   return (
-    <Card className="overflow-hidden">
-      <CardContent className="p-5 space-y-5">
+    <>
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
             {league.logoUrl ? (
@@ -165,7 +189,6 @@ export function MatchHeaderCard({ matchId, match }: MatchHeaderCardProps) {
             ) : null}
           </div>
         ) : null}
-      </CardContent>
-    </Card>
+    </>
   );
 }

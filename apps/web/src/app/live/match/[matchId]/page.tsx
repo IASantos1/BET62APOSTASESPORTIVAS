@@ -260,6 +260,86 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
       .finally(() => setH2hLoading(false));
   }, [activeTab, decodedMatchId]);
 
+  const renderTabPanel = (tab: string): React.ReactNode => {
+    switch (tab) {
+      case 'tracker':
+        return isFootball ? (
+          <div
+            className="rounded-xl border overflow-hidden"
+            style={{ borderColor: 'rgba(30, 86, 49, 0.25)', backgroundColor: 'rgba(30, 86, 49, 0.04)' }}
+          >
+            <div className="px-4 py-2 border-b border-[#1e5631]/20 flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold text-[#1e5631] tracking-wide shrink-0">CAMPO AO VIVO</div>
+              {isLive ? (
+                <div className="text-[11px] text-white/60 max-w-[70%] truncate" title={demoCommentary}>
+                  {demoCommentary}
+                </div>
+              ) : null}
+            </div>
+            <div className="p-3">
+              {isLive ? (
+                <MiniFootballPitch ballX={ballPosition.x} ballY={ballPosition.y} ballZone={ballPosition.zone} />
+              ) : (
+                <div className="py-10 text-center text-sm text-white/50">
+                  O match tracker fica disponível assim que o jogo começar.
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <ComingSoonPanel
+            title="Match Tracker indisponível para esta modalidade"
+            description="O acompanhamento visual em campo está disponível apenas para futebol, por agora."
+          />
+        );
+      case 'stats':
+        return !isFootball ? (
+          <ComingSoonPanel
+            title="Estatísticas em breve"
+            description="As estatísticas detalhadas para esta modalidade estão a ser ligadas aos dados da PropLine."
+          />
+        ) : statsLoading ? (
+          <ComingSoonPanel title="A carregar estatísticas..." description="" />
+        ) : stats ? (
+          <StatisticsPanel
+            stats={stats}
+            homeName={detail?.homeTeamName ?? detail?.name.split(' vs ')[0] ?? 'Casa'}
+            awayName={detail?.awayTeamName ?? detail?.name.split(' vs ')[1] ?? 'Fora'}
+          />
+        ) : (
+          <ComingSoonPanel
+            title="Estatísticas indisponíveis"
+            description="Ainda não há estatísticas publicadas pela Goal API para esta partida."
+          />
+        );
+      case 'h2h':
+        return !isFootball ? (
+          <ComingSoonPanel
+            title="H2H indisponível para esta modalidade"
+            description="O histórico de confrontos diretos está disponível apenas para futebol, por agora."
+          />
+        ) : h2hLoading ? (
+          <ComingSoonPanel title="A carregar confrontos diretos..." description="" />
+        ) : h2h ? (
+          <H2hPanel h2h={h2h} />
+        ) : (
+          <ComingSoonPanel
+            title="Confrontos diretos indisponíveis"
+            description="Não foi possível obter o histórico de confrontos diretos para esta partida."
+          />
+        );
+      case 'standings':
+        return (
+          <ComingSoonPanel
+            title="Classificação em breve"
+            description="A tabela classificativa da competição será apresentada aqui assim que a integração estiver concluída."
+          />
+        );
+      default:
+        return null;
+    }
+  };
+
   const handleSelect = (market: MarketCategory, odd: OddItem) => {
     if (!detail) return;
     const homeName = detail.homeTeamName ?? detail.name.split(' vs ')[0] ?? 'Casa';
@@ -306,162 +386,84 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
               <MatchHeaderCard
                 matchId={decodedMatchId}
                 match={detail ? eventToUiMatchPreview(detail) : null}
+                mobileOverride={renderTabPanel(activeTab)}
               />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              {/* Em mobile (coluna unica) as tabs vem antes dos mercados —
-                  ordem invertida so no desktop via order-*, onde ficam lado
-                  a lado (mercados a esquerda, tabs a direita). Enquanto uma
-                  tab que nao seja Match Tracker estiver ativa, os mercados
-                  ficam ocultos SO em mobile (lg:block forca a exibicao
-                  sempre no desktop) para a tab ocupar a tela toda, em vez
-                  de aparecer escondida no fim da pagina depois de todos os
-                  mercados. */}
-              <div
-                className={cn(
-                  'order-2 lg:order-1 lg:col-span-7 xl:col-span-8 min-w-0',
-                  activeTab !== 'tracker' && 'hidden lg:block',
-                )}
-              >
-                <FullMarketsGrid
-                  matchId={decodedMatchId}
-                  loading={loading}
-                  categories={detail ? eventToUiMarketCategories(detail) : []}
-                  onSelectionClick={(market, odd) => handleSelect(market, odd)}
-                />
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <div className="mb-5">
+                <TabsList className="w-full h-auto grid grid-cols-4 gap-1 p-1 sm:flex sm:flex-wrap">
+                  <TabsTrigger
+                    value="tracker"
+                    className="px-1 sm:px-2.5 py-2 sm:py-1.5 text-[10px] sm:text-xs leading-tight"
+                  >
+                    <span className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 w-full">
+                      <PlayCircle size={17} className="sm:hidden" />
+                      <PlayCircle size={13} className="hidden sm:inline" />
+                      <span className="truncate max-w-full">Match Tracker</span>
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="stats"
+                    className="px-1 sm:px-2.5 py-2 sm:py-1.5 text-[10px] sm:text-xs leading-tight"
+                  >
+                    <span className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 w-full">
+                      <BarChart3 size={17} className="sm:hidden" />
+                      <BarChart3 size={13} className="hidden sm:inline" />
+                      <span className="truncate max-w-full">Estatísticas</span>
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="h2h"
+                    className="px-1 sm:px-2.5 py-2 sm:py-1.5 text-[10px] sm:text-xs leading-tight"
+                  >
+                    <span className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 w-full">
+                      <Swords size={17} className="sm:hidden" />
+                      <Swords size={13} className="hidden sm:inline" />
+                      <span className="truncate max-w-full">H2H</span>
+                    </span>
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="standings"
+                    className="px-1 sm:px-2.5 py-2 sm:py-1.5 text-[10px] sm:text-xs leading-tight"
+                  >
+                    <span className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 w-full">
+                      <ListOrdered size={17} className="sm:hidden" />
+                      <ListOrdered size={13} className="hidden sm:inline" />
+                      <span className="truncate max-w-full">Classificação</span>
+                    </span>
+                  </TabsTrigger>
+                </TabsList>
               </div>
 
-              <div className="order-1 lg:order-2 lg:col-span-5 xl:col-span-4 min-w-0">
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="w-full h-auto grid grid-cols-4 gap-1 p-1 sm:flex sm:flex-wrap">
-                    <TabsTrigger
-                      value="tracker"
-                      className="px-1 sm:px-2.5 py-2 sm:py-1.5 text-[10px] sm:text-xs leading-tight"
-                    >
-                      <span className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 w-full">
-                        <PlayCircle size={17} className="sm:hidden" />
-                        <PlayCircle size={13} className="hidden sm:inline" />
-                        <span className="truncate max-w-full">Match Tracker</span>
-                      </span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="stats"
-                      className="px-1 sm:px-2.5 py-2 sm:py-1.5 text-[10px] sm:text-xs leading-tight"
-                    >
-                      <span className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 w-full">
-                        <BarChart3 size={17} className="sm:hidden" />
-                        <BarChart3 size={13} className="hidden sm:inline" />
-                        <span className="truncate max-w-full">Estatísticas</span>
-                      </span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="h2h"
-                      className="px-1 sm:px-2.5 py-2 sm:py-1.5 text-[10px] sm:text-xs leading-tight"
-                    >
-                      <span className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 w-full">
-                        <Swords size={17} className="sm:hidden" />
-                        <Swords size={13} className="hidden sm:inline" />
-                        <span className="truncate max-w-full">H2H</span>
-                      </span>
-                    </TabsTrigger>
-                    <TabsTrigger
-                      value="standings"
-                      className="px-1 sm:px-2.5 py-2 sm:py-1.5 text-[10px] sm:text-xs leading-tight"
-                    >
-                      <span className="flex flex-col sm:flex-row items-center justify-center gap-0.5 sm:gap-1.5 w-full">
-                        <ListOrdered size={17} className="sm:hidden" />
-                        <ListOrdered size={13} className="hidden sm:inline" />
-                        <span className="truncate max-w-full">Classificação</span>
-                      </span>
-                    </TabsTrigger>
-                  </TabsList>
+              {/* Em mobile o conteudo da tab ativa ja aparece dentro do
+                  MatchHeaderCard (mobileOverride, no lugar do placar), entao
+                  esta coluna com TabsContent fica escondida abaixo do
+                  breakpoint lg — so existe para o layout desktop lado a
+                  lado (mercados + coluna de tabs). Os mercados ficam
+                  ocultos em mobile enquanto uma tab que nao seja o Match
+                  Tracker estiver ativa, para o conteudo dessa tab ocupar a
+                  tela toda em vez de aparecer escondido no fim da pagina. */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+                <div
+                  className={cn('lg:col-span-7 xl:col-span-8 min-w-0', activeTab !== 'tracker' && 'hidden lg:block')}
+                >
+                  <FullMarketsGrid
+                    matchId={decodedMatchId}
+                    loading={loading}
+                    categories={detail ? eventToUiMarketCategories(detail) : []}
+                    onSelectionClick={(market, odd) => handleSelect(market, odd)}
+                  />
+                </div>
 
-                  <TabsContent value="tracker">
-                    {isFootball ? (
-                      <div
-                        className="rounded-xl border overflow-hidden"
-                        style={{ borderColor: 'rgba(30, 86, 49, 0.25)', backgroundColor: 'rgba(30, 86, 49, 0.04)' }}
-                      >
-                        <div className="px-4 py-2 border-b border-[#1e5631]/20 flex items-center justify-between gap-2">
-                          <div className="text-xs font-semibold text-[#1e5631] tracking-wide shrink-0">CAMPO AO VIVO</div>
-                          {isLive ? (
-                            <div className="text-[11px] text-white/60 max-w-[70%] truncate" title={demoCommentary}>
-                              {demoCommentary}
-                            </div>
-                          ) : null}
-                        </div>
-                        <div className="p-3">
-                          {isLive ? (
-                            <MiniFootballPitch
-                              ballX={ballPosition.x}
-                              ballY={ballPosition.y}
-                              ballZone={ballPosition.zone}
-                            />
-                          ) : (
-                            <div className="py-10 text-center text-sm text-white/50">
-                              O match tracker fica disponível assim que o jogo começar.
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <ComingSoonPanel
-                        title="Match Tracker indisponível para esta modalidade"
-                        description="O acompanhamento visual em campo está disponível apenas para futebol, por agora."
-                      />
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="stats">
-                    {!isFootball ? (
-                      <ComingSoonPanel
-                        title="Estatísticas em breve"
-                        description="As estatísticas detalhadas para esta modalidade estão a ser ligadas aos dados da PropLine."
-                      />
-                    ) : statsLoading ? (
-                      <ComingSoonPanel title="A carregar estatísticas..." description="" />
-                    ) : stats ? (
-                      <StatisticsPanel
-                        stats={stats}
-                        homeName={detail?.homeTeamName ?? detail?.name.split(' vs ')[0] ?? 'Casa'}
-                        awayName={detail?.awayTeamName ?? detail?.name.split(' vs ')[1] ?? 'Fora'}
-                      />
-                    ) : (
-                      <ComingSoonPanel
-                        title="Estatísticas indisponíveis"
-                        description="Ainda não há estatísticas publicadas pela Goal API para esta partida."
-                      />
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="h2h">
-                    {!isFootball ? (
-                      <ComingSoonPanel
-                        title="H2H indisponível para esta modalidade"
-                        description="O histórico de confrontos diretos está disponível apenas para futebol, por agora."
-                      />
-                    ) : h2hLoading ? (
-                      <ComingSoonPanel title="A carregar confrontos diretos..." description="" />
-                    ) : h2h ? (
-                      <H2hPanel h2h={h2h} />
-                    ) : (
-                      <ComingSoonPanel
-                        title="Confrontos diretos indisponíveis"
-                        description="Não foi possível obter o histórico de confrontos diretos para esta partida."
-                      />
-                    )}
-                  </TabsContent>
-
-                  <TabsContent value="standings">
-                    <ComingSoonPanel
-                      title="Classificação em breve"
-                      description="A tabela classificativa da competição será apresentada aqui assim que a integração estiver concluída."
-                    />
-                  </TabsContent>
-                </Tabs>
+                <div className="hidden lg:block lg:col-span-5 xl:col-span-4 min-w-0">
+                  <TabsContent value="tracker">{renderTabPanel('tracker')}</TabsContent>
+                  <TabsContent value="stats">{renderTabPanel('stats')}</TabsContent>
+                  <TabsContent value="h2h">{renderTabPanel('h2h')}</TabsContent>
+                  <TabsContent value="standings">{renderTabPanel('standings')}</TabsContent>
+                </div>
               </div>
-            </div>
+            </Tabs>
           </div>
           <Footer />
         </main>
