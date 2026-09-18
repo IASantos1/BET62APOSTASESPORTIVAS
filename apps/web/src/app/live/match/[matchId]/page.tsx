@@ -15,6 +15,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../../../components
 import { apiClient } from '../../../../lib/api-client';
 import { eventToUiMarketCategories, eventToUiMatchPreview } from '../../../../lib/odds-adapters';
 import { useBetslipStore, type BetslipSelection } from '../../../../stores/betslip.store';
+import { cn } from '../../../../lib/utils';
 
 type LiveScore = { home?: number | null; away?: number | null };
 type LiveEventDetail = {
@@ -309,7 +310,20 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-              <div className="lg:col-span-7 xl:col-span-8 min-w-0">
+              {/* Em mobile (coluna unica) as tabs vem antes dos mercados —
+                  ordem invertida so no desktop via order-*, onde ficam lado
+                  a lado (mercados a esquerda, tabs a direita). Enquanto uma
+                  tab que nao seja Match Tracker estiver ativa, os mercados
+                  ficam ocultos SO em mobile (lg:block forca a exibicao
+                  sempre no desktop) para a tab ocupar a tela toda, em vez
+                  de aparecer escondida no fim da pagina depois de todos os
+                  mercados. */}
+              <div
+                className={cn(
+                  'order-2 lg:order-1 lg:col-span-7 xl:col-span-8 min-w-0',
+                  activeTab !== 'tracker' && 'hidden lg:block',
+                )}
+              >
                 <FullMarketsGrid
                   matchId={decodedMatchId}
                   loading={loading}
@@ -318,7 +332,7 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
                 />
               </div>
 
-              <div className="lg:col-span-5 xl:col-span-4 min-w-0">
+              <div className="order-1 lg:order-2 lg:col-span-5 xl:col-span-4 min-w-0">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList className="w-full h-auto grid grid-cols-4 gap-1 p-1 sm:flex sm:flex-wrap">
                     <TabsTrigger

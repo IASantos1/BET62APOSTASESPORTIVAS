@@ -146,8 +146,16 @@ function normalizeOddsResponse(resp: ProplineOddsResponse): ProplineOddsResponse
             ? outcome.line
             : null;
         const isSpread = key.includes('spread') || key.includes('handicap');
-        const selectionLabel = outcome.description
-          ? `${outcome.description} - ${rawOutcomeName}`
+        // Em mercados h2h de esportes individuais (tenis, tenis de mesa,
+        // dardos...) o "outcome.name" ja e o proprio nome do jogador/lado —
+        // se description vier igual (ou so um rotulo generico do book,
+        // "Match Winner" etc.), duplicar como "Yidi Yang - Yidi Yang" so
+        // deixa o rotulo comprido e confuso. So combina os dois quando
+        // description realmente adiciona informacao (ex: mercado de prop
+        // com jogador na description e Over/Under no name).
+        const descriptionTrimmed = outcome.description?.trim();
+        const selectionLabel = descriptionTrimmed && descriptionTrimmed.toLowerCase() !== rawOutcomeName.toLowerCase()
+          ? `${descriptionTrimmed} - ${rawOutcomeName}`
           : rawOutcomeName;
         normalized.selections.push({
           label: selectionLabel,
