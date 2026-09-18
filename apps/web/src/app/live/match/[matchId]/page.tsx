@@ -186,6 +186,8 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
   const [commentaryLog, setCommentaryLog] = React.useState<string[]>(['Bola no meio campo']);
   const [detail, setDetail] = React.useState<LiveEventDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [oddsTrend, setOddsTrend] = React.useState<Map<string, 'up' | 'down'>>(new Map());
+  const prevOddsRef = React.useRef<Map<string, number>>(new Map());
   const [activeTab, setActiveTab] = React.useState('tracker');
   const [stats, setStats] = React.useState<FootballStats | null>(null);
   const [statsLoading, setStatsLoading] = React.useState(false);
@@ -225,7 +227,23 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
         const res = await apiClient.get<LiveEventDetail>(`/odds/events/${encodeURIComponent(decodedMatchId)}`, {
           auth: false,
         });
-        if (!cancelled) setDetail(res);
+        if (!cancelled) {
+          setDetail(res);
+          const nextPrices = new Map<string, number>();
+          const trend = new Map<string, 'up' | 'down'>();
+          for (const market of res.markets ?? []) {
+            for (const sel of market.selections ?? []) {
+              if (typeof sel.odds !== 'number' || !Number.isFinite(sel.odds)) continue;
+              nextPrices.set(sel.id, sel.odds);
+              const prevPrice = prevOddsRef.current.get(sel.id);
+              if (prevPrice !== undefined && prevPrice !== sel.odds) {
+                trend.set(sel.id, sel.odds > prevPrice ? 'up' : 'down');
+              }
+            }
+          }
+          prevOddsRef.current = nextPrices;
+          if (trend.size > 0) setOddsTrend(trend);
+        }
       } catch {
         if (!cancelled) setDetail(null);
       } finally {
@@ -392,6 +410,17 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
     }
   };
 
+  const marketCategories: MarketCategory[] = React.useMemo(() => {
+    if (!detail) return [];
+    return eventToUiMarketCategories(detail).map((cat) => ({
+      ...cat,
+      odds: cat.odds.map((odd) => ({
+        ...odd,
+        trend: (odd.selectionId && oddsTrend.get(odd.selectionId)) || null,
+      })),
+    }));
+  }, [detail, oddsTrend]);
+
   const handleSelect = (market: MarketCategory, odd: OddItem) => {
     if (!detail) return;
     const homeName = detail.homeTeamName ?? detail.name.split(' vs ')[0] ?? 'Casa';
@@ -503,7 +532,7 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
                   <FullMarketsGrid
                     matchId={decodedMatchId}
                     loading={loading}
-                    categories={detail ? eventToUiMarketCategories(detail) : []}
+                    categories={marketCategories}
                     onSelectionClick={(market, odd) => handleSelect(market, odd)}
                   />
                 </div>

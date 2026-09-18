@@ -70,6 +70,32 @@ function prettifyMarketKey(key: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function foldDiacritics(s: string): string {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function lastSignificantWord(s: string): string {
+  const parts = foldDiacritics(s).toLowerCase().trim().split(/\s+/).filter(Boolean);
+  return parts[parts.length - 1] ?? '';
+}
+
+/**
+ * Books diferentes as vezes soletram o mesmo jogador de forma ligeiramente
+ * diferente em esportes individuais (ex.: "Anastasiya Soboleva" no
+ * home_team do evento vs "Anastasiia Soboleva" no outcome.name de outro
+ * book). Uma comparacao so por igualdade exata deixa isso virar um "3º
+ * jogador" fantasma no mercado de vencedor (outcome nao reconhecido vira a
+ * string crua, que forma uma dedupeKey separada na agregacao). Comparar
+ * pelo ultimo nome (normalmente estavel entre fontes) resolve o caso comum
+ * sem arriscar falso positivo entre jogadores diferentes.
+ */
+function namesLikelyMatch(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  const la = lastSignificantWord(a);
+  const lb = lastSignificantWord(b);
+  return la.length > 2 && la === lb;
+}
+
 function normalizeOutcomeForEvent(
   rawName: string,
   homeTeam: string,
@@ -80,6 +106,8 @@ function normalizeOutcomeForEvent(
   if (s === String(awayTeam || '').trim().toLowerCase()) return 'away';
   if (s === 'draw' || s === 'tie' || s === 'empate') return 'draw';
   if (s === 'over' || s === 'under' || s === 'yes' || s === 'no') return s;
+  if (namesLikelyMatch(rawName, homeTeam)) return 'home';
+  if (namesLikelyMatch(rawName, awayTeam)) return 'away';
   return rawName;
 }
 

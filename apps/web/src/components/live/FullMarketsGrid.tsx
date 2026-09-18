@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { ArrowUp, ArrowDown } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import { cn } from '../../lib/utils';
 
@@ -10,6 +11,7 @@ export interface OddItem {
   suspended?: boolean;
   selectionId?: string;
   outcome?: string;
+  trend?: 'up' | 'down' | null;
 }
 
 export interface MarketCategory {
@@ -85,27 +87,34 @@ export function FullMarketsGrid({ matchId, categories, loading, onSelectionClick
                   disabled={odd.suspended}
                   onClick={() => onSelectionClick?.(cat, odd, i)}
                   className={cn(
-                    'h-16 rounded-xl border text-left px-3 py-2 flex flex-col justify-between transition-all relative',
+                    'h-11 rounded-lg border text-left px-2.5 py-1 flex flex-col items-start justify-center gap-0.5 transition-all relative',
                     odd.suspended
                       ? 'bg-gray-700/30 border-gray-600/50 text-gray-400 cursor-not-allowed'
                       : 'border-gray-200/30 hover:bg-red-50/10 hover:border-bet62-primary/40 bg-bet62-bg/40 active:scale-[0.98]',
                   )}
                 >
                   {odd.suspended ? (
-                    <Badge variant="danger" className="absolute top-1.5 right-1.5 py-0 px-1.5 text-[9px]">
+                    <Badge variant="danger" className="absolute top-1/2 right-1.5 -translate-y-1/2 py-0 px-1.5 text-[8px]">
                       Suspenso
                     </Badge>
                   ) : null}
-                  <span className={cn('text-sm truncate pr-10', odd.suspended ? 'text-gray-400' : 'text-white/90')}>
+                  <span
+                    className={cn(
+                      'text-[10px] leading-tight truncate max-w-full',
+                      odd.suspended ? 'text-gray-400 pr-12' : 'text-white/70',
+                    )}
+                  >
                     {odd.name}
                   </span>
                   <span
                     className={cn(
-                      'text-2xl font-bold font-mono leading-none',
+                      'flex items-center gap-0.5 text-sm font-bold font-mono leading-none',
                       odd.suspended ? 'text-gray-500' : 'text-bet62-primary',
                     )}
                   >
                     {formatOdds(odd.price)}
+                    {!odd.suspended && odd.trend === 'up' ? <ArrowUp size={11} className="text-emerald-400 shrink-0" /> : null}
+                    {!odd.suspended && odd.trend === 'down' ? <ArrowDown size={11} className="text-red-400 shrink-0" /> : null}
                   </span>
                 </button>
               ))}

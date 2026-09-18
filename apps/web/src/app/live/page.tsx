@@ -32,7 +32,8 @@ import { Badge } from '../../components/ui/Badge';
 import { Input } from '../../components/ui/Input';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/Tabs';
 import { Button } from '../../components/ui/Button';
-import { cn, formatOdds } from '../../lib/utils';
+import { OddsButton } from '../../components/ui/OddsButton';
+import { cn } from '../../lib/utils';
 import { apiClient } from '../../lib/api-client';
 import { useBetslipStore, type BetslipSelection } from '../../stores/betslip.store';
 
@@ -72,6 +73,50 @@ type LiveEvent = {
   marketsCount?: number;
   sources?: EventSources;
 };
+
+const MONEYLINE_MARKET_CODES = new Set([
+  'H2H', 'MATCH_WINNER_1X2', 'MATCH_1X2', '1X2', 'FULL_TIME_1X2', 'FT_1X2',
+  'MATCH_WINNER', 'WINNER', 'FULL_TIME_RESULT', 'RESULT_FT',
+]);
+
+function normalizeMarketCode(v: string | undefined): string {
+  return String(v ?? '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '');
+}
+
+// `event.markets?.[0]` nao e garantidamente o mercado de vencedor
+// (moneyline/h2h) — pode vir qualquer mercado primeiro. Procurar
+// explicitamente pelo mercado certo evita mostrar odds/rotulos de um
+// mercado errado (ex.: um prop) no cartao de "odds rapidas".
+function findMoneylineMarket(markets: LiveMarket[] | undefined): LiveMarket | undefined {
+  if (!markets || markets.length === 0) return undefined;
+  const match = markets.find((m) => {
+    const code = normalizeMarketCode(m.type ?? m.name);
+    return (
+      MONEYLINE_MARKET_CODES.has(code) ||
+      code.includes('1X2') ||
+      code.includes('MATCHWINNER') ||
+      (code.includes('WINNER') && !code.includes('TOURNAMENT'))
+    );
+  });
+  return match ?? markets[0];
+}
+
+// Books diferentes podem contribuir selecoes para o mesmo jogador/lado sem
+// serem corretamente agregadas a montante (ex.: nome do jogador soletrado
+// de forma ligeiramente diferente) — deduplicar aqui, no ultimo passo antes
+// de mostrar, evita um "3º jogador" fantasma no cartao de odds rapidas de
+// esportes individuais (tenis, dardos etc.).
+function dedupeSelections(selections: LiveMarketSelection[]): LiveMarketSelection[] {
+  const seen = new Set<string>();
+  const out: LiveMarketSelection[] = [];
+  for (const s of selections) {
+    const key = String(s.outcome || s.name || s.id).trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
+  return out;
+}
 
 function SkeletonMatchCard({ i }: { i: number }) {
   return (
@@ -157,8 +202,8 @@ function LiveEventCard({
   const homeName = event.homeTeamName ?? event.name.split(' vs ')[0] ?? 'Casa';
   const awayName = event.awayTeamName ?? event.name.split(' vs ')[1] ?? 'Fora';
   const min = typeof clock.minute === 'number' ? `${clock.minute}'` : event.status;
-  const mainMarket: LiveMarket | undefined = event.markets?.[0];
-  const selections: LiveMarketSelection[] = mainMarket?.selections ?? [];
+  const mainMarket: LiveMarket | undefined = findMoneylineMarket(event.markets);
+  const selections: LiveMarketSelection[] = dedupeSelections(mainMarket?.selections ?? []).slice(0, 3);
   while (selections.length < 3) selections.push({ id: `f${selections.length}`, name: '-', odds: 0, status: 'suspended' });
   const sourceLabel =
     event.sportType === 'FOOTBALL'
@@ -221,10 +266,12 @@ function LiveEventCard({
           </CardContent>
           <div className="p-5 space-y-5">
             <div className="grid grid-cols-3 gap-3">
-              {selections.slice(0, 3).map((s) => (
-                <Button
+              {selections.map((s) => (
+                <OddsButton
                   key={s.id}
-                  variant="ghost"
+                  label={s.name}
+                  price={s.odds}
+                  disabled={s.status === 'suspended'}
                   onClick={(e) => {
                     e.stopPropagation();
                     onSelect(event, {
@@ -235,14 +282,7 @@ function LiveEventCard({
                       marketName: mainMarket?.name ?? 'Resultado Final',
                     });
                   }}
-                  className="h-auto py-3 flex-col items-start text-left group/sel hover:!bg-bet62-primary/10 hover:!border-bet62-primary/40 border border-bet62-border rounded-2xl"
-                  disabled={s.status === 'suspended' || !s.odds || s.odds < 1.01}
-                >
-                  <span className="text-[11px] uppercase tracking-wider text-white/50">{s.name}</span>
-                  <span className={cn('font-mono text-xl font-black mt-1', s.odds >= 1.01 ? 'text-bet62-primary' : 'text-white/30')}>
-                    {s.odds >= 1.01 ? formatOdds(s.odds) : '—'}
-                  </span>
-                </Button>
+                />
               ))}
             </div>
             <div className="space-y-2">
