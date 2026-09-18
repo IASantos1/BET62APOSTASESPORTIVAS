@@ -590,10 +590,15 @@ export class OddsService {
       goalPrematchFootball = football.map((event) => this.toProviderEventFromUpcoming(event));
       out.push(...goalPrematchFootball);
     }
-    if (!split.hasFilter || split.otherSports.length > 0) {
+    // PropLine e a fonte de ODDS do futebol tambem (Goal API so da dados/
+    // stats) — precisa de ser consultada mesmo quando o filtro pedido e SO
+    // futebol (`otherSports` fica vazio nesse caso), senao o enrichment
+    // abaixo nunca tem PropLine events de futebol para casar e as odds de
+    // futebol nunca aparecem quando o pedido filtra por sports=FOOTBALL.
+    if (!split.hasFilter || split.otherSports.length > 0 || split.wantsFootball) {
       const result = await this.proplineProvider.getPrematchEvents({
         ...query,
-        sports: split.hasFilter ? split.otherSports : undefined,
+        sports: split.hasFilter ? query.sports : undefined,
         page: 1,
         limit: 2000,
       });
@@ -643,10 +648,13 @@ export class OddsService {
       goalLiveFootball = football.map((event) => this.toProviderEventFromLive(event));
       out.push(...goalLiveFootball);
     }
-    if (!split.hasFilter || split.otherSports.length > 0) {
+    // Mesma razao do collectPrematchProviderEvents: PropLine e a fonte de
+    // ODDS do futebol (Goal API so da dados/stats ao vivo), entao precisa
+    // de ser consultada mesmo quando o filtro pedido e SO futebol.
+    if (!split.hasFilter || split.otherSports.length > 0 || split.wantsFootball) {
       const result = await this.proplineProvider.getLiveEvents({
         ...query,
-        sports: split.hasFilter ? split.otherSports : undefined,
+        sports: split.hasFilter ? query.sports : undefined,
         page: 1,
         limit: 2000,
       });
