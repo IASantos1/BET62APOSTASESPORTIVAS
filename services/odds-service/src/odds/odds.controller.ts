@@ -15,6 +15,12 @@ import {
 export class OddsController {
   constructor(private readonly oddsService: OddsService) {}
 
+  @Get('diagnostics/providers')
+  @ApiOperation({ summary: 'Diagnostico: confirma se as API keys dos providers (PropLine/Goal API) estao configuradas, sem expor os valores' })
+  getProviderDiagnostics() {
+    return this.oddsService.getProviderDiagnostics();
+  }
+
   @Get('sports')
   @ApiOperation({ summary: 'Listar esportes disponíveis' })
   @ApiOkResponse({
