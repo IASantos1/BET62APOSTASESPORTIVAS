@@ -937,13 +937,18 @@ export default function HomePage() {
             </section>
 
             <section>
-              <div className="grid md:grid-cols-3 gap-4">
+              {/* Em mobile os 3 cartoes de promocao viram um carrossel
+                  horizontal (scroll lateral com snap) em vez de empilhados
+                  verticalmente, ocupando menos altura da pagina; a partir de
+                  md volta a ser o grid de 3 colunas de sempre. */}
+              <div className="flex md:grid md:grid-cols-3 gap-4 overflow-x-auto md:overflow-visible snap-x snap-mandatory -mx-4 px-4 md:mx-0 md:px-0 pb-2 md:pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {PROMOS.map((p, i) => (
                   <motion.div
                     key={p.title}
                     initial={{ opacity: 0, y: 14 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, delay: 0.05 * i }}
+                    className="shrink-0 w-[80%] sm:w-[60%] md:w-auto snap-center"
                   >
                     <div className={`relative overflow-hidden rounded-3xl border border-bet62-border p-6 h-full bg-gradient-to-br ${p.color}`}>
                       <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl animate-pulse-slow" />
