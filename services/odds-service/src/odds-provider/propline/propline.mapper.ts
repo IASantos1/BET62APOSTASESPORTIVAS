@@ -25,7 +25,7 @@ import type {
   ProplineStatsResponse,
   ProplineTeam,
 } from './propline.types';
-import { PROPLINE_BOOKMAKER_BY_CODE, PROPLINE_BOOKMAKER_BY_ID, resolveBookmaker } from './propline.bookmakers';
+import { PROPLINE_BOOKMAKER_BY_CODE, PROPLINE_BOOKMAKER_BY_ID, resolveBookmaker, isDfsBookmaker } from './propline.bookmakers';
 
 const logger = new Logger('ProplineMapper');
 
@@ -121,6 +121,11 @@ function normalizeOddsResponse(resp: ProplineOddsResponse): ProplineOddsResponse
     for (const market of book.markets ?? []) {
       const key = market.key;
       if (!key) continue;
+      // suspended_at != null: o book tirou este mercado do ar (docs: "the
+      // outcomes are then the last quoted legs, not a live price"). Ignorar
+      // os outcomes desse book para este mercado em vez de misturar um
+      // preco parado com os preços ao vivo de outros books.
+      if (market.suspended_at) continue;
       let normalized = byMarket.get(key);
       if (!normalized) {
         normalized = {
@@ -330,6 +335,7 @@ interface AggregatedSelectionRow {
   bestRecordedAt: Date | null;
   bestLastChangeAt: Date | null;
   bestTrend: Bet62Odd['trend'];
+  bestIsDfs: boolean;
   allByBook: Array<{
     price: number;
     bookId: number | string;
@@ -365,6 +371,7 @@ function aggregateSelectionsByOutcome(
     const dedupeKey = buildSelectionDedupeKey(outcome, line, handicap);
     const bookKey = sel.book_code ? String(sel.book_code).toLowerCase() : String(sel.book_id);
     const book = bookiesMap.get(bookKey) ?? resolveBookmaker(sel.book_code ?? sel.book_id);
+    const isDfs = isDfsBookmaker(sel.book_code ?? sel.book_id);
     const price = Number(sel.price);
     const rec = toDateOrNow(sel.recorded_at);
     const lastCh = sel.last_change_at ? toDateOrNow(sel.last_change_at) : null;
@@ -394,12 +401,20 @@ function aggregateSelectionsByOutcome(
         bestRecordedAt: rec,
         bestLastChangeAt: lastCh,
         bestTrend: trend,
+        bestIsDfs: isDfs,
         allByBook: [bookObj],
       };
       groups.set(dedupeKey, group);
     } else {
       group.allByBook.push(bookObj);
-      if (price > group.bestPrice) {
+      // Livros DFS (PrizePicks/Underdog) cotam preco sintetico (+100/+100
+      // fixo), nao um preco de mercado batível — nunca deixar isso vencer
+      // um bookmaker real na comparacao de "melhor odd", so por ter um
+      // numero decimal maior.
+      const better = group.bestIsDfs && !isDfs
+        ? true
+        : (!group.bestIsDfs && isDfs ? false : price > group.bestPrice);
+      if (better) {
         group.bestPrice = price;
         group.bestBookCode = bookObj.bookCode;
         group.bestBookId = bookObj.bookId;
@@ -407,6 +422,7 @@ function aggregateSelectionsByOutcome(
         group.bestRecordedAt = rec;
         group.bestLastChangeAt = lastCh;
         group.bestTrend = trend;
+        group.bestIsDfs = isDfs;
       }
       if (sel.label && (!group.label || group.label === outcome)) {
         group.label = sel.label;

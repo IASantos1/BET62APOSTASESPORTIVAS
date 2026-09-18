@@ -47,12 +47,127 @@ interface LiveMatchPageProps {
   params: { matchId: string };
 }
 
+type FootballStats = {
+  possessionHome: number | null;
+  possessionAway: number | null;
+  shotsHome: number | null;
+  shotsAway: number | null;
+  shotsOnTargetHome: number | null;
+  shotsOnTargetAway: number | null;
+  cornersHome: number | null;
+  cornersAway: number | null;
+  foulsHome: number | null;
+  foulsAway: number | null;
+  offsidesHome: number | null;
+  offsidesAway: number | null;
+  yellowCardsHome: number | null;
+  yellowCardsAway: number | null;
+  redCardsHome: number | null;
+  redCardsAway: number | null;
+  savesHome: number | null;
+  savesAway: number | null;
+  xgHome: number | null;
+  xgAway: number | null;
+};
+
+type H2hTeam = { id?: string | number; name?: string };
+type H2hFixture = {
+  fixture_id?: string | number;
+  home?: H2hTeam;
+  away?: H2hTeam;
+  score?: { home?: { current?: number | null } | number | null; away?: { current?: number | null } | number | null };
+  date?: string | null;
+};
+type H2hResponse = {
+  teamA?: H2hTeam;
+  teamB?: H2hTeam;
+  h2h?: H2hFixture[];
+};
+
 function ComingSoonPanel({ title, description }: { title: string; description: string }) {
   return (
     <Card>
       <CardContent className="p-8 text-center">
         <p className="font-semibold text-white/80">{title}</p>
         <p className="text-sm text-white/50 mt-1.5">{description}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StatRow({ label, home, away }: { label: string; home: number | null; away: number | null }) {
+  const h = home ?? 0;
+  const a = away ?? 0;
+  const total = h + a || 1;
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-mono font-bold text-white/80">{home ?? '-'}</span>
+        <span className="text-white/50 uppercase tracking-wide text-[10px]">{label}</span>
+        <span className="font-mono font-bold text-white/80">{away ?? '-'}</span>
+      </div>
+      <div className="flex h-1.5 rounded-full overflow-hidden bg-bet62-bg/60">
+        <div className="bg-bet62-primary" style={{ width: `${(h / total) * 100}%` }} />
+        <div className="bg-bet62-secondary" style={{ width: `${(a / total) * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function StatisticsPanel({ stats, homeName, awayName }: { stats: FootballStats; homeName: string; awayName: string }) {
+  return (
+    <Card>
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-center justify-between text-[11px] font-semibold text-white/60 uppercase tracking-wide">
+          <span className="truncate max-w-[40%]">{homeName}</span>
+          <span>Estatísticas</span>
+          <span className="truncate max-w-[40%] text-right">{awayName}</span>
+        </div>
+        <StatRow label="Posse de Bola %" home={stats.possessionHome} away={stats.possessionAway} />
+        <StatRow label="Remates" home={stats.shotsHome} away={stats.shotsAway} />
+        <StatRow label="Remates à Baliza" home={stats.shotsOnTargetHome} away={stats.shotsOnTargetAway} />
+        <StatRow label="xG" home={stats.xgHome} away={stats.xgAway} />
+        <StatRow label="Cantos" home={stats.cornersHome} away={stats.cornersAway} />
+        <StatRow label="Faltas" home={stats.foulsHome} away={stats.foulsAway} />
+        <StatRow label="Fora de Jogo" home={stats.offsidesHome} away={stats.offsidesAway} />
+        <StatRow label="Cartões Amarelos" home={stats.yellowCardsHome} away={stats.yellowCardsAway} />
+        <StatRow label="Cartões Vermelhos" home={stats.redCardsHome} away={stats.redCardsAway} />
+        <StatRow label="Defesas" home={stats.savesHome} away={stats.savesAway} />
+      </CardContent>
+    </Card>
+  );
+}
+
+function H2hPanel({ h2h }: { h2h: H2hResponse }) {
+  const fixtures = h2h.h2h ?? [];
+  if (fixtures.length === 0) {
+    return (
+      <ComingSoonPanel
+        title="Sem histórico de confrontos"
+        description="Não há registos de confrontos diretos anteriores entre estas duas equipas."
+      />
+    );
+  }
+  return (
+    <Card>
+      <CardContent className="p-5 space-y-3">
+        <p className="text-[11px] font-semibold text-white/60 uppercase tracking-wide mb-2">Confrontos Diretos</p>
+        {fixtures.slice(0, 8).map((fx, i) => {
+          const home = typeof fx.score?.home === 'object' ? fx.score?.home?.current : fx.score?.home;
+          const away = typeof fx.score?.away === 'object' ? fx.score?.away?.current : fx.score?.away;
+          return (
+            <div
+              key={fx.fixture_id ?? i}
+              className="flex items-center justify-between gap-3 rounded-xl border border-bet62-border/60 bg-bet62-bg/40 px-3 py-2 text-sm"
+            >
+              <span className="truncate flex-1 text-left">{fx.home?.name ?? 'Casa'}</span>
+              <span className="font-mono font-bold text-bet62-primary shrink-0">
+                {home ?? '-'} - {away ?? '-'}
+              </span>
+              <span className="truncate flex-1 text-right">{fx.away?.name ?? 'Fora'}</span>
+            </div>
+          );
+        })}
       </CardContent>
     </Card>
   );
@@ -69,6 +184,13 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
   const [demoCommentary, setDemoCommentary] = React.useState('Bola no meio campo');
   const [detail, setDetail] = React.useState<LiveEventDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [activeTab, setActiveTab] = React.useState('tracker');
+  const [stats, setStats] = React.useState<FootballStats | null>(null);
+  const [statsLoading, setStatsLoading] = React.useState(false);
+  const [h2h, setH2h] = React.useState<H2hResponse | null>(null);
+  const [h2hLoading, setH2hLoading] = React.useState(false);
+  const statsFetchedRef = React.useRef(false);
+  const h2hFetchedRef = React.useRef(false);
 
   const isFootball = (detail?.sportType ?? '').toUpperCase() === 'FOOTBALL';
   const isLive = detail?.status === 'LIVE' || detail?.status === 'HALF_TIME';
@@ -114,6 +236,28 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
       window.clearInterval(timer);
     };
   }, [decodedMatchId]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'stats' || statsFetchedRef.current) return;
+    statsFetchedRef.current = true;
+    setStatsLoading(true);
+    apiClient
+      .get<FootballStats>(`/odds/events/${encodeURIComponent(decodedMatchId)}/statistics`, { auth: false })
+      .then((res) => setStats(res))
+      .catch(() => setStats(null))
+      .finally(() => setStatsLoading(false));
+  }, [activeTab, decodedMatchId]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'h2h' || h2hFetchedRef.current) return;
+    h2hFetchedRef.current = true;
+    setH2hLoading(true);
+    apiClient
+      .get<H2hResponse>(`/odds/events/${encodeURIComponent(decodedMatchId)}/h2h`, { auth: false })
+      .then((res) => setH2h(res))
+      .catch(() => setH2h(null))
+      .finally(() => setH2hLoading(false));
+  }, [activeTab, decodedMatchId]);
 
   const handleSelect = (market: MarketCategory, odd: OddItem) => {
     if (!detail) return;
@@ -175,7 +319,7 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
               </div>
 
               <div className="lg:col-span-5 xl:col-span-4 min-w-0">
-                <Tabs defaultValue="tracker">
+                <Tabs value={activeTab} onValueChange={setActiveTab}>
                   <TabsList className="w-full h-auto grid grid-cols-4 gap-1 p-1 sm:flex sm:flex-wrap">
                     <TabsTrigger
                       value="tracker"
@@ -256,17 +400,43 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
                   </TabsContent>
 
                   <TabsContent value="stats">
-                    <ComingSoonPanel
-                      title="Estatísticas em breve"
-                      description="As estatísticas detalhadas da partida (posse de bola, remates, cantos, cartões) estão a ser ligadas aos dados em tempo real dos provedores."
-                    />
+                    {!isFootball ? (
+                      <ComingSoonPanel
+                        title="Estatísticas em breve"
+                        description="As estatísticas detalhadas para esta modalidade estão a ser ligadas aos dados da PropLine."
+                      />
+                    ) : statsLoading ? (
+                      <ComingSoonPanel title="A carregar estatísticas..." description="" />
+                    ) : stats ? (
+                      <StatisticsPanel
+                        stats={stats}
+                        homeName={detail?.homeTeamName ?? detail?.name.split(' vs ')[0] ?? 'Casa'}
+                        awayName={detail?.awayTeamName ?? detail?.name.split(' vs ')[1] ?? 'Fora'}
+                      />
+                    ) : (
+                      <ComingSoonPanel
+                        title="Estatísticas indisponíveis"
+                        description="Ainda não há estatísticas publicadas pela Goal API para esta partida."
+                      />
+                    )}
                   </TabsContent>
 
                   <TabsContent value="h2h">
-                    <ComingSoonPanel
-                      title="Confrontos diretos em breve"
-                      description="O histórico de confrontos diretos entre as duas equipas será apresentado aqui assim que a integração estiver concluída."
-                    />
+                    {!isFootball ? (
+                      <ComingSoonPanel
+                        title="H2H indisponível para esta modalidade"
+                        description="O histórico de confrontos diretos está disponível apenas para futebol, por agora."
+                      />
+                    ) : h2hLoading ? (
+                      <ComingSoonPanel title="A carregar confrontos diretos..." description="" />
+                    ) : h2h ? (
+                      <H2hPanel h2h={h2h} />
+                    ) : (
+                      <ComingSoonPanel
+                        title="Confrontos diretos indisponíveis"
+                        description="Não foi possível obter o histórico de confrontos diretos para esta partida."
+                      />
+                    )}
                   </TabsContent>
 
                   <TabsContent value="standings">

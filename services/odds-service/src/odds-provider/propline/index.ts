@@ -27,7 +27,7 @@ import { ProplineHttpClient } from './propline.http-client';
 import { ProplineWsClient } from './propline.ws-client';
 import { ProplineWebhookService, type ParsedProplineWebhook } from './propline.webhook';
 import { ProplineDataAdapter } from './propline.adapter';
-import type { ProplineEvent, ProplineSport, ProplineStatsResponse } from './propline.types';
+import type { ProplineEvent, ProplineScoreRow, ProplineSport, ProplineStatsResponse } from './propline.types';
 import {
   normalizeEventStatus,
   normalizePeriod,
@@ -200,6 +200,75 @@ export class ProplineOddsProviderService
     return ['h2h', 'spreads', 'totals'];
   }
 
+  private bet62MarketsToProviderMarkets(
+    bet62Markets: ReturnType<ProplineDataAdapter['runOddsPipeline']>['markets'],
+    eventId: string,
+  ): ProviderMarket[] {
+    return bet62Markets.map((m) => {
+      const pm: ProviderMarket = {
+        id: m.id,
+        providerMarketId: m.code,
+        eventId,
+        type: (m.code as unknown as ProviderMarket['type']) ?? MarketType.TOTAL,
+        name: m.label,
+        specifiers: m.lineSpecifiers ?? null,
+        handicapValue: (m.lineSpecifiers?.handicap as number) ?? undefined,
+        totalLineValue: (m.lineSpecifiers?.line as number) ?? undefined,
+        period: normalizePeriod(m.period as string | null) ?? undefined,
+        status: m.status === 'active' ? MarketStatus.ACTIVE : m.status === 'suspended' ? MarketStatus.SUSPENDED : m.status === 'settled' ? MarketStatus.SETTLED : MarketStatus.CLOSED,
+        displayedName: m.label,
+        cashoutAvailable: true,
+        selections: m.selections.map((s) => {
+          const ps: ProviderMarketSelection = {
+            id: s.id,
+            providerSelectionId: s.id,
+            name: s.name,
+            outcome: (s.outcome.toUpperCase() as unknown as ProviderMarketSelection['outcome']) ?? SelectionOutcome.HOME,
+            odds: s.price,
+            oddsDisplay: String(s.price),
+            status: s.status === 'active' ? MarketStatus.ACTIVE : s.status === 'suspended' ? MarketStatus.SUSPENDED : s.status === 'settled' ? MarketStatus.SETTLED : MarketStatus.CLOSED,
+            handicapValue: s.handicap ?? undefined,
+            totalLineValue: s.line ?? undefined,
+            isTrendingUp: false,
+          };
+          return ps;
+        }),
+      };
+      return pm;
+    });
+  }
+
+  private async fetchOddsMapForSportKey(
+    sportKey: string,
+    isLive: boolean,
+  ): Promise<Map<string, ProviderMarket[]>> {
+    const map = new Map<string, ProviderMarket[]>();
+    try {
+      const markets = this.getDefaultMarketsForSportKey(sportKey);
+      const oddsResponses = await this.http.getSportOdds(sportKey, markets);
+      for (const oddsResp of oddsResponses) {
+        const eventId = String(oddsResp.id ?? oddsResp.event_id ?? '');
+        if (!eventId) continue;
+        // skipStaleCheck: a PropLine real (last_update/last_change_at) e o timestamp
+        // de quando aquele BOOK mudou o preco pela ultima vez, nao de quando NOS
+        // fizemos a nossa propria consulta — uma linha pre-jogo estavel fica com
+        // last_update de horas atras sem isso significar que o dado que acabamos
+        // de buscar agora, ao vivo via HTTP, esta desatualizado. Sem isso, o
+        // calculo de "stale" original (pensado para um scraper proprio) suspendia
+        // praticamente toda selecao, fazendo as odds nunca aparecerem no site.
+        const { markets: bet62Markets } = this.adapter.runOddsPipeline(oddsResp, { isLive, skipStaleCheck: true });
+        if (bet62Markets.length === 0) continue;
+        const providerMarkets = this.bet62MarketsToProviderMarkets(bet62Markets, eventId);
+        map.set(eventId, providerMarkets);
+        const rawEventId = oddsResp.event_id ?? oddsResp.id;
+        if (rawEventId) map.set(String(rawEventId), providerMarkets);
+      }
+    } catch (err) {
+      this.logger.verbose(`Propline fetchOddsMapForSportKey(${sportKey}): ${err instanceof Error ? err.message : String(err)}`);
+    }
+    return map;
+  }
+
   private mapEventLifecycleStatus(pe: ProplineEvent): ProviderEvent['status'] {
     if (pe.status) return mapStatusFromPropline(pe.status);
     if (pe.completed) return 'FINISHED';
@@ -275,32 +344,72 @@ export class ProplineOddsProviderService
   ): Promise<ProviderEvent[]> {
     if (this.fatalInitFailed) return [];
     try {
-      const out: ProviderEvent[] = [];
       const sportKeys = await this.resolveRequestedSportKeys(opts.sport);
-      for (const sportKey of sportKeys) {
-        const rawList = await this.http.getEventsBySport(sportKey);
-        const sportType = mapPropLineSportKeyToSportType(sportKey);
-        if (!sportType) continue;
-        for (const pe of rawList) {
-          if (opts.live) {
-            if (!pe.live || pe.completed) continue;
-          } else {
-            if (pe.live || pe.completed) continue;
+      // Cada sportKey dispara 3 chamadas HTTP (eventos + odds em lote +
+      // scores). Com dezenas de sportKeys (ex: uma liga por chave), rodar
+      // isso em serie (for..of com await) somava o timeout de cada chamada
+      // uma atras da outra e podia deixar a listagem de pré-jogo/ao vivo
+      // travada por minutos no frontend. Buscando tudo em paralelo, o tempo
+      // total fica limitado ao timeout de uma unica chamada lenta, nao a
+      // soma de todas.
+      const perSportKeyResults = await Promise.all(
+        sportKeys.map(async (sportKey): Promise<ProviderEvent[]> => {
+          const sportType = mapPropLineSportKeyToSportType(sportKey);
+          if (!sportType) return [];
+          const [rawList, oddsBySportKey, scoresList] = await Promise.all([
+            this.http.getEventsBySport(sportKey),
+            this.fetchOddsMapForSportKey(sportKey, opts.live),
+            // /events nunca traz status/live/completed (confirmado na doc
+            // oficial da PropLine) — so /scores diz se um jogo esta ao vivo
+            // ou terminado. Sem isso, getLiveEvents ficava sempre vazio (o
+            // codigo antigo lia pe.live, que nunca existe de verdade) e
+            // jogos ja terminados continuavam aparecendo como pré-jogo.
+            this.http.getScoresBySport(sportKey),
+          ]);
+          const scoresById = new Map<string, ProplineScoreRow>();
+          for (const s of scoresList) {
+            const sid = s?.id ?? (s as { event_id?: string })?.event_id;
+            if (sid) scoresById.set(String(sid), s);
           }
-          const pev = this.mapProplineEventToProviderEvent(pe, sportType, false);
-          if (opts.league) {
-            const leagueKey = String(opts.league).toLowerCase();
-            const leagueName = (pev.leagueName ?? '').toLowerCase();
-            const leagueId = (pev.leagueId ?? '').toLowerCase();
-            if (leagueName !== leagueKey && leagueId !== leagueKey) continue;
+          const events: ProviderEvent[] = [];
+          for (const pe of rawList) {
+            const scoreRow = scoresById.get(String(pe.id ?? '')) ?? scoresById.get(String(pe.event_id ?? ''));
+            const enrichedPe: ProplineEvent = scoreRow
+              ? {
+                  ...pe,
+                  status: scoreRow.status as ProplineEvent['status'],
+                  scores: { home: scoreRow.home_score ?? null, away: scoreRow.away_score ?? null },
+                }
+              : pe;
+            const pev = this.mapProplineEventToProviderEvent(enrichedPe, sportType, true);
+            const isLiveNow = pev.status === 'LIVE' || pev.status === 'HALF_TIME';
+            const isDone = pev.status === 'FINISHED' || pev.status === 'ENDED' || pev.status === 'CANCELLED';
+            if (opts.live) {
+              if (!isLiveNow) continue;
+            } else {
+              if (isLiveNow || isDone) continue;
+            }
+            const markets = oddsBySportKey.get(String(pe.id ?? '')) ?? oddsBySportKey.get(String(pe.event_id ?? ''));
+            if (markets && markets.length > 0) {
+              pev.markets = markets;
+              pev.marketsCount = markets.length;
+            }
+            if (opts.league) {
+              const leagueKey = String(opts.league).toLowerCase();
+              const leagueName = (pev.leagueName ?? '').toLowerCase();
+              const leagueId = (pev.leagueId ?? '').toLowerCase();
+              if (leagueName !== leagueKey && leagueId !== leagueKey) continue;
+            }
+            if (!opts.live) {
+              if (opts.from && pev.kickoffAt < opts.from) continue;
+              if (opts.to && pev.kickoffAt > opts.to) continue;
+            }
+            events.push(pev);
           }
-          if (!opts.live) {
-            if (opts.from && pev.kickoffAt < opts.from) continue;
-            if (opts.to && pev.kickoffAt > opts.to) continue;
-          }
-          out.push(pev);
-        }
-      }
+          return events;
+        }),
+      );
+      const out = perSportKeyResults.flat();
       out.sort((a, b) => a.kickoffAt.getTime() - b.kickoffAt.getTime());
       return opts.limit ? out.slice(0, opts.limit) : out;
     } catch (err) {
@@ -396,39 +505,9 @@ export class ProplineOddsProviderService
           if (oddsResp) {
             const { markets: bet62Markets } = this.adapter.runOddsPipeline(oddsResp, {
               isLive: base.status === 'LIVE' || base.status === 'HALF_TIME',
+              skipStaleCheck: true,
             });
-            markets = bet62Markets.map((m) => {
-              const pm: ProviderMarket = {
-                id: m.id,
-                providerMarketId: m.code,
-                eventId: base.id,
-                type: (m.code as unknown as ProviderMarket['type']) ?? MarketType.TOTAL,
-                name: m.label,
-                specifiers: m.lineSpecifiers ?? null,
-                handicapValue: m.lineSpecifiers?.handicap as number ?? undefined,
-                totalLineValue: m.lineSpecifiers?.line as number ?? undefined,
-                period: normalizePeriod(m.period as string | null) ?? undefined,
-                status: m.status === 'active' ? MarketStatus.ACTIVE : m.status === 'suspended' ? MarketStatus.SUSPENDED : m.status === 'settled' ? MarketStatus.SETTLED : MarketStatus.CLOSED,
-                displayedName: m.label,
-                cashoutAvailable: true,
-                selections: m.selections.map((s) => {
-                  const ps: ProviderMarketSelection = {
-                    id: s.id,
-                    providerSelectionId: s.id,
-                    name: s.name,
-                    outcome: (s.outcome.toUpperCase() as unknown as ProviderMarketSelection['outcome']) ?? SelectionOutcome.HOME,
-                    odds: s.price,
-                    oddsDisplay: String(s.price),
-                    status: s.status === 'active' ? MarketStatus.ACTIVE : s.status === 'suspended' ? MarketStatus.SUSPENDED : s.status === 'settled' ? MarketStatus.SETTLED : MarketStatus.CLOSED,
-                    handicapValue: s.handicap ?? undefined,
-                    totalLineValue: s.line ?? undefined,
-                    isTrendingUp: false,
-                  };
-                  return ps;
-                }),
-              };
-              return pm;
-            });
+            markets = this.bet62MarketsToProviderMarkets(bet62Markets, base.id);
           }
         } catch (oddsErr) {
           this.logger.verbose(`Propline getEventDetail odds erro: ${oddsErr instanceof Error ? oddsErr.message : String(oddsErr)}`);
@@ -741,8 +820,10 @@ export class ProplineOddsProviderService
     try {
       if (this.fatalInitFailed) return null;
       const colon = eventId.indexOf(':');
+      const sportRaw = colon > 0 ? eventId.slice(0, colon) : null;
       const rawEventId = colon > 0 ? eventId.slice(colon + 1) : eventId;
-      return await this.http.getStats(rawEventId, period);
+      if (!sportRaw) return null;
+      return await this.http.getStats(sportRaw, rawEventId, period);
     } catch (err) {
       this.logger.verbose(`Propline getStats warning ${eventId}: ${err instanceof Error ? err.message : String(err)}`);
       return null;
