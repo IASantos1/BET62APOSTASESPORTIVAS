@@ -37,8 +37,9 @@ import { Betslip, FloatingBetslipToggle } from '../components/layout/Betslip';
 import { Card, CardContent } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
+import { OddsButton } from '../components/ui/OddsButton';
 import { Progress } from '../components/ui/Progress';
-import { formatCurrencyEUR, formatOdds, cn } from '../lib/utils';
+import { formatCurrencyEUR, cn } from '../lib/utils';
 import { useBetslipStore } from '../stores/betslip.store';
 import { apiClient } from '../lib/api-client';
 
@@ -72,12 +73,14 @@ type BaseSelection = {
   name: string;
   label?: string;
   code?: string;
+  outcome?: string;
   odds: number;
   status?: "active" | "suspended" | "settled" | "void";
 };
 type BaseMarket = {
   id?: string;
   code?: string;
+  type?: string;
   name?: string;
   status?: "active" | "suspended" | "settled" | "void";
   selections: BaseSelection[];
@@ -101,6 +104,10 @@ type BaseEvent = {
 const MATCH_1X2_MARKET_CODES = new Set([
   'MATCH_WINNER_1X2', 'MATCH_1X2', '1X2', 'FULL_TIME_1X2', 'FT_1X2',
   'MATCH_WINNER', 'WINNER', 'FULL_TIME_RESULT', 'RESULT_FT',
+  // 'h2h' e o codigo generico da PropLine para o mercado de
+  // vencedor/moneyline em TODOS os esportes (futebol, tenis, basquete...),
+  // nao so futebol — sem isso nenhum esporte batia neste filtro.
+  'H2H',
 ]);
 const HOME_SELECTION_CODES = new Set(['HOME', '1', 'HOME_TEAM', 'HOME_WIN', 'CASA']);
 const DRAW_SELECTION_CODES = new Set(['DRAW', 'X', 'DRAW_X', 'EMPATE', 'TIE']);
@@ -113,7 +120,7 @@ function findMatch1X2Odds(ev: BaseEvent): { home: number | null; draw: number | 
   let away: number | null = null;
   for (const m of markets) {
     if (!m) continue;
-    const normalizedCode = String(m.code ?? m.name ?? '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '');
+    const normalizedCode = String(m.type ?? m.code ?? m.name ?? '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '');
     const isMatch =
       MATCH_1X2_MARKET_CODES.has(normalizedCode) ||
       normalizedCode.includes('1X2') ||
@@ -124,8 +131,12 @@ function findMatch1X2Odds(ev: BaseEvent): { home: number | null; draw: number | 
     for (const s of m.selections ?? []) {
       if (!s) continue;
       if (s.status && s.status !== 'active') continue;
+      // A API ja manda `outcome` normalizado ('home'/'away'/'draw') — usar
+      // isso primeiro. `code`/`name` ficam so como fallback para fontes
+      // mais antigas que nao tragam esse campo.
+      const outcomeClean = String(s.outcome ?? '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
       const code = String(s.code ?? s.name ?? '').trim().toUpperCase();
-      const clean = code.replace(/[^A-Z0-9]/g, '');
+      const clean = outcomeClean || code.replace(/[^A-Z0-9]/g, '');
       const oddsValue = Number(s.odds);
       if (!Number.isFinite(oddsValue) || oddsValue <= 1) continue;
       if (HOME_SELECTION_CODES.has(clean) || clean === '1' || code.endsWith(' 1')) {
@@ -139,11 +150,6 @@ function findMatch1X2Odds(ev: BaseEvent): { home: number | null; draw: number | 
     if (home !== null || draw !== null || away !== null) break;
   }
   return { home, draw, away };
-}
-
-function formatOddsSafe(v: number | null, placeholder = ''): string {
-  if (v === null || !Number.isFinite(v) || v <= 1) return placeholder;
-  return formatOdds(v);
 }
 
 function FeaturedSkeleton({ i }: { i: number }) {
@@ -332,21 +338,11 @@ function FeaturedEventCard({ ev }: { ev: BaseEvent }) {
               const odds = findMatch1X2Odds(ev);
               const anyReal = odds.home !== null || odds.draw !== null || odds.away !== null;
               return [
-                { label: 'Casa', value: formatOddsSafe(odds.home, anyReal ? '—' : 'Odds em atualização'), disabled: odds.home === null },
-                { label: 'Empate', value: formatOddsSafe(odds.draw, anyReal ? '—' : ''), disabled: odds.draw === null },
-                { label: 'Fora', value: formatOddsSafe(odds.away, anyReal ? '—' : ''), disabled: odds.away === null },
+                { label: 'Casa', price: odds.home, placeholder: anyReal ? '—' : 'Em atualização' },
+                { label: 'Empate', price: odds.draw, placeholder: '—' },
+                { label: 'Fora', price: odds.away, placeholder: '—' },
               ].map((cell) => (
-                <Button
-                  key={cell.label}
-                  variant="ghost"
-                  disabled={cell.disabled}
-                  className="h-auto py-2 flex-col items-start text-left rounded-xl border border-bet62-border/60 hover:!border-bet62-primary/40 hover:!bg-bet62-primary/10 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <span className="text-[10px] uppercase tracking-wider text-white/50">{cell.label}</span>
-                  <span className="font-mono font-black text-bet62-primary mt-1 leading-none break-all">
-                    {cell.value}
-                  </span>
-                </Button>
+                <OddsButton key={cell.label} label={cell.label} price={cell.price} placeholder={cell.placeholder} />
               ));
             })()}
           </div>
@@ -410,23 +406,11 @@ function LiveEventCard({ ev }: { ev: BaseEvent }) {
               const odds = findMatch1X2Odds(ev);
               const anyReal = odds.home !== null || odds.draw !== null || odds.away !== null;
               return [
-                { label: '1', value: formatOddsSafe(odds.home, anyReal ? '—' : 'Odds em atualização'), disabled: odds.home === null },
-                { label: 'X', value: formatOddsSafe(odds.draw, anyReal ? '—' : ''), disabled: odds.draw === null },
-                { label: '2', value: formatOddsSafe(odds.away, anyReal ? '—' : ''), disabled: odds.away === null },
+                { label: '1', price: odds.home, placeholder: anyReal ? '—' : 'Em atualização' },
+                { label: 'X', price: odds.draw, placeholder: '—' },
+                { label: '2', price: odds.away, placeholder: '—' },
               ].map((cell) => (
-                <div
-                  key={cell.label}
-                  className={
-                    'rounded-lg border px-2 py-1.5 text-center transition ' +
-                    (cell.disabled
-                      ? 'bg-bet62-bg/40 border-bet62-border/40 opacity-70'
-                      : 'bg-bet62-bg/60 border-bet62-border/60 hover:border-bet62-primary/50')
-                  }
-                >
-                  <p className="font-mono text-xs font-bold text-bet62-primary group-hover:text-bet62-primary/90 break-all">
-                    {cell.value}
-                  </p>
-                </div>
+                <OddsButton key={cell.label} label={cell.label} price={cell.price} placeholder={cell.placeholder} />
               ));
             })()}
           </div>
@@ -486,21 +470,11 @@ function UpcomingEventCard({ ev }: { ev: BaseEvent }) {
               const odds = findMatch1X2Odds(ev);
               const anyReal = odds.home !== null || odds.draw !== null || odds.away !== null;
               return [
-                { label: '1', value: formatOddsSafe(odds.home, anyReal ? '—' : 'Odds em atualização'), disabled: odds.home === null },
-                { label: 'X', value: formatOddsSafe(odds.draw, anyReal ? '—' : ''), disabled: odds.draw === null },
-                { label: '2', value: formatOddsSafe(odds.away, anyReal ? '—' : ''), disabled: odds.away === null },
+                { label: '1', price: odds.home, placeholder: anyReal ? '—' : 'Em atualização' },
+                { label: 'X', price: odds.draw, placeholder: '—' },
+                { label: '2', price: odds.away, placeholder: '—' },
               ].map((cell) => (
-                <Button
-                  key={cell.label}
-                  variant="ghost"
-                  disabled={cell.disabled}
-                  className="h-auto py-2 flex-col items-start text-left rounded-lg border border-bet62-border/60 hover:!border-bet62-primary/40 hover:!bg-bet62-primary/10 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <span className="text-[10px] uppercase tracking-wider text-white/50">{cell.label}</span>
-                  <span className="font-mono font-black text-bet62-primary mt-1 leading-none break-all">
-                    {cell.value}
-                  </span>
-                </Button>
+                <OddsButton key={cell.label} label={cell.label} price={cell.price} placeholder={cell.placeholder} />
               ));
             })()}
           </div>
@@ -963,13 +937,18 @@ export default function HomePage() {
             </section>
 
             <section>
-              <div className="grid md:grid-cols-3 gap-4">
+              {/* Em mobile os 3 cartoes de promocao viram um carrossel
+                  horizontal (scroll lateral com snap) em vez de empilhados
+                  verticalmente, ocupando menos altura da pagina; a partir de
+                  md volta a ser o grid de 3 colunas de sempre. */}
+              <div className="flex md:grid md:grid-cols-3 gap-4 overflow-x-auto md:overflow-visible snap-x snap-mandatory -mx-4 px-4 md:mx-0 md:px-0 pb-2 md:pb-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {PROMOS.map((p, i) => (
                   <motion.div
                     key={p.title}
                     initial={{ opacity: 0, y: 14 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.4, delay: 0.05 * i }}
+                    className="shrink-0 w-[80%] sm:w-[60%] md:w-auto snap-center"
                   >
                     <div className={`relative overflow-hidden rounded-3xl border border-bet62-border p-6 h-full bg-gradient-to-br ${p.color}`}>
                       <div className="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-2xl animate-pulse-slow" />

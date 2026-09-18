@@ -119,10 +119,10 @@ function StatisticsPanel({ stats, homeName, awayName }: { stats: FootballStats; 
   return (
     <Card>
       <CardContent className="p-5 space-y-4">
-        <div className="flex items-center justify-between text-[11px] font-semibold text-white/60 uppercase tracking-wide">
-          <span className="truncate max-w-[40%]">{homeName}</span>
-          <span>Estatísticas</span>
-          <span className="truncate max-w-[40%] text-right">{awayName}</span>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-[11px] font-semibold text-white/60 uppercase tracking-wide">
+          <span className="truncate min-w-0">{homeName}</span>
+          <span className="shrink-0">Estatísticas</span>
+          <span className="truncate min-w-0 text-right">{awayName}</span>
         </div>
         <StatRow label="Posse de Bola %" home={stats.possessionHome} away={stats.possessionAway} />
         <StatRow label="Remates" home={stats.shotsHome} away={stats.shotsAway} />
@@ -183,8 +183,11 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
 
   const [ballPosition, setBallPosition] = React.useState<{ x: number; y: number; zone: FootballZone }>({ x: 52.5, y: 34, zone: 'center' });
   const [demoCommentary, setDemoCommentary] = React.useState('Bola no meio campo');
+  const [commentaryLog, setCommentaryLog] = React.useState<string[]>(['Bola no meio campo']);
   const [detail, setDetail] = React.useState<LiveEventDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [oddsTrend, setOddsTrend] = React.useState<Map<string, 'up' | 'down'>>(new Map());
+  const prevOddsRef = React.useRef<Map<string, number>>(new Map());
   const [activeTab, setActiveTab] = React.useState('tracker');
   const [stats, setStats] = React.useState<FootballStats | null>(null);
   const [statsLoading, setStatsLoading] = React.useState(false);
@@ -210,6 +213,7 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
       const next = demoCycle[idx % demoCycle.length];
       setDemoCommentary(next);
       setBallPosition(commentaryToBallPosition(next, 67, 52));
+      setCommentaryLog((log) => [next, ...log].slice(0, 6));
       idx += 1;
     }, 3200);
     return () => clearInterval(t);
@@ -223,7 +227,23 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
         const res = await apiClient.get<LiveEventDetail>(`/odds/events/${encodeURIComponent(decodedMatchId)}`, {
           auth: false,
         });
-        if (!cancelled) setDetail(res);
+        if (!cancelled) {
+          setDetail(res);
+          const nextPrices = new Map<string, number>();
+          const trend = new Map<string, 'up' | 'down'>();
+          for (const market of res.markets ?? []) {
+            for (const sel of market.selections ?? []) {
+              if (typeof sel.odds !== 'number' || !Number.isFinite(sel.odds)) continue;
+              nextPrices.set(sel.id, sel.odds);
+              const prevPrice = prevOddsRef.current.get(sel.id);
+              if (prevPrice !== undefined && prevPrice !== sel.odds) {
+                trend.set(sel.id, sel.odds > prevPrice ? 'up' : 'down');
+              }
+            }
+          }
+          prevOddsRef.current = nextPrices;
+          if (trend.size > 0) setOddsTrend(trend);
+        }
       } catch {
         if (!cancelled) setDetail(null);
       } finally {
@@ -239,7 +259,12 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
   }, [decodedMatchId]);
 
   React.useEffect(() => {
-    if (activeTab !== 'stats' || statsFetchedRef.current) return;
+    // Em desktop, a tab Match Tracker tambem mostra as estatisticas lado a
+    // lado com o campo (quando o jogo esta ao vivo), entao a busca precisa
+    // de disparar tanto ao entrar na tab Estatisticas quanto ao entrar no
+    // Tracker de um jogo de futebol ao vivo.
+    const needsStats = activeTab === 'stats' || (activeTab === 'tracker' && isFootball && isLive);
+    if (!needsStats || statsFetchedRef.current) return;
     statsFetchedRef.current = true;
     setStatsLoading(true);
     apiClient
@@ -247,7 +272,7 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
       .then((res) => setStats(res))
       .catch(() => setStats(null))
       .finally(() => setStatsLoading(false));
-  }, [activeTab, decodedMatchId]);
+  }, [activeTab, decodedMatchId, isFootball, isLive]);
 
   React.useEffect(() => {
     if (activeTab !== 'h2h' || h2hFetchedRef.current) return;
@@ -260,10 +285,39 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
       .finally(() => setH2hLoading(false));
   }, [activeTab, decodedMatchId]);
 
+  const statsPanel: React.ReactNode = !isFootball ? (
+    <ComingSoonPanel
+      title="Estatísticas em breve"
+      description="As estatísticas detalhadas para esta modalidade estão a ser ligadas aos dados da PropLine."
+    />
+  ) : statsLoading ? (
+    <ComingSoonPanel title="A carregar estatísticas..." description="" />
+  ) : stats ? (
+    <StatisticsPanel
+      stats={stats}
+      homeName={detail?.homeTeamName ?? detail?.name.split(' vs ')[0] ?? 'Casa'}
+      awayName={detail?.awayTeamName ?? detail?.name.split(' vs ')[1] ?? 'Fora'}
+    />
+  ) : (
+    <ComingSoonPanel
+      title="Estatísticas indisponíveis"
+      description="Ainda não há estatísticas publicadas pela Goal API para esta partida."
+    />
+  );
+
   const renderTabPanel = (tab: string): React.ReactNode => {
     switch (tab) {
-      case 'tracker':
-        return isFootball ? (
+      case 'tracker': {
+        if (!isFootball) {
+          return (
+            <ComingSoonPanel
+              title="Match Tracker indisponível para esta modalidade"
+              description="O acompanhamento visual em campo está disponível apenas para futebol, por agora."
+            />
+          );
+        }
+
+        const pitchBox = (
           <div
             className="rounded-xl border overflow-hidden"
             style={{ borderColor: 'rgba(30, 86, 49, 0.25)', backgroundColor: 'rgba(30, 86, 49, 0.04)' }}
@@ -271,7 +325,7 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
             <div className="px-4 py-2 border-b border-[#1e5631]/20 flex items-center justify-between gap-2">
               <div className="text-xs font-semibold text-[#1e5631] tracking-wide shrink-0">CAMPO AO VIVO</div>
               {isLive ? (
-                <div className="text-[11px] text-white/60 max-w-[70%] truncate" title={demoCommentary}>
+                <div className="text-[11px] text-white/60 max-w-[70%] truncate lg:hidden" title={demoCommentary}>
                   {demoCommentary}
                 </div>
               ) : null}
@@ -286,32 +340,48 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
               )}
             </div>
           </div>
-        ) : (
-          <ComingSoonPanel
-            title="Match Tracker indisponível para esta modalidade"
-            description="O acompanhamento visual em campo está disponível apenas para futebol, por agora."
-          />
         );
+
+        if (!isLive) return pitchBox;
+
+        // A coluna de tabs em si e estreita (5/12 ou 4/12 da largura),
+        // entao so faz sentido colocar campo e estatisticas lado a lado
+        // quando a tela e realmente grande (2xl, ~1536px+) — em laptops
+        // "normais" (lg/xl) ficam empilhados (campo em cima, comentarios +
+        // estatisticas em baixo) para nao espremer os rotulos. Em mobile
+        // so o campo aparece (a coluna extra fica "hidden lg:flex"),
+        // igual a antes.
+        return (
+          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4 items-start">
+            {pitchBox}
+            <div className="hidden lg:flex lg:flex-col gap-4">
+              <Card>
+                <CardContent className="p-4 space-y-2.5">
+                  <p className="text-[11px] font-semibold text-white/60 uppercase tracking-wide">
+                    Comentários ao vivo
+                  </p>
+                  <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                    {commentaryLog.map((c, i) => (
+                      <div key={`${i}-${c}`} className="flex items-start gap-2 text-sm">
+                        <span
+                          className={cn(
+                            'mt-1.5 w-1.5 h-1.5 rounded-full shrink-0',
+                            i === 0 ? 'bg-bet62-primary animate-pulse' : 'bg-white/20',
+                          )}
+                        />
+                        <span className={i === 0 ? 'text-white/90' : 'text-white/50'}>{c}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+              {statsPanel}
+            </div>
+          </div>
+        );
+      }
       case 'stats':
-        return !isFootball ? (
-          <ComingSoonPanel
-            title="Estatísticas em breve"
-            description="As estatísticas detalhadas para esta modalidade estão a ser ligadas aos dados da PropLine."
-          />
-        ) : statsLoading ? (
-          <ComingSoonPanel title="A carregar estatísticas..." description="" />
-        ) : stats ? (
-          <StatisticsPanel
-            stats={stats}
-            homeName={detail?.homeTeamName ?? detail?.name.split(' vs ')[0] ?? 'Casa'}
-            awayName={detail?.awayTeamName ?? detail?.name.split(' vs ')[1] ?? 'Fora'}
-          />
-        ) : (
-          <ComingSoonPanel
-            title="Estatísticas indisponíveis"
-            description="Ainda não há estatísticas publicadas pela Goal API para esta partida."
-          />
-        );
+        return statsPanel;
       case 'h2h':
         return !isFootball ? (
           <ComingSoonPanel
@@ -339,6 +409,17 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
         return null;
     }
   };
+
+  const marketCategories: MarketCategory[] = React.useMemo(() => {
+    if (!detail) return [];
+    return eventToUiMarketCategories(detail).map((cat) => ({
+      ...cat,
+      odds: cat.odds.map((odd) => ({
+        ...odd,
+        trend: (odd.selectionId && oddsTrend.get(odd.selectionId)) || null,
+      })),
+    }));
+  }, [detail, oddsTrend]);
 
   const handleSelect = (market: MarketCategory, odd: OddItem) => {
     if (!detail) return;
@@ -451,7 +532,7 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
                   <FullMarketsGrid
                     matchId={decodedMatchId}
                     loading={loading}
-                    categories={detail ? eventToUiMarketCategories(detail) : []}
+                    categories={marketCategories}
                     onSelectionClick={(market, odd) => handleSelect(market, odd)}
                   />
                 </div>
