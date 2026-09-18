@@ -27,7 +27,7 @@ import { ProplineHttpClient } from './propline.http-client';
 import { ProplineWsClient } from './propline.ws-client';
 import { ProplineWebhookService, type ParsedProplineWebhook } from './propline.webhook';
 import { ProplineDataAdapter } from './propline.adapter';
-import type { ProplineEvent, ProplineSport, ProplineStatsResponse } from './propline.types';
+import type { ProplineEvent, ProplineScoreRow, ProplineSport, ProplineStatsResponse } from './propline.types';
 import {
   normalizeEventStatus,
   normalizePeriod,
@@ -249,7 +249,14 @@ export class ProplineOddsProviderService
       for (const oddsResp of oddsResponses) {
         const eventId = String(oddsResp.id ?? oddsResp.event_id ?? '');
         if (!eventId) continue;
-        const { markets: bet62Markets } = this.adapter.runOddsPipeline(oddsResp, { isLive });
+        // skipStaleCheck: a PropLine real (last_update/last_change_at) e o timestamp
+        // de quando aquele BOOK mudou o preco pela ultima vez, nao de quando NOS
+        // fizemos a nossa propria consulta — uma linha pre-jogo estavel fica com
+        // last_update de horas atras sem isso significar que o dado que acabamos
+        // de buscar agora, ao vivo via HTTP, esta desatualizado. Sem isso, o
+        // calculo de "stale" original (pensado para um scraper proprio) suspendia
+        // praticamente toda selecao, fazendo as odds nunca aparecerem no site.
+        const { markets: bet62Markets } = this.adapter.runOddsPipeline(oddsResp, { isLive, skipStaleCheck: true });
         if (bet62Markets.length === 0) continue;
         const providerMarkets = this.bet62MarketsToProviderMarkets(bet62Markets, eventId);
         map.set(eventId, providerMarkets);
@@ -337,40 +344,72 @@ export class ProplineOddsProviderService
   ): Promise<ProviderEvent[]> {
     if (this.fatalInitFailed) return [];
     try {
-      const out: ProviderEvent[] = [];
       const sportKeys = await this.resolveRequestedSportKeys(opts.sport);
-      for (const sportKey of sportKeys) {
-        const rawList = await this.http.getEventsBySport(sportKey);
-        const sportType = mapPropLineSportKeyToSportType(sportKey);
-        if (!sportType) continue;
-        const oddsBySportKey = rawList.length > 0
-          ? await this.fetchOddsMapForSportKey(sportKey, opts.live)
-          : new Map<string, ProviderMarket[]>();
-        for (const pe of rawList) {
-          if (opts.live) {
-            if (!pe.live || pe.completed) continue;
-          } else {
-            if (pe.live || pe.completed) continue;
+      // Cada sportKey dispara 3 chamadas HTTP (eventos + odds em lote +
+      // scores). Com dezenas de sportKeys (ex: uma liga por chave), rodar
+      // isso em serie (for..of com await) somava o timeout de cada chamada
+      // uma atras da outra e podia deixar a listagem de pré-jogo/ao vivo
+      // travada por minutos no frontend. Buscando tudo em paralelo, o tempo
+      // total fica limitado ao timeout de uma unica chamada lenta, nao a
+      // soma de todas.
+      const perSportKeyResults = await Promise.all(
+        sportKeys.map(async (sportKey): Promise<ProviderEvent[]> => {
+          const sportType = mapPropLineSportKeyToSportType(sportKey);
+          if (!sportType) return [];
+          const [rawList, oddsBySportKey, scoresList] = await Promise.all([
+            this.http.getEventsBySport(sportKey),
+            this.fetchOddsMapForSportKey(sportKey, opts.live),
+            // /events nunca traz status/live/completed (confirmado na doc
+            // oficial da PropLine) — so /scores diz se um jogo esta ao vivo
+            // ou terminado. Sem isso, getLiveEvents ficava sempre vazio (o
+            // codigo antigo lia pe.live, que nunca existe de verdade) e
+            // jogos ja terminados continuavam aparecendo como pré-jogo.
+            this.http.getScoresBySport(sportKey),
+          ]);
+          const scoresById = new Map<string, ProplineScoreRow>();
+          for (const s of scoresList) {
+            const sid = s?.id ?? (s as { event_id?: string })?.event_id;
+            if (sid) scoresById.set(String(sid), s);
           }
-          const pev = this.mapProplineEventToProviderEvent(pe, sportType, true);
-          const markets = oddsBySportKey.get(String(pe.id ?? '')) ?? oddsBySportKey.get(String(pe.event_id ?? ''));
-          if (markets && markets.length > 0) {
-            pev.markets = markets;
-            pev.marketsCount = markets.length;
+          const events: ProviderEvent[] = [];
+          for (const pe of rawList) {
+            const scoreRow = scoresById.get(String(pe.id ?? '')) ?? scoresById.get(String(pe.event_id ?? ''));
+            const enrichedPe: ProplineEvent = scoreRow
+              ? {
+                  ...pe,
+                  status: scoreRow.status as ProplineEvent['status'],
+                  scores: { home: scoreRow.home_score ?? null, away: scoreRow.away_score ?? null },
+                }
+              : pe;
+            const pev = this.mapProplineEventToProviderEvent(enrichedPe, sportType, true);
+            const isLiveNow = pev.status === 'LIVE' || pev.status === 'HALF_TIME';
+            const isDone = pev.status === 'FINISHED' || pev.status === 'ENDED' || pev.status === 'CANCELLED';
+            if (opts.live) {
+              if (!isLiveNow) continue;
+            } else {
+              if (isLiveNow || isDone) continue;
+            }
+            const markets = oddsBySportKey.get(String(pe.id ?? '')) ?? oddsBySportKey.get(String(pe.event_id ?? ''));
+            if (markets && markets.length > 0) {
+              pev.markets = markets;
+              pev.marketsCount = markets.length;
+            }
+            if (opts.league) {
+              const leagueKey = String(opts.league).toLowerCase();
+              const leagueName = (pev.leagueName ?? '').toLowerCase();
+              const leagueId = (pev.leagueId ?? '').toLowerCase();
+              if (leagueName !== leagueKey && leagueId !== leagueKey) continue;
+            }
+            if (!opts.live) {
+              if (opts.from && pev.kickoffAt < opts.from) continue;
+              if (opts.to && pev.kickoffAt > opts.to) continue;
+            }
+            events.push(pev);
           }
-          if (opts.league) {
-            const leagueKey = String(opts.league).toLowerCase();
-            const leagueName = (pev.leagueName ?? '').toLowerCase();
-            const leagueId = (pev.leagueId ?? '').toLowerCase();
-            if (leagueName !== leagueKey && leagueId !== leagueKey) continue;
-          }
-          if (!opts.live) {
-            if (opts.from && pev.kickoffAt < opts.from) continue;
-            if (opts.to && pev.kickoffAt > opts.to) continue;
-          }
-          out.push(pev);
-        }
-      }
+          return events;
+        }),
+      );
+      const out = perSportKeyResults.flat();
       out.sort((a, b) => a.kickoffAt.getTime() - b.kickoffAt.getTime());
       return opts.limit ? out.slice(0, opts.limit) : out;
     } catch (err) {
@@ -466,6 +505,7 @@ export class ProplineOddsProviderService
           if (oddsResp) {
             const { markets: bet62Markets } = this.adapter.runOddsPipeline(oddsResp, {
               isLive: base.status === 'LIVE' || base.status === 'HALF_TIME',
+              skipStaleCheck: true,
             });
             markets = this.bet62MarketsToProviderMarkets(bet62Markets, base.id);
           }

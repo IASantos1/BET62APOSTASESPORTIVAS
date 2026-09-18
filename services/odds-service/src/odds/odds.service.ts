@@ -968,6 +968,7 @@ export class OddsService {
       kickoffAt: ev.kickoffAt,
       liveUpdatedAt: ev.liveUpdatedAt,
       liveStreamAvailable: ev.liveStreamAvailable,
+      markets: ev.markets && ev.markets.length > 0 ? this.formatMarketSelections(ev.markets) : undefined,
       marketsCount: ev.marketsCount,
       providerEventId: ev.providerEventId,
       sources,

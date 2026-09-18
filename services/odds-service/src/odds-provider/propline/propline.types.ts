@@ -43,6 +43,9 @@ export interface ProplineOutcome {
 export interface ProplineBookmakerMarket {
   key: string;
   last_update?: string | null;
+  description?: string | null;
+  team?: string | null;
+  suspended_at?: string | null;
   outcomes: ProplineOutcome[];
 }
 
@@ -391,6 +394,22 @@ export interface ProplineWsAckMessage {
   type: 'ack';
   action: string;
   subscribed?: string[] | null;
+}
+
+// GET /v1/sports/{sport}/scores — a unica fonte real de status ao
+// vivo/terminado. O endpoint /events NAO traz status, live ou completed
+// (confirmado na doc oficial: so id, sport_key, home_team, away_team,
+// commence_time, home_team_key, away_team_key, home_team_id, away_team_id,
+// home_team_logo_url, away_team_logo_url, merged_from_event_ids).
+export interface ProplineScoreRow {
+  id: string;
+  sport_key: string;
+  home_team: string;
+  away_team: string;
+  commence_time: string;
+  status: ProplineEventStatus | string;
+  home_score?: number | null;
+  away_score?: number | null;
 }
 
 export interface ProplineScoreResponse {
