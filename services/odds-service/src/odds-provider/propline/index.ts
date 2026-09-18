@@ -525,10 +525,11 @@ export class ProplineOddsProviderService
       if (this.fatalInitFailed) return [];
       const keys = await this.resolveRequestedSportKeys(sport as unknown as string | undefined);
       const leagues = new Map<string, ProviderLeague>();
-      for (const key of keys) {
-        const sportType = mapPropLineSportKeyToSportType(key);
+      const perKeyEvents = await Promise.all(
+        keys.map(async (key) => ({ key, sportType: mapPropLineSportKeyToSportType(key), events: await this.http.getEventsBySport(key) })),
+      );
+      for (const { key, sportType, events } of perKeyEvents) {
         if (!sportType) continue;
-        const events = await this.http.getEventsBySport(key);
         for (const event of events) {
           const providerLeagueId = event.league_key ?? key;
           const leagueId = buildCompositeId(key, providerLeagueId);

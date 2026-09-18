@@ -16,7 +16,10 @@ type FetchOptions = RequestInit & {
   jsonBody?: unknown;
   params?: Record<string, string | number | boolean | Array<string | number | boolean> | undefined>;
   skipAuthError?: boolean;
+  timeoutMs?: number;
 };
+
+const DEFAULT_TIMEOUT_MS = 20_000;
 
 export class ApiError extends Error {
   status: number;
@@ -87,7 +90,7 @@ export async function apiFetch<T = unknown>(
   path: string,
   opts: FetchOptions = {},
 ): Promise<T> {
-  const { auth = true, jsonBody, params, headers: h, ...rest } = opts;
+  const { auth = true, jsonBody, params, headers: h, timeoutMs = DEFAULT_TIMEOUT_MS, signal, ...rest } = opts;
 
   const headers = new Headers(h as HeadersInit);
   if (jsonBody !== undefined) {
@@ -100,13 +103,31 @@ export async function apiFetch<T = unknown>(
     if (token) headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const res = await fetch(buildUrl(path, params), {
-    method: jsonBody !== undefined && !rest.method ? 'POST' : rest.method ?? 'GET',
-    headers,
-    body: jsonBody !== undefined ? JSON.stringify(jsonBody) : (rest.body as BodyInit | undefined),
-    credentials: 'include',
-    ...rest,
-  });
+  // Sem timeout aqui, um backend lento/travado deixava a UI presa
+  // indefinidamente em estado de "loading" (fetch nativo não tem timeout
+  // por padrão). Aborta a chamada após timeoutMs para a UI sempre poder
+  // sair do skeleton e mostrar um erro em vez de travar para sempre.
+  const controller = signal ? null : new AbortController();
+  const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(path, params), {
+      method: jsonBody !== undefined && !rest.method ? 'POST' : rest.method ?? 'GET',
+      headers,
+      body: jsonBody !== undefined ? JSON.stringify(jsonBody) : (rest.body as BodyInit | undefined),
+      credentials: 'include',
+      ...rest,
+      signal: signal ?? controller?.signal,
+    });
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new ApiError('Tempo limite excedido ao contactar o servidor.', 0, null);
+    }
+    throw err;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 
   const data = await parseResponse<T>(res);
 
