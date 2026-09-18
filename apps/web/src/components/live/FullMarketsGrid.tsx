@@ -77,7 +77,7 @@ export function FullMarketsGrid({ matchId, categories, loading, onSelectionClick
             <span className="text-white/50 text-sm group-open:rotate-90 transition-transform">›</span>
           </summary>
           <div className="px-4 pb-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {cat.odds.map((odd, i) => (
                 <button
                   key={`${odd.selectionId || cat.code || cat.name}-${i}`}
