@@ -87,6 +87,23 @@ export class OddsService {
     return this.abstractProvider as unknown as OddsProvider;
   }
 
+  /**
+   * Diagnostico leve para confirmar em producao, so por uma URL no
+   * navegador, se as API keys dos providers estao configuradas — nunca
+   * expoe o valor da chave, so um booleano hasApiKey por provider.
+   */
+  getProviderDiagnostics(): {
+    propline: { hasApiKey: boolean; baseUrl: string };
+    goalApi: { hasApiKey: boolean; baseUrl: string };
+  } {
+    const proplineCfg = this.proplineProvider.getHttpClient().getConfig();
+    const goalApiCfg = this.goalApiHttpClient.getConfig();
+    return {
+      propline: { hasApiKey: proplineCfg.hasApiKey, baseUrl: proplineCfg.baseUrl },
+      goalApi: { hasApiKey: goalApiCfg.hasApiKey, baseUrl: goalApiCfg.baseUrl },
+    };
+  }
+
   private isGoaldirRuntimeProvider(): boolean {
     return String(this.abstractProvider.providerName ?? '').trim().toUpperCase() === 'GOALDIR';
   }

@@ -79,6 +79,14 @@ export class GoalApiHttpClient {
     }
   }
 
+  getConfig(): Readonly<{ baseUrl: string; hasApiKey: boolean; timeoutMs: number }> {
+    return {
+      baseUrl: this.baseUrl,
+      hasApiKey: Boolean(this.apiKey && this.apiKey.length > 0),
+      timeoutMs: this.timeoutMs,
+    };
+  }
+
   async safeFetch(
     url: string,
     opts?: RequestInit,
