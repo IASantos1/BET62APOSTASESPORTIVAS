@@ -91,15 +91,25 @@ export class OddsService {
    * Diagnostico leve para confirmar em producao, so por uma URL no
    * navegador, se as API keys dos providers estao configuradas — nunca
    * expoe o valor da chave, so um booleano hasApiKey por provider.
+   * `propline.availableSportKeys` mostra a lista crua de esportes que a
+   * PropLine reporta ter (GET /v1/sports) — usado para confirmar se ela
+   * sequer lista futebol/soccer entre os esportes oferecidos.
    */
-  getProviderDiagnostics(): {
-    propline: { hasApiKey: boolean; baseUrl: string };
+  async getProviderDiagnostics(): Promise<{
+    propline: { hasApiKey: boolean; baseUrl: string; availableSportKeys: string[] | null };
     goalApi: { hasApiKey: boolean; baseUrl: string };
-  } {
+  }> {
     const proplineCfg = this.proplineProvider.getHttpClient().getConfig();
     const goalApiCfg = this.goalApiHttpClient.getConfig();
+    let availableSportKeys: string[] | null = null;
+    try {
+      const sports = await this.proplineProvider.getHttpClient().getSports();
+      availableSportKeys = sports.map((s) => s.key);
+    } catch (err) {
+      this.logger.warn(`getProviderDiagnostics: falha ao buscar PropLine getSports: ${err instanceof Error ? err.message : String(err)}`);
+    }
     return {
-      propline: { hasApiKey: proplineCfg.hasApiKey, baseUrl: proplineCfg.baseUrl },
+      propline: { hasApiKey: proplineCfg.hasApiKey, baseUrl: proplineCfg.baseUrl, availableSportKeys },
       goalApi: { hasApiKey: goalApiCfg.hasApiKey, baseUrl: goalApiCfg.baseUrl },
     };
   }
