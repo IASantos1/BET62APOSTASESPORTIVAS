@@ -6,8 +6,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy,
-  Radio,
-  CalendarDays,
   Dices,
   User,
   Menu,
@@ -17,11 +15,8 @@ import {
   History,
   LogOut,
   ChevronDown,
-  Sparkles,
-  LogIn,
   Gift,
   Plus,
-  Percent,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
@@ -39,9 +34,7 @@ import { formatCurrencyEUR } from '../../lib/utils';
 import { apiClient, ApiError } from '../../lib/api-client';
 
 const NAV = [
-  { href: '/', label: 'Destaques', icon: Trophy },
-  { href: '/live', label: 'Ao Vivo', icon: Radio, badge: '24' },
-  { href: '/events', label: 'Próximos', icon: CalendarDays },
+  { href: '/', label: 'Início', icon: Trophy },
   { href: '/casino', label: 'Cassino', icon: Dices },
   { href: '/promocoes', label: 'Promoções', icon: Gift, badge: '5' },
 ];

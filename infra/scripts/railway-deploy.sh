@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # =======================================================================
-# BET62 APOSTAS ESPORTIVAS — Deploy Automático RAILWAY (1 comando)
+# BET62 — Deploy Automático RAILWAY (1 comando)
 # =======================================================================
 # Requisitos prévios (rodar 1 vez):
 #   1. railway login (já autenticado)
@@ -9,7 +9,7 @@ set -euo pipefail
 # =======================================================================
 # Como usar:
 #   chmod +x ./infra/scripts/railway-deploy.sh
-#   ./infra/scripts/railway-deploy.sh          # Deploy de TODOS os 13 serviços
+#   ./infra/scripts/railway-deploy.sh          # Deploy de TODOS os serviços
 #   ./infra/scripts/railway-deploy.sh auth web  # Deploy só auth-service + web
 # =======================================================================
 export NPM_CONFIG_LEGACY_PEER_DEPS=true
@@ -30,7 +30,6 @@ declare -A SERVICE_DIR_MAP=(
   ["user-service"]="services/user-service"
   ["kyc-service"]="services/kyc-service"
   ["wallet-service"]="services/wallet-service"
-  ["odds-service"]="services/odds-service"
   ["bets-service"]="services/bets-service"
   ["bonus-service"]="services/bonus-service"
   ["casino-service"]="services/casino-service"
@@ -44,7 +43,6 @@ declare -A DOCKERFILE_MAP=(
   ["user-service"]="infra/docker/Dockerfile.node"
   ["kyc-service"]="infra/docker/Dockerfile.node"
   ["wallet-service"]="infra/docker/Dockerfile.node"
-  ["odds-service"]="infra/docker/Dockerfile.node"
   ["bets-service"]="infra/docker/Dockerfile.node"
   ["bonus-service"]="infra/docker/Dockerfile.node"
   ["casino-service"]="infra/docker/Dockerfile.node"
@@ -62,7 +60,6 @@ else
     "user-service"
     "kyc-service"
     "wallet-service"
-    "odds-service"
     "bets-service"
     "bonus-service"
     "casino-service"
@@ -124,7 +121,7 @@ echo "==================================================================="
 echo "Ordem recomendada de arranque (espera 'Deployed' por esta ordem):"
 echo "  1. Postgres + Redis (serviços managed Railway)"
 echo "  2. auth-service  → wallet-service → user-service → kyc-service"
-echo "  3. odds-service → bets-service → bonus-service → casino-service"
+echo "  3. bets-service → bonus-service → casino-service"
 echo "  4. notifications-service → admin-service"
 echo "  5. api-gateway → web"
 echo "==================================================================="

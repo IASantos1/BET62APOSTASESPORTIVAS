@@ -68,20 +68,19 @@ Abre `railway.app → teu projeto → Variables → RAW Editor` e cola TUDO de `
 | `JWT_REFRESH_SECRET` | Outra string diferente (comando igual acima) |
 | `STRIPE_SECRET_KEY` / `STRIPE_PUBLISHABLE_KEY` / `STRIPE_WEBHOOK_SECRET` | dashboard.stripe.com/test |
 | `SUMSUB_APP_TOKEN` / `SUMSUB_SECRET_KEY` | cockpit.sumsub.com (staging primeiro) |
-| `ODDS_PROVIDER_*` | O teu provider de odds real (nome+baseURL+key) |
 | `SMTP_*` | Resend/Postmark/Sendgrid (100 grátis/dia) |
 | `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | `npx web-push generate-vapid-keys` |
 | `ADMIN_DEFAULT_PASSWORD` | Password forte SUPER ADMIN inicial |
 
 ---
 
-## 3️⃣ **Passo 3 — Criar 13 serviços (1 comando deploy.sh)**
+## 3️⃣ **Passo 3 — Criar os serviços (1 comando deploy.sh)**
 
 ### Método Recomendado: Script automático (Windows usa WSL ou Git Bash)
 ```bash
 chmod +x ./infra/scripts/railway-deploy.sh
 
-# Deployar TUDO (13 serviços — API Gateway → 11 NestJS → Web):
+# Deployar TUDO:
 ./infra/scripts/railway-deploy.sh
 
 # OU deploy só um serviço individual:
@@ -107,7 +106,7 @@ Cada serviço no Railway → **New → Empty Service → Settings → Service**:
 
 ## 4️⃣ **Passo 4 — Rodar migrations (1 vez local, dados gravam no Postgres Railway)**
 
-Depois do `bet62-postgres` deployed (status **Available**), executa **localmente** as `prisma migrate dev` (10 migrations) a apontar para o Railway Postgres remoto:
+Depois do `bet62-postgres` deployed (status **Available**), executa **localmente** as `prisma migrate dev` a apontar para o Railway Postgres remoto:
 
 ```powershell
 # PowerShell Windows — copia DATABASE_URL do Railway Postgres e cola:
@@ -123,7 +122,7 @@ npx prisma migrate dev --schema services/auth-service/prisma/schema.prisma --nam
 # Repete para os 9 restantes:
 $env:DATABASE_URL="RAILWAY_URL_POSTGRES_AQUI?schema=users"
 npx prisma migrate dev --schema services/user-service/prisma/schema.prisma --name init
-# kyc / wallet / odds / bets / bonus / casino / notifications / admins
+# kyc / wallet / bets / bonus / casino / notifications / admins
 ```
 
 Após sucesso → tabelas de cada serviço aparecem nos seus schemas correspondentes no Railway Postgres.
@@ -167,7 +166,7 @@ Railway liga tudo em paralelo, mas para evitar falhas iniciais:
 1. ✅ **Postgres + Redis healthy** (sempre primeiro)
 2. ✅ **auth-service / wallet-service / user-service** (dependem só de BD)
 3. ✅ **kyc-service (Sumsub), bonus, notifications (Webhook SMTP/VAPID)**
-4. ✅ **odds-service (odds provider API), bets-service (depende de odds+wallet), casino**
+4. ✅ **bets-service e casino**
 5. ✅ **admin-service, api-gateway** (agregam tudo)
 6. ✅ **web** (último, consome api-gateway)
 

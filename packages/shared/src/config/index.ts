@@ -5,7 +5,5 @@ export * from "./casino.config";
 export * from "./env-aliases";
 export * from "./kyc.config";
 export * from "./limits.config";
-export * from "./odds.config";
 export * from "./promotions.config";
-export * from "./sports-provider.config";
 export * from "./wallet.config";

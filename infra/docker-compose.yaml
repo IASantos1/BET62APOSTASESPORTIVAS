@@ -216,32 +216,6 @@ services:
     profiles:
       - services
 
-  odds-service:
-    build:
-      context: ..
-      dockerfile: infra/docker/Dockerfile.node
-      args:
-        SERVICE_DIR: services/odds-service
-        SERVICE_PORT: 3005
-    container_name: bet62-odds-service
-    restart: unless-stopped
-    environment:
-      - NODE_ENV=${NODE_ENV:-development}
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-      - PORT=3005
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    env_file:
-      - ../.env
-    networks:
-      - bet62-net
-    profiles:
-      - services
-
   bets-service:
     build:
       context: ..

@@ -10,7 +10,6 @@ prismaServices=(
     "bets-service"
     "casino-service"
     "kyc-service"
-    "odds-service"
     "notifications-service"
     "user-service"
     "admin-service"
