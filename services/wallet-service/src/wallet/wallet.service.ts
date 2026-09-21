@@ -237,6 +237,7 @@ export class WalletService {
       checkoutUrl = session.url;
       sessionId = session.sessionId;
       clientSecret = session.clientSecret;
+      dto.paymentMethod = session.paymentMethod;
     } else {
       const intent = await this.stripe.createPaymentIntent(
         userId,

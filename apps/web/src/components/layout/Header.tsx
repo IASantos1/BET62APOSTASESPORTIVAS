@@ -6,8 +6,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy,
-  Radio,
-  CalendarDays,
   Dices,
   User,
   Menu,
@@ -17,24 +15,26 @@ import {
   History,
   LogOut,
   ChevronDown,
-  Sparkles,
-  LogIn,
   Gift,
   Plus,
-  Percent,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { Avatar, AvatarFallback } from '../ui/Avatar';
 import { PaymentMethodLogo } from '../ui/PaymentMethodLogo';
+import {
+  DEFAULT_DEPOSIT_METHOD,
+  isPaymentMethodEnabled,
+  normalizeDepositMethod,
+  type PaymentMethod,
+} from '../../lib/payment-methods';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../stores/auth.store';
 import { formatCurrencyEUR } from '../../lib/utils';
+import { apiClient, ApiError } from '../../lib/api-client';
 
 const NAV = [
-  { href: '/', label: 'Destaques', icon: Trophy },
-  { href: '/live', label: 'Ao Vivo', icon: Radio, badge: '24' },
-  { href: '/events', label: 'Próximos', icon: CalendarDays },
+  { href: '/', label: 'Início', icon: Trophy },
   { href: '/casino', label: 'Cassino', icon: Dices },
   { href: '/promocoes', label: 'Promoções', icon: Gift, badge: '5' },
 ];
@@ -53,8 +53,6 @@ export function Bet62Logo({ className }: { className?: string }) {
   );
 }
 
-type PaymentMethod = 'mbway' | 'multibanco' | 'card';
-
 export function Header() {
   const pathname = usePathname();
   const router = useRouter();
@@ -62,30 +60,33 @@ export function Header() {
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [depositOpen, setDepositOpen] = React.useState(false);
   const [depositAmount, setDepositAmount] = React.useState<number>(20);
-  const [selectedMethod, setSelectedMethod] = React.useState<PaymentMethod>('mbway');
+  const [selectedMethod, setSelectedMethod] = React.useState<PaymentMethod>(DEFAULT_DEPOSIT_METHOD);
   const [depositLoading, setDepositLoading] = React.useState(false);
+  const [depositError, setDepositError] = React.useState<string | null>(null);
   const { user, isAuthenticated, logout, isLoading } = useAuthStore();
   const balance = 0;
 
   const handleDeposit = async () => {
     if (depositAmount < 10) return;
+    const paymentMethod = normalizeDepositMethod(selectedMethod);
     setDepositLoading(true);
+    setDepositError(null);
     try {
-      const res = await fetch('/api/client/deposit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: depositAmount,
-          method: selectedMethod,
-        }),
+      const data = await apiClient.post<{ checkoutUrl?: string }>('/wallet/deposit/stripe/create-intent', {
+        provider: 'STRIPE',
+        amount: depositAmount,
+        currency: 'EUR',
+        paymentMethod,
+        returnUrl: `${window.location.origin}/carteira`,
       });
-      const data = await res.json().catch(() => ({}));
-      if (data?.url) {
-        window.location.href = data.url;
-      } else if (data?.checkoutUrl) {
+      if (data?.checkoutUrl) {
         window.location.href = data.checkoutUrl;
+      } else {
+        setDepositError('Não foi possível iniciar o pagamento. Tenta novamente.');
       }
-    } catch {
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Erro ao iniciar o depósito.';
+      setDepositError(message);
     } finally {
       setDepositLoading(false);
     }
@@ -380,18 +381,22 @@ export function Header() {
 
                 <div className="space-y-2.5 mb-5">
                   <button
-                    onClick={() => setSelectedMethod('mbway')}
+                    onClick={() => {
+                      if (isPaymentMethodEnabled('mbway')) setSelectedMethod('mbway');
+                    }}
+                    disabled={!isPaymentMethodEnabled('mbway')}
                     className={cn(
                       'w-full flex items-center gap-3 p-3.5 rounded-2xl border text-left transition-all',
                       selectedMethod === 'mbway'
                         ? 'border-[#009688]/60 bg-[#009688]/10 shadow-[0_0_0_1px_rgba(0,150,136,0.25)]'
-                        : 'border-bet62-border hover:border-white/20 bg-bet62-surface/50',
+                        : 'border-bet62-border bg-bet62-surface/50',
+                      !isPaymentMethodEnabled('mbway') && 'opacity-55 cursor-not-allowed',
                     )}
                   >
                     <PaymentMethodLogo method="mbway" size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm">MB WAY</p>
-                      <p className="text-xs text-white/50">Instantâneo · mín. €10</p>
+                      <p className="text-xs text-white/50">Em breve · usar Stripe ou Multibanco</p>
                     </div>
                     {selectedMethod === 'mbway' ? (
                       <div className="h-5 w-5 rounded-full bg-[#009688] flex items-center justify-center shrink-0">
@@ -436,8 +441,8 @@ export function Header() {
                   >
                     <PaymentMethodLogo method="card" size="sm" />
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm">Cartão Crédito / Débito</p>
-                      <p className="text-xs text-white/50">Visa / Mastercard · mín. €10</p>
+                      <p className="font-semibold text-sm">Stripe Checkout</p>
+                      <p className="text-xs text-white/50">Visa / Mastercard · 3D Secure</p>
                     </div>
                     {selectedMethod === 'card' ? (
                       <div className="h-5 w-5 rounded-full bg-slate-600 flex items-center justify-center shrink-0">
@@ -448,6 +453,10 @@ export function Header() {
                     )}
                   </button>
                 </div>
+
+                <p className="mb-4 text-[11px] leading-relaxed text-white/45">
+                  MB WAY ainda não está ativo como método nativo nesta conta Stripe, por isso fica marcado como indisponível até a ativação real.
+                </p>
 
                 <div className="mb-5">
                   <label className="block text-xs font-semibold text-white/60 uppercase tracking-wider mb-2">
@@ -481,6 +490,12 @@ export function Header() {
                     ))}
                   </div>
                 </div>
+
+                {depositError ? (
+                  <p className="mb-3 text-sm text-bet62-danger bg-bet62-danger/10 border border-bet62-danger/30 rounded-xl px-3 py-2">
+                    {depositError}
+                  </p>
+                ) : null}
 
                 <Button
                   variant="primary"

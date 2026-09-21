@@ -23,7 +23,6 @@ const ROUTE_DEFINITIONS: ServiceRouteDefinition[] = [
   { prefix: '/api/user', envPrefix: 'USER', defaultPort: Number(process.env.USER_PORT ?? 3002), name: 'user-service' },
   { prefix: '/api/kyc', envPrefix: 'KYC', defaultPort: Number(process.env.KYC_PORT ?? 3003), name: 'kyc-service' },
   { prefix: '/api/wallet', envPrefix: 'WALLET', defaultPort: Number(process.env.WALLET_PORT ?? 3004), name: 'wallet-service' },
-  { prefix: '/api/odds', envPrefix: 'ODDS', defaultPort: Number(process.env.ODDS_PORT ?? 3005), name: 'odds-service' },
   { prefix: '/api/bets', envPrefix: 'BETS', defaultPort: Number(process.env.BETS_PORT ?? 3006), name: 'bets-service' },
   { prefix: '/api/bonus', envPrefix: 'BONUS', defaultPort: Number(process.env.BONUS_PORT ?? 3007), name: 'bonus-service' },
   { prefix: '/api/casino', envPrefix: 'CASINO', defaultPort: Number(process.env.CASINO_PORT ?? 3008), name: 'casino-service' },
@@ -74,14 +73,7 @@ export class ApiReverseProxyMiddlewareController implements NestMiddleware {
       timeout: PROXY_TIMEOUT_MS,
     };
 
-    // #region debug-point H2a:proxy-upstream-path
-    (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'pre-fix', hypothesisId: 'H2a', location: 'api-reverse-proxy.middleware.ts:62', msg: '[DEBUG] proxy upstream request enviado', data: { routePrefix: route.prefix, routeName: route.name, target: `${options.hostname}:${options.port}`, method: req.method, pathSentToUpstream: options.path, originalUrl: url, expect: 'Se odds-service tem setGlobalPrefix(api/odds)+@Controller(odds) a rota e /api/odds/odds/events/... e nao /api/odds/events/...' }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
-    // #endregion
-
     const upstream = http.request(options, (upstreamRes) => {
-      // #region debug-point H2a:proxy-upstream-status
-      (() => { const fs = require('fs'), p = '.dbg/no-prematch-live-events.env'; let u = 'http://127.0.0.1:7777/event', s = 'no-prematch-live-events'; try { const e = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; u = (e.match(/DEBUG_SERVER_URL=(.+)/) || [])[1] || u; s = (e.match(/DEBUG_SESSION_ID=(.+)/) || [])[1] || s; } catch {} const d = { sessionId: s, runId: 'pre-fix', hypothesisId: 'H2a', location: 'api-reverse-proxy.middleware.ts:77', msg: '[DEBUG] proxy upstream status recebido', data: { path: options.path, statusCode: upstreamRes.statusCode, routeName: route.name, expectedIfH2a: '404 se path nao contem /api/odds/odds/ duplo prefixo' }, ts: Date.now() }; try { require('http').request(u.split('/event')[0], { method: 'POST', path: '/event', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(JSON.stringify(d)) } }, (r) => { r.on('data', () => {}); }).on('error', () => {}).end(JSON.stringify(d)); } catch {} })();
-      // #endregion
       res.status(upstreamRes.statusCode ?? 502);
       const h = (upstreamRes.headersDistinct as Record<string, string[]>) ?? (upstreamRes.headers as unknown as Record<string, string[]>);
       for (const [k, v] of Object.entries(h)) {

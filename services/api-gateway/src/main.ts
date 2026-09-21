@@ -1,3 +1,51 @@
+// #region env-aliases-bootstrap-inline (0 imports, 0 external deps, 100% crash-proof)
+(() => {
+  if (typeof process === 'undefined' || typeof process.env === 'undefined') return;
+  const ENV_ALIASES: Array<[string, string[]]> = [
+    ['JWT_SECRET', ['SEGREDO_JWT']],
+    ['JWT_ACCESS_SECRET', ['SEGREDO_ACESSO_JWT']],
+    ['JWT_REFRESH_SECRET', ['SEGREDO_REFRESH_JWT']],
+    ['STRIPE_SECRET_KEY', ['CHAVE_SECRETA_STRIPE']],
+    ['STRIPE_WEBHOOK_SECRET', ['SEGREDO_WEBHOOK_STRIPE']],
+    ['STRIPE_PUBLISHABLE_KEY', ['CHAVE_PUBLICAVEL_STRIPE']],
+    ['DATABASE_URL', ['URL_DO_BANCO_DE_DADOS']],
+  ];
+  const TRUE_SET = new Set(['1', 'true', 'TRUE', 'True', 'yes', 'YES', 'sim', 'SIM', 'on', 'ON', 's', 'S', 'y', 'Y']);
+  const isTrue = (v: unknown): boolean => typeof v === 'string' && TRUE_SET.has(v.trim());
+  const setIfMissing = (target: string, sources: string[]): boolean => {
+    const existing = process.env[target];
+    if (typeof existing === 'string' && existing.length > 0) return false;
+    for (const src of sources) {
+      const v = process.env[src];
+      if (typeof v === 'string' && v.length > 0) {
+        process.env[target] = v;
+        return true;
+      }
+    }
+    return false;
+  };
+  const applied: Record<string, string> = {};
+  for (const [target, sources] of ENV_ALIASES) {
+    if (setIfMissing(target, sources)) {
+      const v = process.env[target] || '';
+      applied[target] = v.length > 10 ? `${v.slice(0, 6)}…${v.slice(-4)}` : v;
+    }
+  }
+  const count = Object.keys(applied).length;
+  if (count > 0) {
+    try {
+      // eslint-disable-next-line no-console
+      console.info(`[env-aliases:api-gateway] Mapeamento Railway PT/typo → EN aplicado (${count}):`, JSON.stringify(applied, null, 2));
+    } catch (_e) {}
+  } else {
+    try {
+      // eslint-disable-next-line no-console
+      console.info('[env-aliases:api-gateway] Nenhum mapeamento aplicado (todas as vars já em EN, 0 fallback).');
+    } catch (_e) {}
+  }
+})();
+// #endregion
+
 // @ts-nocheck — resolução de tipos temporária enquanto prisma generate não roda
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
@@ -54,7 +102,7 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('BET62 API Gateway')
-    .setDescription('API Gateway do BET62 - Plataforma de Apostas Esportivas')
+    .setDescription('API Gateway do BET62')
     .setVersion('1.0.0')
     .addBearerAuth()
     .build();

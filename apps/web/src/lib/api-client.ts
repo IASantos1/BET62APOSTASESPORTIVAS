@@ -14,7 +14,7 @@ const baseUrl =
 type FetchOptions = RequestInit & {
   auth?: boolean;
   jsonBody?: unknown;
-  params?: Record<string, string | number | boolean | undefined>;
+  params?: Record<string, string | number | boolean | Array<string | number | boolean> | undefined>;
   skipAuthError?: boolean;
 };
 
@@ -62,6 +62,12 @@ function buildUrl(path: string, params?: FetchOptions['params']) {
   const url = new URL(cleanPath, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
   for (const [k, v] of Object.entries(params)) {
     if (v === undefined || v === null) continue;
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        url.searchParams.append(k, String(item));
+      }
+      continue;
+    }
     url.searchParams.append(k, String(v));
   }
   return url.toString();
