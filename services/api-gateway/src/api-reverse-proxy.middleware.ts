@@ -23,6 +23,7 @@ const ROUTE_DEFINITIONS: ServiceRouteDefinition[] = [
   { prefix: '/api/user', envPrefix: 'USER', defaultPort: Number(process.env.USER_PORT ?? 3002), name: 'user-service' },
   { prefix: '/api/kyc', envPrefix: 'KYC', defaultPort: Number(process.env.KYC_PORT ?? 3003), name: 'kyc-service' },
   { prefix: '/api/wallet', envPrefix: 'WALLET', defaultPort: Number(process.env.WALLET_PORT ?? 3004), name: 'wallet-service' },
+  { prefix: '/api/odds', envPrefix: 'ODDS', defaultPort: Number(process.env.ODDS_PORT ?? 3005), name: 'odds-service' },
   { prefix: '/api/bets', envPrefix: 'BETS', defaultPort: Number(process.env.BETS_PORT ?? 3006), name: 'bets-service' },
   { prefix: '/api/bonus', envPrefix: 'BONUS', defaultPort: Number(process.env.BONUS_PORT ?? 3007), name: 'bonus-service' },
   { prefix: '/api/casino', envPrefix: 'CASINO', defaultPort: Number(process.env.CASINO_PORT ?? 3008), name: 'casino-service' },

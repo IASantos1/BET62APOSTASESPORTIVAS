@@ -23,7 +23,10 @@ const nextConfig = {
   // Mantemos a base da API relativa por defeito para evitar acoplamento a hosts
   // hardcoded no bundle do cliente.
   env: {
-    NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL ?? '',
+    NEXT_PUBLIC_API_BASE_URL:
+      process.env.NEXT_PUBLIC_API_BASE_URL ??
+      process.env.NEXT_PUBLIC_API_URL ??
+      '',
   },
 };
 

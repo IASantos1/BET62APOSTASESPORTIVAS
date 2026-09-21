@@ -52,6 +52,7 @@ enum CasinoBetStatus {
 
 enum CasinoProvider {
   MOCK
+  BIGBANG
   PGSOFT
   EVOLUTION
   PRAGMATIC
@@ -130,6 +131,7 @@ model CasinoGame {
   favorites              CasinoGameFavorite[]
   sessions               CasinoSession[]
   bets                   CasinoBet[]
+  providerWalletTxs      CasinoProviderWalletTx[]
 
   @@unique([providerId, providerGameId])
   @@index([category, status])
@@ -234,6 +236,34 @@ model CasinoBet {
   @@index([roundRef])
   @@schema("casino")
   @@map("casino_bet")
+}
+
+model CasinoProviderWalletTx {
+  id                 String      @id @default(uuid())
+  provider           CasinoProvider
+  transactionId      String      @unique
+  roundId            String?
+  type               String
+  roundEnd           Boolean     @default(false)
+  username           String
+  amount             Decimal     @db.Decimal(14, 2)
+  currency           String      @default("EUR") @db.VarChar(8)
+  gameId             String?
+  externalBetRef     String?
+  providerCategoryId String?
+  status             String      @default("PENDING")
+  sandbox            Boolean     @default(false)
+  balanceAfter       Decimal?    @db.Decimal(14, 2)
+  requestPayload     Json?
+  responsePayload    Json?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  game               CasinoGame? @relation(fields: [gameId], references: [id])
+  @@index([username, roundId])
+  @@index([provider, status])
+  @@schema("casino")
+  @@map("casino_provider_wallet_tx")
 }
 
 model CasinoJackpot {

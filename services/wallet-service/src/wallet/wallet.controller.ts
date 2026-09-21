@@ -37,6 +37,18 @@ export class WalletController {
     return this.walletService.getBalance(req.user.sub, currency);
   }
 
+  @Get('internal/balance')
+  @ApiOperation({ summary: '[INTERNAL] Saldo de carteira por userId' })
+  async getInternalBalance(
+    @Query('userId') userId: string,
+    @Query('currency') currency = 'EUR',
+  ) {
+    if (!userId) {
+      throw new BadRequestException('userId is required');
+    }
+    return this.walletService.getBalance(userId, currency);
+  }
+
   @Get('transactions')
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Extrato de transações da carteira' })

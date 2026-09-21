@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  Activity,
+  Calendar,
   Dices,
   Gift,
   HelpCircle,
@@ -13,6 +15,8 @@ import { cn } from '../../lib/utils';
 import { Badge } from '../ui/Badge';
 
 const QUICK_LINKS = [
+  { label: 'Ao Vivo', icon: Activity, href: '/live', hint: 'Futebol em tempo real' },
+  { label: 'Próximos', icon: Calendar, href: '/events', hint: 'Agenda de partidas' },
   { label: 'Cassino', icon: Dices, href: '/casino', hint: 'Jogos e provedores' },
   { label: 'Promoções', icon: Gift, href: '/promocoes', hint: 'Campanhas ativas', badge: '5' },
   { label: 'Carteira', icon: Wallet, href: '/carteira', hint: 'Depósitos e levantamentos' },
@@ -39,10 +43,10 @@ export function Sidebar({ compact = false, className }: SidebarProps) {
         <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
           <div className="flex items-center gap-2 text-bet62-primary font-bold text-sm">
             <ShieldCheck size={16} />
-            Plataforma sem feeds esportivos
+            Futebol e casino ativos
           </div>
           <p className="mt-2 text-xs text-white/60 leading-relaxed">
-            A navegação lateral foi reduzida aos módulos que continuam ativos após a remoção das integrações de odds.
+            A navegação lateral destaca o feed de futebol via MrDoge e a operação de casino integrada ao BigBang.
           </p>
         </div>
       </div>
@@ -92,7 +96,7 @@ export function Sidebar({ compact = false, className }: SidebarProps) {
             Campanha ativa
           </div>
           <p className="mt-1.5 text-sm font-semibold">Bónus de recarga e cashback</p>
-          <p className="text-xs text-white/60 mt-1">A operação comercial continua disponível sem dependências do módulo esportivo.</p>
+          <p className="text-xs text-white/60 mt-1">Campanhas comerciais mantidas em paralelo com futebol ao vivo, agenda e lobby de casino.</p>
         </div>
       </div>
     </aside>

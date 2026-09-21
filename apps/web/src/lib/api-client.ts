@@ -3,8 +3,14 @@ import { z } from 'zod';
 const ACCESS_KEY = 'bet62_access_token';
 const REFRESH_KEY = 'bet62_refresh_token';
 
+const runtimeEnv =
+  typeof process !== 'undefined'
+    ? (process as unknown as { env?: Record<string, string> }).env
+    : undefined;
+
 const baseUrl =
-  (typeof process !== 'undefined' && (process as unknown as { env?: Record<string, string> }).env?.NEXT_PUBLIC_API_BASE_URL) ||
+  runtimeEnv?.NEXT_PUBLIC_API_BASE_URL ||
+  runtimeEnv?.NEXT_PUBLIC_API_URL ||
   (typeof window !== 'undefined'
     ? (window as unknown as { __NEXT_DATA__?: unknown }).__NEXT_DATA__
       ? ''

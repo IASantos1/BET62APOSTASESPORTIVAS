@@ -14,6 +14,7 @@ import { HealthController } from './health.controller';
 import { GamesModule } from './modules/games/games.module';
 import { SessionModule } from './modules/session/session.module';
 import { GameplayModule } from './modules/gameplay/gameplay.module';
+import { BigBangModule } from './providers/bigbang/bigbang.module';
 import { JwtStrategy } from './auth-shared/jwt.strategy';
 import { JwtAuthGuard } from './auth-shared/jwt-auth.guard';
 import { RolesGuard } from './auth-shared/roles.guard';
@@ -79,6 +80,7 @@ import { RolesGuard } from './auth-shared/roles.guard';
     ScheduleModule.forRoot(),
     TerminusModule,
     PrismaModule,
+    BigBangModule,
     GamesModule,
     SessionModule,
     GameplayModule,

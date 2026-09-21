@@ -37,6 +37,7 @@ export enum CasinoBetStatus {
 
 export enum CasinoProvider {
   MOCK = "MOCK",
+  BIGBANG = "BIGBANG",
   PGSOFT = "PGSOFT",
   EVOLUTION = "EVOLUTION",
   PRAGMATIC = "PRAGMATIC",

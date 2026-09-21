@@ -1171,6 +1171,58 @@ importers:
         specifier: ^5.3.3
         version: 5.9.3
 
+  services/odds-service:
+    dependencies:
+      '@bet62/shared':
+        specifier: '*'
+        version: link:../../packages/shared
+      '@mrdoge/node':
+        specifier: latest
+        version: 0.4.3
+      '@nestjs/common':
+        specifier: ^10.3.0
+        version: 10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2)
+      '@nestjs/config':
+        specifier: ^3.1.1
+        version: 3.3.0(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2))(rxjs@7.8.2)
+      '@nestjs/core':
+        specifier: ^10.3.0
+        version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/platform-express@10.4.22)(@nestjs/websockets@10.4.22)(reflect-metadata@0.1.14)(rxjs@7.8.2)
+      '@nestjs/platform-express':
+        specifier: ^10.3.0
+        version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@10.4.22)
+      '@nestjs/swagger':
+        specifier: ^7.2.0
+        version: 7.4.2(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@10.4.22)(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)
+      '@nestjs/terminus':
+        specifier: ^10.2.0
+        version: 10.3.0(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.1.14)(rxjs@7.8.2))(@nestjs/core@10.4.22)(@prisma/client@5.22.0(prisma@5.22.0))(reflect-metadata@0.1.14)(rxjs@7.8.2)
+      class-transformer:
+        specifier: ^0.5.1
+        version: 0.5.1
+      class-validator:
+        specifier: ^0.14.1
+        version: 0.14.4
+      helmet:
+        specifier: ^7.1.0
+        version: 7.2.0
+      reflect-metadata:
+        specifier: ^0.1.13
+        version: 0.1.14
+      rxjs:
+        specifier: ^7.8.1
+        version: 7.8.2
+    devDependencies:
+      '@nestjs/cli':
+        specifier: ^10.3.0
+        version: 10.4.9
+      '@types/node':
+        specifier: ^20.11.0
+        version: 20.19.43
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+
   services/user-service:
     dependencies:
       '@bet62/shared':
@@ -2655,6 +2707,16 @@ packages:
 
   '@microsoft/tsdoc@0.15.1':
     resolution: {integrity: sha512-4aErSrCR/On/e5G2hDP0wjooqDdauzEbIq8hIkIe5pXV0rtWJZvdCEKL0ykZxex+IxIwBp0eGeV48hQN07dXtw==}
+
+  '@mrdoge/http@0.4.3':
+    resolution: {integrity: sha512-nGjv4rSvDO/MZh4RVsq2D2tqvNz7+HYlTIarW1JO+6fdaOgd7M7VzZQnGuYy7G9IVuqwmq+txj/jLW6UU6Zvhw==}
+
+  '@mrdoge/node@0.4.3':
+    resolution: {integrity: sha512-Z4E+Mu6ESBj9cXhtjF6mmp4NrBJE5nXddDCVj4Ikp/GDupfAJHtXXsxMuydZqBkVNuVKcr8/+qrrkzAfAAfXMw==}
+    engines: {node: '>=18'}
+
+  '@mrdoge/protocol@0.4.3':
+    resolution: {integrity: sha512-7D1ORoXXOtmDPIH+7bIEODOKQMfF7tumKz5wgcBfVFm14EoG4AhgKK3h9EoiHXO/Hn/cMF5jRvfVA+lLImxbVg==}
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4':
     resolution: {integrity: sha512-LCkGo6JDfaBhgST7UpPWgNgLINpcpabaHfyz5OBx75nUYxBsaEPxjnyNjWpeb/xBup/682QnBfRBy2/LvPutZQ==}
@@ -9248,6 +9310,24 @@ snapshots:
       - supports-color
 
   '@microsoft/tsdoc@0.15.1': {}
+
+  '@mrdoge/http@0.4.3':
+    dependencies:
+      '@mrdoge/protocol': 0.4.3
+
+  '@mrdoge/node@0.4.3':
+    dependencies:
+      '@mrdoge/http': 0.4.3
+      '@mrdoge/protocol': 0.4.3
+      ws: 8.21.3
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
+
+  '@mrdoge/protocol@0.4.3':
+    dependencies:
+      zod: 3.25.76
 
   '@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.4':
     optional: true

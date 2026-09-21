@@ -78,12 +78,34 @@ export interface BET62CasinoConfig {
 
 export const DEFAULT_CASINO_CONFIG: BET62CasinoConfig = {
   enabled: true,
-  defaultProvider: "MOCK",
+  defaultProvider: process.env.CASINO_DEFAULT_PROVIDER ?? "MOCK",
   providers: [
+    {
+      provider: "BIGBANG",
+      enabled: process.env.BIGBANG_ENABLED === "true",
+      priority: 1,
+      baseApiUrl: process.env.BIGBANG_BASE_URL ?? "https://api.bigbangcasino.bet/api/v1",
+      operatorId: process.env.BIGBANG_OPERATOR_ID ?? "BET62",
+      apiKey: process.env.BIGBANG_API_KEY ?? "replace_bigbang_api_key",
+      currency: process.env.BIGBANG_DEFAULT_CURRENCY ?? "EUR",
+      languages: ["pt", "en", "es"],
+      supportedCategories: [
+        "SLOTS",
+        "ROULETTE",
+        "BLACKJACK",
+        "BACCARAT",
+        "POKER",
+        "LIVE_DEALER",
+        "GAME_SHOW",
+      ],
+      demoModeSupported: true,
+      freeRoundsSupported: false,
+      maxWinMultiplier: 100000,
+    },
     {
       provider: "MOCK",
       enabled: true,
-      priority: 1,
+      priority: 99,
       baseApiUrl: "http://localhost:3008/mock-provider",
       operatorId: "BET62_MOCK",
       apiKey: "mock_api_key_replace",

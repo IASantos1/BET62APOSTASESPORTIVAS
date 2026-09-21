@@ -6,6 +6,7 @@ import {
   CasinoProvider,
 } from '@bet62/shared';
 import type { CasinoGamesQueryDto } from '@bet62/shared';
+import { BigBangService } from '../../providers/bigbang/bigbang.service';
 
 const SLOT_NAMES = [
   'Book of Dead', 'Starburst', 'Gonzo\'s Quest', 'Mega Moolah', 'Immortal Romance',
@@ -49,12 +50,17 @@ const VOLATILITY = ['LOW', 'MED', 'HIGH'];
 export class GamesService implements OnModuleInit {
   private readonly logger = new Logger(GamesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly bigBangService: BigBangService,
+  ) {}
 
   async onModuleInit() {
     try {
       const total = await this.prisma.casinoGame.count();
-      if (total === 0) {
+      if (this.bigBangService.isEnabled()) {
+        await this.bigBangService.maybeSyncCatalogOnBoot();
+      } else if (total === 0) {
         this.logger.log('Seeding 200 mock casino games...');
         await this.seedMockGames();
         this.logger.log('Casino games seeding completed');

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+  Activity,
+  Calendar,
   Trophy,
   Dices,
   User,
@@ -35,6 +37,8 @@ import { apiClient, ApiError } from '../../lib/api-client';
 
 const NAV = [
   { href: '/', label: 'Início', icon: Trophy },
+  { href: '/live', label: 'Ao Vivo', icon: Activity },
+  { href: '/events', label: 'Próximos', icon: Calendar },
   { href: '/casino', label: 'Cassino', icon: Dices },
   { href: '/promocoes', label: 'Promoções', icon: Gift, badge: '5' },
 ];

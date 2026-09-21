@@ -4,12 +4,14 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { CasinoSessionStatus, CasinoGameCategory } from '@bet62/shared';
 import { StartCasinoSessionDto } from '@bet62/shared';
 import { BET62_EVENTS, createEnvelope } from '@bet62/shared';
+import { BigBangService } from '../../providers/bigbang/bigbang.service';
 
 @Injectable()
 export class SessionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly bigBangService: BigBangService,
   ) {}
 
   async start(userId: string, dto: StartCasinoSessionDto, clientMeta?: { ip?: string; ua?: string; device?: string; country?: string }) {
@@ -21,7 +23,19 @@ export class SessionService {
     }
 
     const playerToken =
-      dto.playerToken ?? `ct-${userId.slice(0, 8)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      dto.playerToken ?? (this.bigBangService.isEnabled() ? userId : `ct-${userId.slice(0, 8)}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+
+    let launchUrl = `/api/casino/embed/${game.id}?token=${playerToken}`;
+    let providerSessionReference = `prov-sess-${crypto.randomUUID()}`;
+    if (this.bigBangService.isEnabled()) {
+      const launch = await this.bigBangService.launchGame({
+        userId,
+        gameId: game.id,
+        playerToken,
+      });
+      launchUrl = launch.gameUrl;
+      providerSessionReference = launch.providerSessionReference ?? providerSessionReference;
+    }
 
     const session = await this.prisma.casinoSession.create({
       data: {
@@ -29,7 +43,7 @@ export class SessionService {
         gameId: game.id,
         playerToken,
         sessionStatus: CasinoSessionStatus.ACTIVE,
-        providerSessionReference: `prov-sess-${crypto.randomUUID()}`,
+        providerSessionReference,
         currency: 'EUR',
         ipAddress: clientMeta?.ip,
         userAgent: clientMeta?.ua,
@@ -55,8 +69,6 @@ export class SessionService {
       }),
     );
 
-    const slug = encodeURIComponent(game.slug);
-    const launchUrl = `/api/casino/embed/${session.id}?token=${playerToken}&game=${slug}`;
     return {
       sessionId: session.id,
       playerToken,
