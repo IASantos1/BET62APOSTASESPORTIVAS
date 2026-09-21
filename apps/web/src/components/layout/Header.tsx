@@ -356,16 +356,16 @@ export function Header() {
               onClick={() => setDepositOpen(false)}
               className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70]"
             />
-            <div className="fixed inset-0 z-[71] flex items-end justify-center p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center sm:p-4">
+            <div className="fixed inset-0 z-[71] flex items-center justify-center p-4 sm:p-6 pointer-events-none">
               <motion.div
                 initial={{ opacity: 0, y: 20, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 20, scale: 0.96 }}
                 transition={{ duration: 0.25, type: 'spring', damping: 25, stiffness: 300 }}
-                className="w-full max-w-[380px] sm:w-[92vw] sm:max-w-lg max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]"
+                className="pointer-events-auto w-full max-w-lg max-h-[calc(100dvh-2rem)] overflow-y-auto"
               >
-                <div className="rounded-[26px] sm:rounded-3xl border border-bet62-border bg-bet62-surface/95 backdrop-blur-xl shadow-glass p-4 sm:p-6 overflow-y-auto max-h-[calc(100dvh-1.5rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]">
-                <div className="flex items-center justify-between mb-4 sm:mb-5">
+                <div className="rounded-3xl border border-bet62-border bg-bet62-surface/95 backdrop-blur-xl shadow-glass p-6">
+                <div className="flex items-center justify-between mb-5">
                   <div>
                     <h3 className="text-xl font-bold tracking-tight">Depósito Rápido</h3>
                     <p className="text-xs text-white/50 mt-0.5">Escolhe o método e valor</p>
