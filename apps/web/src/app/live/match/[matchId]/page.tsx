@@ -281,7 +281,10 @@ function useBetbyStats(id: string, feed: 'live' | 'prematch', tpl: string | null
   const [data, setData] = React.useState<unknown>(null);
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
-    if (!tpl || !on) return;
+    if (!tpl) { setData(null); setError(null); return; }
+    if (!on) return;
+    setData(null);
+    setError(null);
     let stop = false;
     const load = () =>
       fetch(fillTemplate(tpl, id, feed), { cache: 'no-store' })
@@ -299,10 +302,10 @@ function useBetbyStats(id: string, feed: 'live' | 'prematch', tpl: string | null
 }
 
 function pairsOf(v: unknown, prefix = '', out: { key: string; home: number; away: number }[] = [], depth = 0) {
-  if (!v || typeof v !== 'object' || depth > 5) return out;
+  if (!v || typeof v !== 'object' || depth > 8) return out;
   const o = v as Record<string, unknown>;
-  const h = o.home ?? o.home_value ?? o.team1 ?? o['1'];
-  const a = o.away ?? o.away_value ?? o.team2 ?? o['2'];
+  const h = o.home ?? o.home_value ?? o.homeValue ?? o.team1 ?? o['1'];
+  const a = o.away ?? o.away_value ?? o.awayValue ?? o.team2 ?? o['2'];
   if (h !== undefined && a !== undefined && Number.isFinite(Number(String(h).replace('%', ''))) && Number.isFinite(Number(String(a).replace('%', '')))) {
     out.push({ key: String(o.name ?? o.title ?? o.type ?? prefix), home: Number(String(h).replace('%', '')), away: Number(String(a).replace('%', '')) });
     return out;
@@ -461,8 +464,7 @@ function Inner({ id }: { id: string }) {
             <iframe src={tracker} title="Tracker do jogo" className="block h-[340px] w-full md:h-[420px]" allow="fullscreen" />
           ) : (
             <p className="p-6 text-sm text-white/60">
-              Minicampo indisponível para este jogo: a BETBY não enviou o id do tracker. No admin, o Explorador BETBY mostra os campos do
-              evento e permite escolher o que tem o id.
+              Minicampo não disponível: este evento não contém um identificador reconhecido de um fornecedor de tracking. O ID interno da BETBY não é suficiente para abrir o tracker.
             </p>
           )}
         </div>
@@ -521,7 +523,7 @@ function Inner({ id }: { id: string }) {
           )}
           {betbyStats.error && <EmptyPanel>Estatísticas da BETBY indisponíveis: {betbyStats.error}</EmptyPanel>}
           {!stats.length && !extraStats.length && !distRows.length && !betbyStats.error && (
-            <EmptyPanel>{live ? 'Sem estatísticas da BETBY para este jogo.' : 'As estatísticas aparecem quando o jogo começar.'}</EmptyPanel>
+            <EmptyPanel>{live ? 'A BETBY não enviou estatísticas para este evento.' : cfg?.statsEndpoint ? 'A fonte configurada não devolveu estatísticas pré-jogo para este evento.' : 'Sem fonte de estatísticas pré-jogo configurada. O feed de odds da BETBY não inclui, por si só, forma, confrontos diretos ou estatísticas históricas.'}</EmptyPanel>
           )}
         </section>
       )}
