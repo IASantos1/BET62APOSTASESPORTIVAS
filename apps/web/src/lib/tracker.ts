@@ -28,7 +28,11 @@ export function trackerCandidates(raw: unknown): TrackerCandidate[] {
   const out: TrackerCandidate[] = [];
   const seen = new Set<string>();
   const walk = (value: unknown, path: string, depth: number, inheritedProvider: string | null) => {
-    if (!value || typeof value !== 'object' || depth > 10 || Array.isArray(value)) return;
+    if (!value || typeof value !== 'object' || depth > 10) return;
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => walk(item, path ? `${path}.${index}` : String(index), depth + 1, inheritedProvider));
+      return;
+    }
     const object = value as Record<string, unknown>;
     const ownProvider =
       providerOf(object.tracker_provider) ??
@@ -40,7 +44,8 @@ export function trackerCandidates(raw: unknown): TrackerCandidate[] {
       const nextPath = path ? `${path}.${key}` : key;
       const keyProvider = providerOf(key);
       const provider = keyProvider ?? ownProvider;
-      if ((typeof child === 'string' || typeof child === 'number') && ID_FIELD.test(key) && provider) {
+      const idField = ID_FIELD.test(key) || (!!keyProvider && /(?:^|_)(?:id|event_id|match_id|fixture_id|game_id)$/i.test(key));
+      if ((typeof child === 'string' || typeof child === 'number') && idField && provider) {
         const valueText = String(child).replace(/^sr:match:/i, '');
         if (/^\d{3,}$/.test(valueText)) {
           const identity = `${nextPath}|${provider}|${valueText}`;
