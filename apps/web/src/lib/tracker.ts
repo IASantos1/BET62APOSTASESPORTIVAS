@@ -4,36 +4,55 @@
 // O admin (Explorador BETBY) mostra o que existe e pode fixar o campo a usar (/api/config).
 import { BETBY_CONFIG, type BetbyEvent } from './betby';
 
-const NAME = /(statscore|tracker|lmt|betradar|sportradar|radar|ext(ernal)?_?(event_?)?id|provider|widget|stats?_?id|sr_?id|match_?id|event_?id|fixture_?id|game_?id)/i;
+const PROVIDERS = [
+  { pattern: /statscore/i, id: 'statscore' },
+  { pattern: /sportradar|betradar|sr:match/i, id: 'betradar' },
+  { pattern: /\\blmt\\b|liveticker/i, id: 'lmt' },
+] as const;
 
-export interface TrackerCandidate {
-  path: string;
-  value: string;
-  provider: string;
+const ID_FIELD = /^(?:id|event_?id|match_?id|fixture_?id|game_?id|external_?(?:event_?)?id|tracker_?id)$/i;
+
+function providerOf(value: unknown): string | null {
+  const text = String(value ?? '');
+  return PROVIDERS.find((p) => p.pattern.test(text))?.id ?? null;
 }
 
-/** Campos do evento que parecem um id de tracker (até 4 níveis). */
-export const getPath = (o: unknown, path: string) => path.split('.').reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[k] : undefined), o);
-
+/** Só aceita IDs associados explicitamente a um fornecedor de tracking.
+ *  event.id, desc.competitors[].id e state.provider não são IDs de tracker.
+ */
 export function trackerCandidates(raw: unknown): TrackerCandidate[] {
   const out: TrackerCandidate[] = [];
-  const walk = (v: unknown, path: string, depth: number) => {
-    if (!v || typeof v !== 'object' || depth > 8) return;
-    for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
-      if (k === 'markets') continue;
-      const p = path ? `${path}.${k}` : k;
-      if ((typeof x === 'string' || typeof x === 'number') && (NAME.test(k) || NAME.test(path)) && /\d{3,}/.test(String(x))) {
-        const text = `${p} ${x}`.toLowerCase();
-        const provider = text.includes('statscore') ? 'statscore' : /betradar|sportradar|sr:match|radar/.test(text) ? 'betradar' : 'statscore';
-        out.push({ path: p, value: String(x).replace(/^sr:match:/, ''), provider });
-      } else walk(x, p, depth + 1);
+  const seen = new Set<string>();
+  const walk = (value: unknown, path: string, depth: number, inheritedProvider: string | null) => {
+    if (!value || typeof value !== 'object' || depth > 10 || Array.isArray(value)) return;
+    const object = value as Record<string, unknown>;
+    const ownProvider =
+      providerOf(object.tracker_provider) ??
+      providerOf(object.data_provider) ??
+      providerOf(object.provider) ??
+      inheritedProvider;
+    for (const [key, child] of Object.entries(object)) {
+      if (key === 'markets') continue;
+      const nextPath = path ? `${path}.${key}` : key;
+      const keyProvider = providerOf(key);
+      const provider = keyProvider ?? ownProvider;
+      if ((typeof child === 'string' || typeof child === 'number') && ID_FIELD.test(key) && provider) {
+        const valueText = String(child).replace(/^sr:match:/i, '');
+        if (/^\\d{3,}$/.test(valueText)) {
+          const identity = `${nextPath}|${provider}|${valueText}`;
+          if (!seen.has(identity)) {
+            seen.add(identity);
+            out.push({ path: nextPath, value: valueText, provider });
+          }
+        }
+      } else {
+        walk(child, nextPath, depth + 1, provider);
+      }
     }
   };
-  walk(raw, '', 0);
+  walk(raw, '', 0, null);
   return out;
 }
-
-
 
 export function trackerUrl(provider: string, sportId: string, eventId: string) {
   const providers = JSON.stringify({ id: provider, sportId: String(sportId), lang: BETBY_CONFIG.locale.toLowerCase(), eventId: Number(eventId) || eventId });
@@ -46,7 +65,7 @@ export function trackerFor(raw: BetbyEvent | undefined, sportId: string | undefi
   if (!raw || !sportId) return null;
   if (pref) {
     const v = getPath(raw, pref.path);
-    if (v !== undefined && v !== null && v !== '') return trackerUrl(pref.provider, sportId, String(v).replace(/^sr:match:/, ''));
+    if (v !== undefined && v !== null && /^\\d{3,}$/.test(String(v).replace(/^sr:match:/, '')) && providerOf(pref.provider)) return trackerUrl(providerOf(pref.provider)!, sportId, String(v).replace(/^sr:match:/, ''));
   }
   const c = trackerCandidates(raw)[0];
   return c ? trackerUrl(c.provider, sportId, c.value) : null;
