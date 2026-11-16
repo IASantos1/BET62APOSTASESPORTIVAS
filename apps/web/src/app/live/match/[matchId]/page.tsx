@@ -4,8 +4,7 @@ import Link from 'next/link';
 import * as React from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, Clock3, RefreshCw } from 'lucide-react';
-import { Header } from '../../../../components/layout/Header';
-import { Footer } from '../../../../components/layout/Footer';
+import { SportsShell } from '../../../../components/sports/SportsShell';
 import { Card, CardContent } from '../../../../components/ui/Card';
 import { Button } from '../../../../components/ui/Button';
 import {
@@ -74,9 +73,7 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
       ?.outcomes.find((o) => String(o.outcome_id) === outcomeId)?.percentage;
 
   return (
-    <div className="min-h-screen bg-bet62-bg">
-      <Header />
-      <main className="max-w-7xl mx-auto px-4 lg:px-8 py-10 space-y-6">
+    <SportsShell>
         <div className="flex items-center justify-between gap-3">
           <Button variant="outline" asChild>
             <Link href={feed === 'prematch' ? '/events' : '/live'}>
@@ -166,8 +163,6 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
             </Card>
           </>
         )}
-      </main>
-      <Footer />
-    </div>
+    </SportsShell>
   );
 }
