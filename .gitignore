@@ -19,24 +19,11 @@ pnpm-debug.log*
 *.swo
 .turbo/
 
-# ============ Data ============
-data/
-postgres/
-redis/
-uploads/
-
 # ============ Build ============
 build/
 out/
 *.tsbuildinfo
-packages/shared/dist/
-packages/*/dist/
-services/*/dist/
 apps/*/dist/
-services/*/prisma/generated/
-services/*/src/prisma/generated/
-packages/*/src/prisma/generated/
-prisma/generated/
 checkpoint-nodejs/
 
 # ============ Docker ============

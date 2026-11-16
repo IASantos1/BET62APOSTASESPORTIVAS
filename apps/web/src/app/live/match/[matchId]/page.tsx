@@ -7,7 +7,6 @@ import { Header } from '../../../../components/layout/Header';
 import { Footer } from '../../../../components/layout/Footer';
 import { Card, CardContent } from '../../../../components/ui/Card';
 import { Button } from '../../../../components/ui/Button';
-import { apiClient } from '../../../../lib/api-client';
 
 interface LiveMatchPageProps {
   params: { matchId: string };
@@ -38,14 +37,9 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
     setLoading(true);
     setError(null);
     try {
-      const [matchData, marketData, timelineData] = await Promise.all([
-        apiClient.get(`/odds/events/${params.matchId}`, { auth: false }),
-        apiClient.get<Market[]>(`/odds/events/${params.matchId}/markets`, { auth: false }),
-        apiClient.get<any[]>(`/odds/events/${params.matchId}/timeline`, { auth: false }),
-      ]);
-      setMatch(matchData);
-      setMarkets(Array.isArray(marketData) ? marketData : []);
-      setTimeline(Array.isArray(timelineData) ? timelineData : []);
+      setMatch(null);
+      setMarkets([]);
+      setTimeline([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar detalhe da partida.');
     } finally {

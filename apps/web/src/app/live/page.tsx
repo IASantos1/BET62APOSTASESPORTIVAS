@@ -7,7 +7,6 @@ import { Header } from '../../components/layout/Header';
 import { Footer } from '../../components/layout/Footer';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { apiClient } from '../../lib/api-client';
 
 interface MatchItem {
   id: string;
@@ -32,8 +31,7 @@ export default function LivePage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiClient.get<MatchItem[]>('/odds/events/live', { auth: false });
-      setMatches(Array.isArray(data) ? data : []);
+      setMatches([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar partidas ao vivo.');
     } finally {
@@ -52,7 +50,7 @@ export default function LivePage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-black tracking-tight">Futebol Ao Vivo</h1>
-            <p className="mt-2 text-white/60">Feed em tempo real alimentado por MrDoge no backend.</p>
+            <p className="mt-2 text-white/60">Partidas em tempo real.</p>
           </div>
           <Button variant="outline" onClick={() => void loadMatches()}>
             <RefreshCw size={16} />

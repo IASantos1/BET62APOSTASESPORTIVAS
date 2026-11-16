@@ -25,7 +25,6 @@ import {
   type PaymentMethod,
 } from '../../../lib/payment-methods';
 import { cn } from '../../../lib/utils';
-import { apiClient, ApiError } from '../../../lib/api-client';
 
 const BENEFITS = [
   { icon: Zap, label: 'Instantâneo', desc: 'Confirmado em segundos' },
@@ -44,21 +43,9 @@ export default function CarteiraDepositoPage() {
     const paymentMethod = normalizeDepositMethod(method);
     setLoading(true);
     setError(null);
-    try {
-      const data = await apiClient.post<{ checkoutUrl?: string }>('/wallet/deposit/stripe/create-intent', {
-        provider: 'STRIPE',
-        amount,
-        currency: 'EUR',
-        paymentMethod,
-        returnUrl: `${window.location.origin}/carteira`,
-      });
-      if (data?.checkoutUrl) window.location.href = data.checkoutUrl;
-      else setError('Não foi possível iniciar o pagamento. Tenta novamente.');
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Erro ao iniciar o depósito.');
-    } finally {
-      setLoading(false);
-    }
+    void paymentMethod;
+    setError('Pagamentos ainda não configurados.');
+    setLoading(false);
   };
 
   return (

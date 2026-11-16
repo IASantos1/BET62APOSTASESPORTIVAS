@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3080",
     "build": "next build",
-    "start": "next start -p 3080",
+    "start": "next start -p ${PORT:-3080}",
     "lint": "next lint"
   },
   "dependencies": {
@@ -28,8 +28,7 @@
     "@radix-ui/react-toast": "^1.1.5",
     "@radix-ui/react-tooltip": "^1.0.7",
     "@radix-ui/react-tabs": "^1.0.4",
-    "@radix-ui/react-avatar": "^1.0.4",
-    "@bet62/shared": "*"
+    "@radix-ui/react-avatar": "^1.0.4"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",
