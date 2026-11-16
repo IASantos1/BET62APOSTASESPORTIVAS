@@ -52,8 +52,13 @@ export function leagueLogoUrl(sport: string, league: string, country: string): s
 
 const broken = new Set<string>();
 
+// O logótipo oficial da Liga Portugal termina na faixa do patrocinador (Betclic): mostra-se cortado
+// acima dela, como no outro projeto (img.cut-sponsor).
+const SPONSOR_CUT = new Set([94]);
+
 export function LeagueLogo({ sport, league, country, className }: { sport: string; league: string; country: string; className?: string }) {
   const url = leagueLogoUrl(sport, league, country);
+  const cut = SPONSOR_CUT.has(leagueApiId(sport, league, country) ?? -1);
   const [failed, setFailed] = React.useState(false);
   if (!url || failed || broken.has(url)) return <Flag country={country} className={className} />;
   return (
@@ -66,7 +71,7 @@ export function LeagueLogo({ sport, league, country, className }: { sport: strin
         broken.add(url);
         setFailed(true);
       }}
-      className={cn('h-5 w-5 shrink-0 object-contain', className)}
+      className={cn('h-5 w-5 shrink-0 object-contain', cut && 'cut-sponsor', className)}
     />
   );
 }

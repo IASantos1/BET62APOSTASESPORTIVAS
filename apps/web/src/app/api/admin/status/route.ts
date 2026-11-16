@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isAdminAuthorized } from '../../../../lib/admin-auth';
-import { apiCall, apiSportsStatus } from '../../../../lib/server/apisports';
+import { apiCall, apiSportsStatus, logoCacheStatus, warmLeaguePacks } from '../../../../lib/server/apisports';
 import { bigBangStatus, casinoGames } from '../../../../lib/server/bigbang';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: Request) {
   if (!isAdminAuthorized()) return NextResponse.json({ error: 'Sem sessão de admin.' }, { status: 401 });
   const test = new URL(req.url).searchParams.get('test') === '1';
-  const apiFootball: Record<string, unknown> = { ...apiSportsStatus() };
+  if (test) warmLeaguePacks();
+  const apiFootball: Record<string, unknown> = { ...apiSportsStatus(), logos: logoCacheStatus() };
   const bigBang: Record<string, unknown> = { ...bigBangStatus() };
   if (test) {
     try {

@@ -121,7 +121,7 @@ export function IntegrationsCard() {
           {af?.logos ? (
             <p className="text-xs text-white/50">
               Emblemas: {String((af.logos as { leaguesLoaded: number }).leaguesLoaded)}/{String((af.logos as { leaguesTotal: number }).leaguesTotal)} ligas
-              descarregadas · {String((af.logos as { teamsCached: number }).teamsCached)} equipas em cache
+              descarregadas
               {(af.logos as { warming: boolean }).warming ? ' · a descarregar…' : ''}
             </p>
           ) : null}

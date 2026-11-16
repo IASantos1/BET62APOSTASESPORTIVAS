@@ -51,8 +51,8 @@ export function OddButton({ event, outcomeId, marketId, label, compact = false }
         if (p) toggle(p);
       }}
       className={cn(
-        'flex items-center justify-between gap-1 rounded-lg border px-2 text-sm transition',
-        compact ? 'h-9 min-w-[3.6rem]' : 'h-10 flex-1',
+        'flex w-full items-center justify-between gap-1 rounded-lg border px-2 text-sm transition',
+        compact ? 'h-9' : 'h-10',
         selected
           ? 'border-bet62-primary bg-bet62-primary text-onbrand'
           : 'border-transparent bg-bet62-odd hover:bg-bet62-odd-hover',
@@ -68,13 +68,32 @@ export function OddButton({ event, outcomeId, marketId, label, compact = false }
   );
 }
 
+/**
+ * As odds principais em 3 colunas do mesmo tamanho em todos os desportos (como no outro projeto):
+ * 1 X 2 no futebol; nos desportos sem empate (ténis, basquetebol…) o 1 na primeira coluna e o 2 na
+ * última, com o mesmo tamanho de botão. Sem odds: três espaços vazios, para as linhas ficarem alinhadas.
+ */
 function MainOdds({ e, compact }: { e: BoardEvent; compact?: boolean }) {
   const odds = mainOddsOf(e);
-  if (!odds.length) return <span className="text-xs text-white/35">—</span>;
+  const grid = cn('grid gap-1.5', compact ? 'grid-cols-[repeat(3,4.25rem)]' : 'w-full grid-cols-3');
+  if (!odds.length) {
+    return (
+      <div className={grid}>
+        {[0, 1, 2].map((i) => (
+          <span key={i} className={cn('grid place-items-center rounded-lg bg-bet62-odd/40 text-xs text-white/30', compact ? 'h-9' : 'h-10')}>
+            —
+          </span>
+        ))}
+      </div>
+    );
+  }
+  const two = odds.length === 2;
   return (
-    <div className={cn('flex gap-1.5', !compact && 'w-full')}>
-      {odds.map((o) => (
-        <OddButton key={o.outcomeId} event={e} outcomeId={o.outcomeId} marketId={o.marketId} label={o.label} compact={compact} />
+    <div className={grid}>
+      {odds.map((o, i) => (
+        <div key={o.outcomeId} className={two && i === 1 ? 'col-start-3' : undefined}>
+          <OddButton event={e} outcomeId={o.outcomeId} marketId={o.marketId} label={o.label} compact={compact} />
+        </div>
       ))}
     </div>
   );

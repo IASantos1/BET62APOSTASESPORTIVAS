@@ -176,6 +176,44 @@ async function leaguePack(leagueId: number) {
   return p;
 }
 
+// Ligas principais (os mesmos ids do Logos.tsx): descarregadas em segundo plano, uma a cada ~7 s, e
+// guardadas para sempre. Um clube que mudou de divisão (ou joga a Champions) é encontrado na liga
+// onde estava na época que o plano permite, sem gastar uma pesquisa.
+export const LEAGUE_IDS = [39, 40, 45, 140, 141, 143, 135, 136, 137, 78, 79, 81, 61, 62, 66, 94, 95, 96, 88, 89, 144, 179,
+  203, 197, 207, 218, 119, 113, 103, 106, 345, 2, 3, 848, 13, 11, 1, 4, 5, 71, 72, 128, 253, 262, 307, 98];
+let warming = false;
+export function warmLeaguePacks() {
+  if (warming || !API_KEY()) return;
+  warming = true;
+  void (async () => {
+    try {
+      for (const id of LEAGUE_IDS) {
+        if (packs.get(String(id), FOREVER)) continue;
+        while (!canCall('football')) {
+          if (usage.football.used >= DAILY || usage.football.remaining === 0) return;
+          await new Promise((r) => setTimeout(r, 7000));
+        }
+        await leaguePack(id).catch(() => []);
+        await new Promise((r) => setTimeout(r, 7000));
+      }
+    } finally {
+      warming = false;
+    }
+  })();
+}
+export function logoCacheStatus() {
+  const loaded = LEAGUE_IDS.filter((id) => (packs.get(String(id), FOREVER)?.length ?? 0) > 0).length;
+  return { leaguesLoaded: loaded, leaguesTotal: LEAGUE_IDS.length, warming };
+}
+function fromPacks(name: string, leagueId?: number) {
+  const order = leagueId ? [leagueId, ...LEAGUE_IDS.filter((x) => x !== leagueId)] : LEAGUE_IDS;
+  for (const id of order) {
+    const t = packs.get(String(id), FOREVER)?.find((x) => sameTeam(x.name, name));
+    if (t) return t.logo;
+  }
+  return null;
+}
+
 /**
  * Emblema de uma equipa (URL do media.api-sports.io) ou null. Com `leagueId` (ligas principais),
  * procura primeiro nas equipas da liga; senão pelo nome. O URL encontrado fica guardado sem expiração.
@@ -199,12 +237,16 @@ export async function teamLogo(sport: string, name: string, leagueId?: number): 
   const hit = logos.get(key, FOREVER);
   if (typeof hit === 'string' && hit) return hit;
   if (missingLogos.get(key, NEGATIVE_CACHE)) return null;
-  if (api === 'football' && leagueId) {
-    const team = (await leaguePack(leagueId).catch(() => [])).find((t) => sameTeam(t.name, name));
-    if (team) {
-      logos.set(key, team.logo);
-      return team.logo;
+  if (api === 'football') {
+    warmLeaguePacks();
+    if (leagueId) await leaguePack(leagueId).catch(() => []);
+    const packed = fromPacks(name, leagueId);
+    if (packed) {
+      logos.set(key, packed);
+      return packed;
     }
+    // Enquanto as ligas descarregam, não gasta pesquisas (o clube pode estar numa delas).
+    if (warming) return null;
   }
   if (inflight.has(key)) return inflight.get(key)!;
   const p = (async () => {
