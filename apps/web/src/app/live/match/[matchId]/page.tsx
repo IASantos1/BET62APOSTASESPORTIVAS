@@ -306,8 +306,18 @@ function pairsOf(v: unknown, prefix = '', out: { key: string; home: number; away
   const o = v as Record<string, unknown>;
   const h = o.home ?? o.home_value ?? o.homeValue ?? o.team1 ?? o['1'];
   const a = o.away ?? o.away_value ?? o.awayValue ?? o.team2 ?? o['2'];
-  if (h !== undefined && a !== undefined && Number.isFinite(Number(String(h).replace('%', ''))) && Number.isFinite(Number(String(a).replace('%', '')))) {
-    out.push({ key: String(o.name ?? o.title ?? o.type ?? prefix), home: Number(String(h).replace('%', '')), away: Number(String(a).replace('%', '')) });
+  if (h !== undefined && a !== undefined && Number.isFinite(Number(String(h).replace('%', '').replace(',', '.'))) && Number.isFinite(Number(String(a).replace('%', '').replace(',', '.')))) {
+    out.push({ key: String(o.name ?? o.title ?? o.type ?? prefix), home: Number(String(h).replace('%', '').replace(',', '.')), away: Number(String(a).replace('%', '').replace(',', '.')) });
+    return out;
+  }
+  if (o.home && o.away && typeof o.home === 'object' && typeof o.away === 'object') {
+    const home = o.home as Record<string, unknown>;
+    const away = o.away as Record<string, unknown>;
+    for (const metric of new Set([...Object.keys(home), ...Object.keys(away)])) {
+      const hv = Number(String(home[metric]).replace('%', '').replace(',', '.'));
+      const av = Number(String(away[metric]).replace('%', '').replace(',', '.'));
+      if (Number.isFinite(hv) && Number.isFinite(av)) out.push({ key: metric, home: hv, away: av });
+    }
     return out;
   }
   for (const [k, x] of Object.entries(o)) pairsOf(x, k, out, depth + 1);
@@ -317,6 +327,8 @@ function pairsOf(v: unknown, prefix = '', out: { key: string; home: number; away
 const STAT_LABEL: Record<string, string> = {
   ...STAT_NAMES,
   possession: 'Posse de bola', ball_possession: 'Posse de bola', xg: 'Golos esperados (xG)', expected_goals: 'Golos esperados (xG)',
+  aces: 'Aces', double_faults: 'Duplas faltas', first_serve: 'Primeiro serviço', break_points: 'Pontos de break',
+  rebounds: 'Ressaltos', assists: 'Assistências', turnovers: 'Perdas de bola', steals: 'Roubos de bola', blocks: 'Desarmes / blocos', three_pointers: 'Triplos',
   shots: 'Remates', shots_total: 'Remates', shots_on_target: 'Remates à baliza', shots_off_target: 'Remates fora',
   attacks: 'Ataques', dangerous_attacks: 'Ataques perigosos', fouls: 'Faltas', offsides: 'Foras de jogo', free_kicks: 'Livres',
   goal_kicks: 'Pontapés de baliza', throw_ins: 'Lançamentos', saves: 'Defesas', penalties: 'Penáltis', substitutions: 'Substituições',
