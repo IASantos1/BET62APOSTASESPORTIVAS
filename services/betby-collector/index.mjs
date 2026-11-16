@@ -55,8 +55,8 @@ async function writeJsonLine(file, record) {
   await appendFile(file, JSON.stringify(record) + '\n', 'utf8');
 }
 
-async function fetchFeed(feed, path) {
-  const url = config.baseUrl + path;
+// Um pedido à BETBY; guarda no estado do feed o HTTP, o motivo de bloqueio (bb-rsn) e o início da resposta.
+async function requestJson(feed, url) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
   try {
@@ -78,40 +78,80 @@ async function fetchFeed(feed, path) {
       const reason = blockReason ? ` (bb-rsn: ${blockReason})` : '';
       throw new Error(`${feed}: HTTP ${response.status}${reason} - ${bodyText.slice(0, 300)}`);
     }
-    let payload;
-    try { payload = JSON.parse(bodyText); }
-    catch { throw new Error(`${feed}: resposta não é JSON válido`); }
-
-    const hash = digest(payload);
-    const events = findEvents(payload);
-    const now = new Date().toISOString();
-    if (seenHashes.get(feed) !== hash) {
-      await writeJsonLine(join(config.dataDir, 'snapshots', `${feed}.jsonl`), {
-        captured_at: now, feed, url, sha256: hash, data: payload
-      });
-      seenHashes.set(feed, hash);
-    }
-    if (events.length) {
-      await writeJsonLine(join(config.dataDir, 'events', `${feed}.jsonl`), {
-        captured_at: now,
-        feed,
-        events: events.map(event => ({
-          id: event.id ?? event.event_id ?? null,
-          scheduled: event.scheduled ?? null,
-          competitors: event.competitors ?? null,
-          score: event.score ?? null,
-          period_scores: event.period_scores ?? null,
-          clock: event.clock ?? null,
-          statistics: event.statistics ?? null,
-          markets: event.markets ?? null,
-          raw: event
-        }))
-      });
-    }
-    state.feeds[feed] = { ...state.feeds[feed], ok: true, error: null, count: events.length, sha256: hash, lastCapturedAt: now };
+    try { return JSON.parse(bodyText); }
+    catch { throw new Error(`${feed}: resposta não é JSON válido (${url})`); }
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function saveSnapshot(key, feed, url, payload, now) {
+  const hash = digest(payload);
+  if (seenHashes.get(key) !== hash) {
+    await writeJsonLine(join(config.dataDir, 'snapshots', `${feed}.jsonl`), {
+      captured_at: now, feed, url, sha256: hash, data: payload
+    });
+    seenHashes.set(key, hash);
+  }
+  return hash;
+}
+
+// O cursor (último segmento da URL) devolve um índice com as versões atuais dos eventos
+// (top_events_versions / rest_events_versions); os eventos vêm de pedir cada versão no lugar do cursor.
+function versionsOf(index) {
+  if (!index || typeof index !== 'object') return [];
+  const list = [...(Array.isArray(index.top_events_versions) ? index.top_events_versions : []),
+    ...(Array.isArray(index.rest_events_versions) ? index.rest_events_versions : [])];
+  return [...new Set(list.map(String).filter(v => /^\d+$/.test(v)))];
+}
+
+async function fetchFeed(feed, path) {
+  const now = new Date().toISOString();
+  const indexUrl = config.baseUrl + path;
+  const index = await requestJson(feed, indexUrl);
+  const hash = await saveSnapshot(feed, feed, indexUrl, index, now);
+
+  const versions = versionsOf(index);
+  const base = indexUrl.slice(0, indexUrl.lastIndexOf('/'));
+  const versionResults = [];
+  let events = findEvents(index);
+  for (const version of versions) {
+    const url = `${base}/${version}`;
+    const payload = await requestJson(feed, url);
+    await saveSnapshot(`${feed}:${version}`, feed, url, payload, now);
+    const found = findEvents(payload);
+    versionResults.push({ version, events: found.length, keys: Object.keys(payload || {}).slice(0, 12) });
+    events = events.concat(found);
+  }
+
+  if (events.length) {
+    await writeJsonLine(join(config.dataDir, 'events', `${feed}.jsonl`), {
+      captured_at: now,
+      feed,
+      events: events.map(event => ({
+        id: event.id ?? event.event_id ?? null,
+        scheduled: event.scheduled ?? null,
+        competitors: event.competitors ?? null,
+        score: event.score ?? null,
+        period_scores: event.period_scores ?? null,
+        clock: event.clock ?? null,
+        statistics: event.statistics ?? null,
+        markets: event.markets ?? null,
+        raw: event
+      }))
+    });
+  }
+  state.feeds[feed] = {
+    ...state.feeds[feed],
+    ok: true,
+    error: null,
+    count: events.length,
+    indexUrl,
+    indexKeys: Object.keys(index || {}).slice(0, 12),
+    versions: versionResults,
+    sha256: hash,
+    lastCapturedAt: now
+  };
 }
 
 async function poll() {

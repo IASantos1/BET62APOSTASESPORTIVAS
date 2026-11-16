@@ -28,7 +28,7 @@ Set these variables on the new service only:
 | `BETBY_BASE_URL` | `https://demoapi.betby.com` | API base |
 | `BETBY_BRAND_ID` | `1653815133341880320` | Demo brand ID used in current tests |
 | `BETBY_LOCALE` | `en-GB` | API locale |
-| `BETBY_LIVE_CURSOR` | `0` | Live URL suffix; keep fixed until cursor semantics are confirmed |
+| `BETBY_LIVE_CURSOR` | `0` | Live URL suffix. `0` returns a version index (`top_events_versions`, `rest_events_versions`); the collector then requests each version in place of the cursor to get the events |
 | `BETBY_PREMATCH_CURSOR` | `0` | Prematch URL suffix; keep fixed until cursor semantics are confirmed |
 | `BETBY_POLL_INTERVAL_MS` | `15000` | Poll interval |
 | `BETBY_DATA_DIR` | `/data` | Persistent volume path |
@@ -49,7 +49,7 @@ BETBY_ENABLED=false npm start
 ## Important limitations
 
 - The current demo API paths and brand ID are configurable and must be replaced with production-approved values when BETBY supplies production access.
-- The numeric URL suffix is deliberately treated as a fixed cursor. Do not auto-increment it until BETBY confirms its meaning.
+- The numeric URL suffix `0` returns a version index; the event versions it lists are requested next. This was inferred from a real index response and should be confirmed with BETBY.
 - Polling stores snapshots and event data; it does not place bets, authenticate end users, or connect to the BET62 wallet.
 - Use only feeds and credentials that BETBY has authorized for your account and intended use.
 
@@ -63,4 +63,4 @@ O site BET62 tem uma página `/admin` que mostra o `/status` deste collector (es
 | `BETBY_STATUS_TOKEN` | o mesmo valor definido no collector |
 | `ADMIN_PASSWORD` | senha da área admin (pedida num formulário em `/admin`) |
 
-Sintoma conhecido: `HTTP 503 {"error":"access blocked"}` com cabeçalho `bb-rsn: bc` significa que a BETBY recusou o pedido na origem (IP/região do servidor não autorizado). Não é erro de código: é preciso pedir à BETBY a liberação do IP de saída do collector ou credenciais oficiais.
+Sintoma conhecido: a mesma URL responde num navegador doméstico, mas no servidor dá `HTTP 503 {"error":"access blocked"}` com cabeçalho `bb-rsn: bc`. Isso significa que a BETBY recusou o pedido na origem (IP/região do servidor não autorizado). Não é erro de código: é preciso pedir à BETBY a liberação do IP de saída do collector ou credenciais oficiais.

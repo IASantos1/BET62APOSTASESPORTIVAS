@@ -18,6 +18,8 @@ interface FeedState {
   checkedAt?: string;
   lastCapturedAt?: string;
   error?: string | null;
+  indexKeys?: string[];
+  versions?: { version: string; events: number; keys: string[] }[];
 }
 
 interface CollectorStatus {
@@ -201,6 +203,22 @@ export default function AdminPage() {
                       <span className="text-white/50">{feed.count} eventos</span>
                     </div>
                     {feed.url && <p className="font-mono text-xs text-white/50 break-all">{feed.url}</p>}
+                    {feed.indexKeys && (
+                      <p className="font-mono text-xs text-white/50 break-all">índice: {feed.indexKeys.join(', ')}</p>
+                    )}
+                    {feed.versions && (
+                      <div className="rounded-xl border border-bet62-border bg-bet62-surface/50 p-3 text-xs space-y-1">
+                        {feed.versions.length === 0 ? (
+                          <p className="text-white/60">O índice não trouxe versões de eventos.</p>
+                        ) : (
+                          feed.versions.map((v) => (
+                            <p key={v.version} className="font-mono text-white/70 break-all">
+                              versão {v.version}: {v.events} eventos · campos: {v.keys.join(', ') || '—'}
+                            </p>
+                          ))
+                        )}
+                      </div>
+                    )}
                     {feed.error && (
                       <pre className="whitespace-pre-wrap rounded-xl border border-bet62-border bg-bet62-surface/50 p-3 text-xs text-white/70">
                         {feed.error}
