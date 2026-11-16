@@ -5,6 +5,7 @@ import { MotionConfig } from 'framer-motion';
 import { useState, type ReactNode } from 'react';
 import { BoardProvider } from '../lib/board';
 import { PwaManager } from '../components/pwa/PwaManager';
+import { MobileNav } from '../components/layout/MobileNav';
 
 export default function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -29,7 +30,10 @@ export default function Providers({ children }: { children: ReactNode }) {
         reducedMotion="user"
         transition={{ type: 'tween', ease: 'easeOut', duration: 0.25 }}
       >
-        <BoardProvider>{children}</BoardProvider>
+        <BoardProvider>
+          {children}
+          <MobileNav />
+        </BoardProvider>
         <PwaManager />
       </MotionConfig>
     </QueryClientProvider>

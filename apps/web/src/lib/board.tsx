@@ -27,6 +27,10 @@ export interface BoardEvent {
   /** Parciais (tempos, sets, períodos). */
   periods?: { number: number; home_score: number; away_score: number }[];
   markets: BetbyMarkets;
+  /** Id do desporto na BETBY (para o tracker). */
+  betbySport?: string;
+  /** O evento tal como a BETBY o envia (explorador do admin, tracker). */
+  raw?: BetbyEvent;
 }
 
 export interface LeagueNode {
@@ -78,6 +82,55 @@ interface BoardState {
 }
 
 const BoardContext = React.createContext<BoardState | null>(null);
+
+// Odds que mudaram na última leitura (seta verde a subir / vermelha a descer, como no outro projeto).
+export interface OddMove {
+  dir: 'up' | 'down';
+  at: number;
+}
+const MovesContext = React.createContext<Map<string, OddMove>>(new Map());
+const MOVE_SHOW_MS = 8000;
+
+/** Mudança recente desta odd (chave `${evento}|${mercado}|${variante}|${seleção}`), ou null. */
+export function useOddMove(key: string): OddMove | null {
+  const m = React.useContext(MovesContext).get(key);
+  return m && Date.now() - m.at < MOVE_SHOW_MS ? m : null;
+}
+
+function useOddMoves(events: BoardEvent[]) {
+  const prev = React.useRef(new Map<string, number>());
+  const moves = React.useRef(new Map<string, OddMove>());
+  const [snapshot, setSnapshot] = React.useState(() => new Map<string, OddMove>());
+  React.useEffect(() => {
+    const now = Date.now();
+    const seen = new Map<string, number>();
+    let changed = false;
+    for (const e of events) {
+      for (const [m, variants] of Object.entries(e.markets)) {
+        for (const [v, outcomes] of Object.entries(variants)) {
+          for (const [o, x] of Object.entries(outcomes)) {
+            const k = Number(x.k);
+            if (!(k > 1)) continue;
+            const key = `${e.id}|${m}|${v}|${o}`;
+            seen.set(key, k);
+            const before = prev.current.get(key);
+            if (before !== undefined && before !== k) {
+              moves.current.set(key, { dir: k > before ? 'up' : 'down', at: now });
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+    prev.current = seen;
+    for (const [k, mv] of moves.current) if (now - mv.at > MOVE_SHOW_MS) {
+      moves.current.delete(k);
+      changed = true;
+    }
+    if (changed) setSnapshot(new Map(moves.current));
+  }, [events]);
+  return snapshot;
+}
 
 // Mercados principais (ids Betradar usados pela BETBY): 1 = 1X2; 186/219/340 = vencedor (com prolongamento).
 export const MAIN_MARKETS: { id: string; name: string; labels: Record<string, string> }[] = [
@@ -157,6 +210,8 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
     statistics: (raw.score?.statistics as BoardEvent['statistics']) || undefined,
     periods: raw.score?.period_scores,
     markets: raw.markets,
+    betbySport: d.sport,
+    raw,
   };
 }
 
@@ -201,7 +256,12 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     };
   }, [live.events, live.dictionaries, live.loading, live.error, live.updatedAt, pre.events, pre.dictionaries, pre.loading, pre.error, pre.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <BoardContext.Provider value={value}>{children}</BoardContext.Provider>;
+  const moves = useOddMoves(value.events);
+  return (
+    <BoardContext.Provider value={value}>
+      <MovesContext.Provider value={moves}>{children}</MovesContext.Provider>
+    </BoardContext.Provider>
+  );
 }
 
 export function useBoard() {
