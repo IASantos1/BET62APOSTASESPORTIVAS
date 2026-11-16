@@ -22,6 +22,10 @@ export interface BoardEvent {
   startTime: number | null;
   clock?: string;
   score?: { home: string; away: string };
+  /** Ao vivo: cartões, cantos… ({ home, away } por estatística). */
+  statistics?: Record<string, { home: number; away: number }>;
+  /** Parciais (tempos, sets, períodos). */
+  periods?: { number: number; home_score: number; away_score: number }[];
   markets: BetbyMarkets;
 }
 
@@ -150,6 +154,8 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
     startTime: d.scheduled ? d.scheduled * 1000 : null,
     clock: raw.state?.clock?.match_time,
     score,
+    statistics: (raw.score?.statistics as BoardEvent['statistics']) || undefined,
+    periods: raw.score?.period_scores,
     markets: raw.markets,
   };
 }
