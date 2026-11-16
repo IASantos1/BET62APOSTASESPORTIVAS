@@ -1,11 +1,12 @@
 'use client';
 
 import * as React from 'react';
-import { RefreshCw, Activity, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Activity, AlertTriangle, CheckCircle2, Lock, LogOut } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
+import { Input } from '../../components/ui/Input';
 
 interface FeedState {
   ok: boolean;
@@ -30,7 +31,8 @@ interface CollectorStatus {
 }
 
 interface ApiResult {
-  reachable: boolean;
+  unauthorized?: boolean;
+  reachable?: boolean;
   problem?: string;
   latencyMs?: number;
   status?: CollectorStatus;
@@ -58,6 +60,8 @@ function fmt(date?: string | null) {
 export default function AdminPage() {
   const [data, setData] = React.useState<ApiResult | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [password, setPassword] = React.useState('');
+  const [loginError, setLoginError] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -75,26 +79,76 @@ export default function AdminPage() {
     void load();
   }, [load]);
 
+  const login = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    const res = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) {
+      setLoginError('Senha incorreta.');
+      return;
+    }
+    setPassword('');
+    await load();
+  };
+
+  const logout = async () => {
+    await fetch('/api/admin/login', { method: 'DELETE' });
+    await load();
+  };
+
   const status = data?.status;
 
   return (
     <div className="min-h-screen bg-bet62-bg">
       <Header />
       <main className="max-w-5xl mx-auto px-4 lg:px-8 py-10 space-y-6">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl md:text-4xl font-black tracking-tight">Administração</h1>
             <p className="mt-2 text-white/60">Diagnóstico do BETBY Collector.</p>
           </div>
-          <Button variant="outline" onClick={() => void load()} disabled={loading}>
-            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-            Atualizar
-          </Button>
+          {!data?.unauthorized && (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => void load()} disabled={loading}>
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                Atualizar
+              </Button>
+              <Button variant="ghost" onClick={() => void logout()} aria-label="Sair">
+                <LogOut size={16} />
+              </Button>
+            </div>
+          )}
         </div>
 
         {!data ? (
           <Card>
             <CardContent className="p-8 text-white/60">A verificar...</CardContent>
+          </Card>
+        ) : data.unauthorized ? (
+          <Card className="max-w-md">
+            <CardContent className="p-6">
+              <form onSubmit={(e) => void login(e)} className="space-y-4">
+                <div className="flex items-center gap-2 font-bold">
+                  <Lock size={18} className="text-bet62-primary" />
+                  Acesso restrito
+                </div>
+                <Input
+                  type="password"
+                  placeholder="Senha de administrador"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoFocus
+                />
+                {loginError && <p className="text-sm text-bet62-danger">{loginError}</p>}
+                <Button type="submit" variant="glow" className="w-full">
+                  Entrar
+                </Button>
+              </form>
+            </CardContent>
           </Card>
         ) : !status ? (
           <Card>
