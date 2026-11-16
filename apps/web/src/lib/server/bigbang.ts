@@ -84,9 +84,11 @@ export async function casinoGames(): Promise<CasinoGame[]> {
     const best = new Map<string, CasinoGame>();
     for (const g of out) {
       if (/sportsbook|sports$|esports/i.test(g.name)) continue;
-      const k = `${g.provider.toLowerCase()}|${g.name.toLowerCase()}`;
+      const k = `${g.provider.toLowerCase()}|${g.name.toLowerCase().replace(/\s*\((premium|standard)\)\s*/g, '').trim()}`;
       const cur = best.get(k);
-      if (!cur || (!cur.image && g.image)) best.set(k, g);
+      // A cópia Standard (com demo) primeiro; depois a que tem imagem.
+      const better = !cur || (g.demo && !cur.demo) || (g.demo === cur.demo && !cur.image && !!g.image);
+      if (better) best.set(k, g);
     }
     const games = [...best.values()];
     if (games.length) catalog.set('all', games);

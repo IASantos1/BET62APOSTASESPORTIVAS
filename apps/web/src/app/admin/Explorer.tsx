@@ -118,6 +118,13 @@ export function IntegrationsCard() {
             {af?.remaining !== null && af?.remaining !== undefined ? ` · restantes na conta: ${String(af.remaining)}` : ''}
             {af?.lastError ? ` · último erro: ${String(af.lastError)}` : ''}
           </p>
+          {af?.logos ? (
+            <p className="text-xs text-white/50">
+              Emblemas: {String((af.logos as { leaguesLoaded: number }).leaguesLoaded)}/{String((af.logos as { leaguesTotal: number }).leaguesTotal)} ligas
+              descarregadas · {String((af.logos as { teamsCached: number }).teamsCached)} equipas em cache
+              {(af.logos as { warming: boolean }).warming ? ' · a descarregar…' : ''}
+            </p>
+          ) : null}
           <Row name="Big Bang Casino" conf={!!bb?.configured} test={bb?.test as never} />
           <p className="text-xs text-white/50">
             {bb?.sandbox ? 'chave de teste (sandbox) · ' : ''}
@@ -144,6 +151,19 @@ export function BetbyExplorer() {
   const [custom, setCustom] = React.useState('');
   const [trk, setTrk] = React.useState<{ provider: string; eventId: string } | null>(null);
   const [msg, setMsg] = React.useState<string | null>(null);
+  const [needle, setNeedle] = React.useState('');
+  const hits = React.useMemo(() => {
+    const n = needle.trim();
+    if (n.length < 4) return [];
+    const out: { ev: BoardEvent; where: string }[] = [];
+    for (const ev of events) {
+      const text = JSON.stringify(ev.raw ?? {});
+      const i = text.indexOf(n);
+      if (i >= 0) out.push({ ev, where: text.slice(Math.max(0, i - 80), i + n.length + 40) });
+      if (out.length >= 10) break;
+    }
+    return out;
+  }, [needle, events]);
   React.useEffect(() => {
     loadSiteConfig(true).then(setCfg);
   }, []);
@@ -217,6 +237,19 @@ export function BetbyExplorer() {
         </button>
       </div>
       {msg && <p className="text-xs text-bet62-primary">{msg}</p>}
+
+      <div className="space-y-2 rounded-xl border border-bet62-border p-3">
+        <b className="text-xs">Procurar um número em todos os jogos (ex.: o id do statscore 6541376)</b>
+        <input value={needle} onChange={(ev) => setNeedle(ev.target.value)} placeholder="número ou texto" className={input} />
+        {needle.trim().length >= 4 && (
+          <p className="text-xs text-white/55">{hits.length ? `${hits.length} jogo(s) com este valor:` : 'Não aparece nos dados que a BETBY envia na lista.'}</p>
+        )}
+        {hits.map((h) => (
+          <button key={h.ev.id} onClick={() => setId(h.ev.id)} className="block w-full rounded-lg bg-bet62-bg p-2 text-left font-mono text-[11px] text-white/70">
+            {h.ev.home} - {h.ev.away}: …{h.where}…
+          </button>
+        ))}
+      </div>
 
       <select value={e?.id ?? ''} onChange={(ev) => setId(ev.target.value)} className={input}>
         {list.map((x) => (
