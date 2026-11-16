@@ -21,7 +21,8 @@ const LEAGUE_LOGOS: [RegExp, string | null, number][] = [
   [/ekstraklasa/i, 'poland', 106], [/(czech liga|first league|chance liga)/i, 'czech republic', 345],
   [/champions league/i, null, 2], [/europa league/i, null, 3], [/conference league/i, null, 848], [/libertadores/i, null, 13],
   [/sudamericana/i, null, 11], [/world cup/i, null, 1], [/(euro championship|^euro\b)/i, null, 4], [/nations league/i, null, 5],
-  [/^(s[eé]rie a|brasileir[aã]o( s[eé]rie a)?)$/i, 'brazil', 71], [/^(s[eé]rie b|brasileir[aã]o s[eé]rie b)$/i, 'brazil', 72],
+  // A BETBY escreve "Brasileiro Serie A", "Brasilero Serie A", "Brasileirão"…
+  [/^((bras[a-zãí]*)\s+)?s[eé]rie a$|^brasileir[aã]o$/i, 'brazil', 71], [/^((bras[a-zãí]*)\s+)?s[eé]rie b$/i, 'brazil', 72],
   [/liga profesional|primera divisi[oó]n/i, 'argentina', 128], [/^(mls|major league soccer)$/i, 'usa', 253], [/^(mls|major league soccer)$/i, 'united states', 253],
   [/liga mx/i, 'mexico', 262], [/(pro league|saudi)/i, 'saudi arabia', 307], [/j1 league/i, 'japan', 98],
 ];
