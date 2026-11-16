@@ -11,7 +11,7 @@ export const getPath = (o: unknown, path: string) => path.split('.').reduce<unkn
 const PROVIDERS = [
   { pattern: /statscore/i, id: 'statscore' },
   { pattern: /sportradar|betradar|sr:match/i, id: 'betradar' },
-  { pattern: /\\blmt\\b|liveticker/i, id: 'lmt' },
+  { pattern: /\blmt\b|liveticker/i, id: 'lmt' },
 ] as const;
 
 const ID_FIELD = /^(?:id|event_?id|match_?id|fixture_?id|game_?id|external_?(?:event_?)?id|tracker_?id)$/i;
@@ -42,7 +42,7 @@ export function trackerCandidates(raw: unknown): TrackerCandidate[] {
       const provider = keyProvider ?? ownProvider;
       if ((typeof child === 'string' || typeof child === 'number') && ID_FIELD.test(key) && provider) {
         const valueText = String(child).replace(/^sr:match:/i, '');
-        if (/^\\d{3,}$/.test(valueText)) {
+        if (/^\d{3,}$/.test(valueText)) {
           const identity = `${nextPath}|${provider}|${valueText}`;
           if (!seen.has(identity)) {
             seen.add(identity);
@@ -69,7 +69,7 @@ export function trackerFor(raw: BetbyEvent | undefined, sportId: string | undefi
   if (!raw || !sportId) return null;
   if (pref) {
     const v = getPath(raw, pref.path);
-    if (v !== undefined && v !== null && /^\\d{3,}$/.test(String(v).replace(/^sr:match:/, '')) && providerOf(pref.provider)) return trackerUrl(providerOf(pref.provider)!, sportId, String(v).replace(/^sr:match:/, ''));
+    if (v !== undefined && v !== null && /^\d{3,}$/.test(String(v).replace(/^sr:match:/, '')) && providerOf(pref.provider)) return trackerUrl(providerOf(pref.provider)!, sportId, String(v).replace(/^sr:match:/, ''));
   }
   const c = trackerCandidates(raw)[0];
   return c ? trackerUrl(c.provider, sportId, c.value) : null;
