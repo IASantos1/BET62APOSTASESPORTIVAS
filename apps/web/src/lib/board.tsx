@@ -282,70 +282,28 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
   };
 }
 
-const LIVE_CLOCK_STORAGE_KEY = 'bet62:live-clock-watch:v1';
-const LIVE_CLOCK_STALE_MS = 5 * 60_000;
-type ClockWatch = { progress: string; observedAt: number; expired?: boolean };
-const liveClockWatches = new Map<string, ClockWatch>();
-let clockWatchesLoaded = false;
+const SOCCER_FEED_SILENCE_MS = 5 * 60_000;
 
-function loadClockWatches() {
-  if (clockWatchesLoaded) return;
-  clockWatchesLoaded = true;
-  if (typeof window === 'undefined') return;
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(LIVE_CLOCK_STORAGE_KEY) || '{}') as Record<string, ClockWatch>;
-    for (const [id, watch] of Object.entries(saved)) {
-      if (watch && typeof watch.progress === 'string' && Number.isFinite(watch.observedAt)) {
-        liveClockWatches.set(id, watch);
-      }
-    }
-  } catch {
-    // Ignore unavailable or invalid browser storage.
-  }
-}
-
-function saveClockWatches() {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(LIVE_CLOCK_STORAGE_KEY, JSON.stringify(Object.fromEntries(liveClockWatches)));
-  } catch {
-    // The in-memory watch still works if browser storage is unavailable.
-  }
-}
-
-function isStalledFinishedSoccer(raw: BetbyEvent, sport: SportKey, now: number) {
-  loadClockWatches();
-  if (sport !== 'futebol') {
-    if (liveClockWatches.delete(raw.id)) saveClockWatches();
-    return false;
-  }
-
+function isSoccerFeedSilentAfterRegulation(
+  raw: BetbyEvent,
+  sport: SportKey,
+  lastEventUpdates: Map<string, number>,
+  now: number,
+) {
+  if (sport !== 'futebol') return false;
   const clock = raw.state?.clock?.match_time;
   const match = clock?.match(/^(\d{1,3}):(\d{2})$/);
   const seconds = match ? Number(match[1]) * 60 + Number(match[2]) : 0;
   const hasExtraPeriod = raw.score?.period_scores?.some((period) => period.number > 2);
-  if (!match || seconds < 89 * 60 || seconds > 130 * 60 || hasExtraPeriod) {
-    if (liveClockWatches.delete(raw.id)) saveClockWatches();
-    return false;
-  }
-
-  const progress = [
-    clock,
-    raw.score?.home_score ?? '',
-    raw.score?.away_score ?? '',
-  ].join('|');
-  const previous = liveClockWatches.get(raw.id);
-  if (!previous || previous.progress !== progress) {
-    liveClockWatches.set(raw.id, { progress, observedAt: now });
-    saveClockWatches();
-    return false;
-  }
-  if (previous.expired) return true;
-  if (now - previous.observedAt < LIVE_CLOCK_STALE_MS) return false;
-
-  liveClockWatches.set(raw.id, { ...previous, expired: true });
-  saveClockWatches();
-  return true;
+  const lastUpdate = lastEventUpdates.get(raw.id);
+  return Boolean(
+    match
+    && seconds >= 89 * 60
+    && seconds <= 130 * 60
+    && !hasExtraPeriod
+    && lastUpdate
+    && now - lastUpdate >= SOCCER_FEED_SILENCE_MS,
+  );
 }
 
 /** Em destaque primeiro as grandes ligas (tier), depois os que começam mais cedo. */
@@ -359,6 +317,11 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
   const value = React.useMemo<BoardState>(() => {
     const byId = new Map<string, BoardEvent>();
     const now = Date.now();
+    const liveFeedHealthy = Boolean(
+      live.updatedAt
+      && !live.error
+      && now - live.updatedAt.getTime() < 45_000,
+    );
     for (const raw of pre.events) {
       const e = toBoardEvent(raw, 'scheduled', pre.dictionaries);
       // Um jogo pré-jogo cujo início já passou sai da lista (entra no ao vivo).
@@ -369,27 +332,21 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       // estado ativo observado na BETBY. match_status é uma fase específica do desporto.
       if (raw.state?.status !== undefined && raw.state.status !== 1) {
         byId.delete(raw.id);
-        if (liveClockWatches.delete(raw.id)) saveClockWatches();
         continue;
       }
       const sportInfo = raw.desc?.sport ? live.dictionaries.sports[raw.desc.sport] : undefined;
       const sport = sportKeyOf(sportInfo as { name?: string; slug?: string } | undefined);
-      if (sport && isStalledFinishedSoccer(raw, sport, now)) {
+      if (
+        liveFeedHealthy
+        && sport
+        && isSoccerFeedSilentAfterRegulation(raw, sport, live.lastEventUpdates, now)
+      ) {
         byId.delete(raw.id);
         continue;
       }
       const e = toBoardEvent(raw, 'live', live.dictionaries);
       if (e) byId.set(e.id, e);
     }
-    const liveIds = new Set(live.events.map((event) => event.id));
-    let watchesChanged = false;
-    for (const id of liveClockWatches.keys()) {
-      if (!liveIds.has(id)) {
-        liveClockWatches.delete(id);
-        watchesChanged = true;
-      }
-    }
-    if (watchesChanged) saveClockWatches();
     const events = [...byId.values()].sort((a, b) => sportRank(a.sport) - sportRank(b.sport) || byPriority(a, b));
     const leagueMap = new Map<string, LeagueNode>();
     for (const e of events) {
@@ -412,7 +369,7 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
         void pre.reload();
       },
     };
-  }, [live.events, live.dictionaries, live.loading, live.error, live.updatedAt, pre.events, pre.dictionaries, pre.loading, pre.error, pre.updatedAt, side.widgets, side.broadcasts]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [live.events, live.lastEventUpdates, live.dictionaries, live.loading, live.error, live.updatedAt, pre.events, pre.dictionaries, pre.loading, pre.error, pre.updatedAt, side.widgets, side.broadcasts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const moves = useOddMoves(value.events);
   return (

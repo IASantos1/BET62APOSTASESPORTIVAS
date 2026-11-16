@@ -160,15 +160,21 @@ export function applyDictionaries(dict: BetbyDictionaries, payload: Record<strin
   }
 }
 
-export function applyDeltas(store: Map<string, BetbyEvent>, payload: Record<string, unknown> | null) {
+export function applyDeltas(
+  store: Map<string, BetbyEvent>,
+  payload: Record<string, unknown> | null,
+  lastEventUpdates?: Map<string, number>,
+) {
   const events = payload?.events;
   if (!events || typeof events !== 'object' || Array.isArray(events)) return;
   for (const [id, raw] of Object.entries(events as Record<string, Delta | null>)) {
     if (raw === null) {
       store.delete(id);
+      lastEventUpdates?.delete(id);
       continue;
     }
     if (!raw || typeof raw !== 'object') continue;
+    lastEventUpdates?.set(id, Date.now());
     const current: BetbyEvent = store.get(id) ?? { id, markets: {} };
     if (raw.desc) current.desc = { ...current.desc, ...raw.desc };
     if (raw.state) current.state = { ...current.state, ...raw.state };
@@ -243,6 +249,7 @@ const SNAPSHOT_MAX_AGE = 10 * 60_000;
 interface Snapshot {
   at: number;
   events: [string, BetbyEvent][];
+  lastEventUpdates?: [string, number][];
   dict: BetbyDictionaries;
   applied: string[];
 }
@@ -285,10 +292,12 @@ async function fetchVersions(feed: BetbyFeed, versions: string[], signal: AbortS
  */
 export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
   const storeRef = React.useRef(new Map<string, BetbyEvent>());
+  const lastEventUpdatesRef = React.useRef(new Map<string, number>());
   const dictRef = React.useRef(emptyDictionaries());
   const appliedRef = React.useRef(new Set<string>());
   const busyRef = React.useRef(false);
   const [events, setEvents] = React.useState<BetbyEvent[]>([]);
+  const [lastEventUpdates, setLastEventUpdates] = React.useState<Map<string, number>>(new Map());
   const [dictionaries, setDictionaries] = React.useState<BetbyDictionaries>(emptyDictionaries());
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -305,9 +314,13 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
     const snap = readSnapshot(feed);
     if (!snap || storeRef.current.size) return;
     storeRef.current = new Map(snap.events);
+    lastEventUpdatesRef.current = new Map<string, number>(
+      snap.lastEventUpdates ?? snap.events.map(([id]) => [id, snap.at] as [string, number]),
+    );
     dictRef.current = snap.dict;
     appliedRef.current = new Set(snap.applied);
     publish();
+    setLastEventUpdates(new Map(lastEventUpdatesRef.current));
     setUpdatedAt(new Date(snap.at));
     setLoading(false);
   }, [feed, publish]);
@@ -322,22 +335,29 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
       const dict = dictRef.current;
       const index = await getJson(feedUrl(feed, 0), controller.signal);
       applyDictionaries(dict, index);
-      applyDeltas(store, index);
+      applyDeltas(store, index, lastEventUpdatesRef.current);
       const versions = versionsOf(index);
       const fresh = versions.filter((v) => !appliedRef.current.has(v));
       const payloads = await fetchVersions(feed, fresh, controller.signal);
       payloads.forEach((payload, i) => {
         applyDictionaries(dict, payload);
-        applyDeltas(store, payload);
+        applyDeltas(store, payload, lastEventUpdatesRef.current);
         appliedRef.current.add(fresh[i]);
       });
       // Esquece versões que já saíram do índice (a lista não cresce para sempre).
       const current = new Set(versions);
       for (const v of appliedRef.current) if (!current.has(v)) appliedRef.current.delete(v);
       publish();
+      setLastEventUpdates(new Map(lastEventUpdatesRef.current));
       setUpdatedAt(new Date());
       setError(null);
-      writeSnapshot(feed, { at: Date.now(), events: [...store.entries()], dict, applied: [...appliedRef.current] });
+      writeSnapshot(feed, {
+        at: Date.now(),
+        events: [...store.entries()],
+        lastEventUpdates: [...lastEventUpdatesRef.current],
+        dict,
+        applied: [...appliedRef.current],
+      });
     } catch (err) {
       setError(err instanceof Error ? (err.name === 'AbortError' ? 'A BETBY não respondeu a tempo.' : err.message) : 'Falha ao ler a BETBY.');
     } finally {
@@ -353,7 +373,7 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
     return () => clearInterval(id);
   }, [load, intervalMs]);
 
-  return { events, dictionaries, loading, error, updatedAt, reload: load };
+  return { events, dictionaries, lastEventUpdates, loading, error, updatedAt, reload: load };
 }
 
 /**
