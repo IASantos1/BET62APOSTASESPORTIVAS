@@ -17,19 +17,19 @@ import { Button } from '../components/ui/Button';
 const FEATURES = [
   {
     title: 'Cassino',
-    description: 'Acesso rápido aos jogos, provedores e campanhas ativas da plataforma.',
+    description: 'Slots, roleta, blackjack e jogos ao vivo dos melhores provedores.',
     href: '/casino',
     icon: Dices,
   },
   {
     title: 'Promoções',
-    description: 'Campanhas de aquisição, recarga, cashback e jornadas de retenção.',
+    description: 'Bónus de boas-vindas, recarga e cashback para aproveitares mais.',
     href: '/promocoes',
     icon: Gift,
   },
   {
     title: 'Carteira',
-    description: 'Fluxos de depósito, levantamento e gestão operacional de pagamentos.',
+    description: 'Depósitos e levantamentos rápidos, seguros e sem complicações.',
     href: '/carteira',
     icon: Wallet,
   },
@@ -49,16 +49,16 @@ export default function HomePage() {
                 <div className="space-y-5">
                   <Badge variant="green" className="uppercase tracking-widest text-[10px] px-3 py-1">
                     <Sparkles size={12} className="mr-1" />
-                    Plataforma simplificada
+                    Apostas e casino
                   </Badge>
                   <div className="space-y-3">
                     <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-[1.02]">
-                      BET62 focada em
-                      <span className="block text-bet62-primary">casino, pagamentos e conta</span>
+                      Aposta, joga e ganha
+                      <span className="block text-bet62-primary">tudo num só lugar</span>
                     </h1>
                     <p className="max-w-2xl text-white/65 text-base md:text-lg leading-relaxed">
-                      As integrações de APIs esportivas foram removidas deste workspace.
-                      A navegação principal agora privilegia os módulos estáveis da plataforma.
+                      Futebol ao vivo, agenda de partidas, cassino e promoções numa plataforma
+                      rápida, segura e pensada para jogar com responsabilidade.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-3">
@@ -81,22 +81,22 @@ export default function HomePage() {
                         <ShieldCheck size={20} className="text-bet62-primary" />
                       </div>
                       <div>
-                        <p className="font-bold">Operação atual</p>
-                        <p className="text-sm text-white/55">Sem dependência de feeds esportivos externos</p>
+                        <p className="font-bold">Porquê a BET62</p>
+                        <p className="text-sm text-white/55">Segura, rápida e sempre disponível</p>
                       </div>
                     </div>
                     <div className="grid gap-3">
                       <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
-                        <p className="text-xs uppercase tracking-widest text-white/40">Frontoffice</p>
-                        <p className="mt-1 font-semibold">Home, cassino, promoções e jornadas de carteira</p>
+                        <p className="text-xs uppercase tracking-widest text-white/40">Ao vivo</p>
+                        <p className="mt-1 font-semibold">Futebol em tempo real e agenda de partidas</p>
                       </div>
                       <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
-                        <p className="text-xs uppercase tracking-widest text-white/40">Backoffice</p>
-                        <p className="mt-1 font-semibold">Auth, user, kyc, wallet, bonus, casino e admin</p>
+                        <p className="text-xs uppercase tracking-widest text-white/40">Cassino</p>
+                        <p className="mt-1 font-semibold">Centenas de jogos e provedores de topo</p>
                       </div>
                       <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
-                        <p className="text-xs uppercase tracking-widest text-white/40">Infra</p>
-                        <p className="mt-1 font-semibold">Gateway e scripts sem o microserviço de odds</p>
+                        <p className="text-xs uppercase tracking-widest text-white/40">Carteira</p>
+                        <p className="mt-1 font-semibold">Depósitos instantâneos e levantamentos rápidos</p>
                       </div>
                     </div>
                   </CardContent>
@@ -115,7 +115,7 @@ export default function HomePage() {
                     <p className="mt-2 text-sm text-white/60 flex-1">{feature.description}</p>
                     <Button variant="ghost" className="mt-5 justify-start px-0" asChild>
                       <Link href={feature.href}>
-                        Abrir módulo
+                        Explorar
                         <ArrowRight size={15} />
                       </Link>
                     </Button>
