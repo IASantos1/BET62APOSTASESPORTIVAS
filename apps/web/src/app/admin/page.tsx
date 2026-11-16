@@ -1,86 +1,70 @@
 'use client';
 
 import * as React from 'react';
-import { RefreshCw, Activity, AlertTriangle, CheckCircle2, Lock, LogOut } from 'lucide-react';
+import { RefreshCw, AlertTriangle, CheckCircle2, Lock, LogOut } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { BETBY_CONFIG, eventTitle, feedUrl, useBetbyFeed, type BetbyFeed } from '../../lib/betby';
 
-interface FeedState {
-  ok: boolean;
-  count: number;
-  url?: string;
-  httpStatus?: number;
-  blockReason?: string | null;
-  bodyPreview?: string;
-  checkedAt?: string;
-  lastCapturedAt?: string;
-  error?: string | null;
-  indexKeys?: string[];
-  versions?: { version: string; events: number; keys: string[] }[];
-  summary?: { events: number; withScore: number; withClock: number; withMarkets: number; fields: string[]; sample: string | null };
-}
+// Diagnóstico das URLs da BETBY, lidas no navegador de quem abre esta página.
+function FeedCard({ feed }: { feed: BetbyFeed }) {
+  const { events, dictionaries, loading, error, updatedAt, reload } = useBetbyFeed(feed);
+  const withNames = events.filter((e) => e.desc?.competitors?.length).length;
+  const withOdds = events.filter((e) => Object.keys(e.markets).length).length;
+  const withScore = events.filter((e) => e.score).length;
+  const sample = events.find((e) => e.desc?.competitors?.length && Object.keys(e.markets).length) ?? events[0];
+  const ok = !error && events.length > 0;
 
-interface CollectorStatus {
-  enabled: boolean;
-  config?: { baseUrl: string; brandId: string; locale: string; intervalMs: number; paths: Record<string, string> };
-  startedAt: string;
-  lastRunAt: string | null;
-  lastSuccessAt: string | null;
-  lastError: string | null;
-  feeds: Record<string, FeedState>;
-}
-
-interface ApiResult {
-  unauthorized?: boolean;
-  reachable?: boolean;
-  problem?: string;
-  latencyMs?: number;
-  status?: CollectorStatus;
-}
-
-// Tradução dos sintomas mais comuns para uma pista do que fazer.
-function hint(feed: FeedState): string | null {
-  if (feed.ok) return null;
-  const body = feed.bodyPreview ?? '';
-  if (feed.httpStatus === 503 && body.includes('access blocked')) {
-    return `A BETBY bloqueou o pedido na origem (bb-rsn: ${feed.blockReason ?? '—'}). O servidor do collector não está autorizado — normalmente é bloqueio por IP/país. É preciso pedir à BETBY a liberação do IP de saída do collector ou credenciais oficiais.`;
-  }
-  if (feed.httpStatus === 401 || feed.httpStatus === 403) return 'Acesso negado pela BETBY: falta autorização ou credenciais para este brand.';
-  if (feed.httpStatus === 404) return 'Caminho não encontrado: confirma BETBY_BRAND_ID, BETBY_LOCALE e o cursor.';
-  if (feed.error?.includes('timeout')) return 'A BETBY não respondeu a tempo. Verifica a rede do serviço ou aumenta BETBY_TIMEOUT_MS.';
-  if (feed.error?.includes('ENOTFOUND')) return 'O domínio não resolve: confirma BETBY_BASE_URL.';
-  if (feed.error?.includes('JSON')) return 'A resposta não é JSON — provavelmente uma página de erro ou o endereço errado.';
-  return null;
-}
-
-function fmt(date?: string | null) {
-  return date ? new Date(date).toLocaleString('pt-PT') : '—';
+  return (
+    <Card glow={error ? 'primary' : 'none'}>
+      <CardContent className="p-6 space-y-3 text-sm">
+        <div className="flex items-center gap-2 flex-wrap">
+          {ok ? <CheckCircle2 size={18} className="text-emerald-400" /> : <AlertTriangle size={18} className="text-bet62-danger" />}
+          <span className="font-bold uppercase tracking-wide">{feed}</span>
+          <Badge variant={error ? 'danger' : 'green'}>{loading ? 'a ler…' : error ? 'erro' : 'ok'}</Badge>
+          <span className="text-white/50">{events.length} jogos</span>
+          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => void reload()} aria-label="Atualizar">
+            <RefreshCw size={14} />
+          </Button>
+        </div>
+        <p className="font-mono text-xs text-white/50 break-all">{feedUrl(feed, 0)}</p>
+        {error && (
+          <pre className="whitespace-pre-wrap rounded-xl border border-bet62-border bg-bet62-surface/50 p-3 text-xs text-white/70">{error}</pre>
+        )}
+        <p className="text-white/80">
+          com nomes: <b>{withNames}</b> · com odds: {withOdds} · com placar: {withScore} · desportos:{' '}
+          {Object.keys(dictionaries.sports).length} · torneios: {Object.keys(dictionaries.tournaments).length}
+        </p>
+        {sample && (
+          <details>
+            <summary className="cursor-pointer text-white/60">Exemplo: {eventTitle(sample)}</summary>
+            <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all font-mono text-xs text-white/60">
+              {JSON.stringify(sample, null, 1).slice(0, 3000)}
+            </pre>
+          </details>
+        )}
+        <p className="text-xs text-white/40">Atualizado: {updatedAt ? updatedAt.toLocaleTimeString('pt-PT') : '—'}</p>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function AdminPage() {
-  const [data, setData] = React.useState<ApiResult | null>(null);
-  const [loading, setLoading] = React.useState(true);
+  const [authorized, setAuthorized] = React.useState<boolean | null>(null);
   const [password, setPassword] = React.useState('');
   const [loginError, setLoginError] = React.useState<string | null>(null);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/admin/betby-status', { cache: 'no-store' });
-      setData((await res.json()) as ApiResult);
-    } catch {
-      setData({ reachable: false, problem: 'Falha ao contactar o servidor web.' });
-    } finally {
-      setLoading(false);
-    }
+  const check = React.useCallback(async () => {
+    const res = await fetch('/api/admin/login', { cache: 'no-store' }).catch(() => null);
+    setAuthorized(Boolean(res?.ok));
   }, []);
 
   React.useEffect(() => {
-    void load();
-  }, [load]);
+    void check();
+  }, [check]);
 
   const login = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,15 +79,13 @@ export default function AdminPage() {
       return;
     }
     setPassword('');
-    await load();
+    await check();
   };
 
   const logout = async () => {
     await fetch('/api/admin/login', { method: 'DELETE' });
-    await load();
+    await check();
   };
-
-  const status = data?.status;
 
   return (
     <div className="min-h-screen bg-bet62-bg">
@@ -112,26 +94,20 @@ export default function AdminPage() {
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl md:text-4xl font-black tracking-tight">Administração</h1>
-            <p className="mt-2 text-white/60">Diagnóstico do BETBY Collector.</p>
+            <p className="mt-2 text-white/60">Diagnóstico das URLs da BETBY.</p>
           </div>
-          {!data?.unauthorized && (
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => void load()} disabled={loading}>
-                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-                Atualizar
-              </Button>
-              <Button variant="ghost" onClick={() => void logout()} aria-label="Sair">
-                <LogOut size={16} />
-              </Button>
-            </div>
+          {authorized && (
+            <Button variant="ghost" onClick={() => void logout()} aria-label="Sair">
+              <LogOut size={16} />
+            </Button>
           )}
         </div>
 
-        {!data ? (
+        {authorized === null ? (
           <Card>
             <CardContent className="p-8 text-white/60">A verificar...</CardContent>
           </Card>
-        ) : data.unauthorized ? (
+        ) : !authorized ? (
           <Card className="max-w-md">
             <CardContent className="p-6">
               <form onSubmit={(e) => void login(e)} className="space-y-4">
@@ -153,101 +129,15 @@ export default function AdminPage() {
               </form>
             </CardContent>
           </Card>
-        ) : !status ? (
-          <Card>
-            <CardContent className="p-6 flex gap-3">
-              <AlertTriangle className="text-bet62-danger shrink-0" size={20} />
-              <div>
-                <p className="font-bold">Collector indisponível</p>
-                <p className="mt-1 text-sm text-white/70">{data.problem}</p>
-              </div>
-            </CardContent>
-          </Card>
         ) : (
           <>
             <Card>
-              <CardContent className="p-6 grid gap-4 sm:grid-cols-2 text-sm">
-                <div className="flex items-center gap-2">
-                  <Activity size={16} className="text-bet62-primary" />
-                  <span className="font-bold">Collector</span>
-                  <Badge variant={status.enabled ? 'green' : 'amber'}>{status.enabled ? 'ativo' : 'desligado'}</Badge>
-                  {data.latencyMs !== undefined && <span className="text-white/40">{data.latencyMs} ms</span>}
-                </div>
-                <div className="text-white/60">Iniciado: {fmt(status.startedAt)}</div>
-                <div className="text-white/60">Última execução: {fmt(status.lastRunAt)}</div>
-                <div className="text-white/60">Último sucesso: {fmt(status.lastSuccessAt)}</div>
-                {status.config && (
-                  <div className="sm:col-span-2 rounded-xl border border-bet62-border bg-bet62-surface/50 p-3 font-mono text-xs text-white/70 break-all">
-                    base: {status.config.baseUrl} · brand: {status.config.brandId} · locale: {status.config.locale} ·
-                    intervalo: {status.config.intervalMs / 1000}s
-                  </div>
-                )}
+              <CardContent className="p-4 font-mono text-xs text-white/70 break-all">
+                base: {BETBY_CONFIG.baseUrl} · brand: {BETBY_CONFIG.brandId} · locale: {BETBY_CONFIG.locale}
               </CardContent>
             </Card>
-
-            {Object.entries(status.feeds).map(([name, feed]) => {
-              const tip = hint(feed);
-              return (
-                <Card key={name} glow={feed.ok ? 'none' : 'primary'}>
-                  <CardContent className="p-6 space-y-3 text-sm">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {feed.ok ? (
-                        <CheckCircle2 size={18} className="text-emerald-400" />
-                      ) : (
-                        <AlertTriangle size={18} className="text-bet62-danger" />
-                      )}
-                      <span className="font-bold uppercase tracking-wide">{name}</span>
-                      <Badge variant={feed.ok ? 'green' : 'danger'}>
-                        {feed.httpStatus ? `HTTP ${feed.httpStatus}` : feed.ok ? 'ok' : 'erro'}
-                      </Badge>
-                      {feed.blockReason && <Badge variant="amber">bb-rsn: {feed.blockReason}</Badge>}
-                      <span className="text-white/50">{feed.count} eventos</span>
-                    </div>
-                    {feed.url && <p className="font-mono text-xs text-white/50 break-all">{feed.url}</p>}
-                    {feed.indexKeys && (
-                      <p className="font-mono text-xs text-white/50 break-all">índice: {feed.indexKeys.join(', ')}</p>
-                    )}
-                    {feed.summary && (
-                      <div className="rounded-xl border border-bet62-border bg-bet62-surface/50 p-3 text-xs space-y-2">
-                        <p className="text-white/80">
-                          Jogos no estado atual: <b>{feed.summary.events}</b> · com placar: {feed.summary.withScore} · com relógio:{' '}
-                          {feed.summary.withClock} · com odds: {feed.summary.withMarkets}
-                        </p>
-                        <p className="font-mono text-white/50">campos: {feed.summary.fields.join(', ') || '—'}</p>
-                        {feed.summary.sample && (
-                          <details>
-                            <summary className="cursor-pointer text-white/60">Ver um jogo de exemplo</summary>
-                            <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-white/60">{feed.summary.sample}</pre>
-                          </details>
-                        )}
-                      </div>
-                    )}
-                    {feed.versions && (
-                      <div className="rounded-xl border border-bet62-border bg-bet62-surface/50 p-3 text-xs space-y-1">
-                        {feed.versions.length === 0 ? (
-                          <p className="text-white/60">O índice não trouxe versões de eventos.</p>
-                        ) : (
-                          feed.versions.map((v) => (
-                            <p key={v.version} className="font-mono text-white/70 break-all">
-                              versão {v.version}: {v.events} jogos atualizados · campos: {v.keys.join(', ') || '—'}
-                            </p>
-                          ))
-                        )}
-                      </div>
-                    )}
-                    {feed.error && (
-                      <pre className="whitespace-pre-wrap rounded-xl border border-bet62-border bg-bet62-surface/50 p-3 text-xs text-white/70">
-                        {feed.error}
-                      </pre>
-                    )}
-                    {tip && <p className="text-white/80">{tip}</p>}
-                    <p className="text-xs text-white/40">
-                      Verificado: {fmt(feed.checkedAt)} · Última captura: {fmt(feed.lastCapturedAt)}
-                    </p>
-                  </CardContent>
-                </Card>
-              );
-            })}
+            <FeedCard feed="live" />
+            <FeedCard feed="prematch" />
           </>
         )}
       </main>
