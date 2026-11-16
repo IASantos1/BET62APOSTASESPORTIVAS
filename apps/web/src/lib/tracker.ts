@@ -4,6 +4,10 @@
 // O admin (Explorador BETBY) mostra o que existe e pode fixar o campo a usar (/api/config).
 import { BETBY_CONFIG, type BetbyEvent } from './betby';
 
+export interface TrackerCandidate { path: string; value: string; provider: string; }
+
+export const getPath = (o: unknown, path: string) => path.split('.').reduce<unknown>((v, k) => (v && typeof v === 'object' ? (v as Record<string, unknown>)[k] : undefined), o);
+
 const PROVIDERS = [
   { pattern: /statscore/i, id: 'statscore' },
   { pattern: /sportradar|betradar|sr:match/i, id: 'betradar' },
@@ -56,7 +60,7 @@ export function trackerCandidates(raw: unknown): TrackerCandidate[] {
 
 export function trackerUrl(provider: string, sportId: string, eventId: string) {
   const providers = JSON.stringify({ id: provider, sportId: String(sportId), lang: BETBY_CONFIG.locale.toLowerCase(), eventId: Number(eventId) || eventId });
-  const trackerBase = (process.env.NEXT_PUBLIC_BETBY_TRACKER_URL || BETBY_CONFIG.baseUrl).replace(/\/$/, '');
+  const trackerBase = (process.env.NEXT_PUBLIC_BETBY_TRACKER_URL || 'https://demo.betby.com').replace(/\/$/, '');
   return `${trackerBase}/tracker.html?providers=${encodeURIComponent(providers)}`;
 }
 
