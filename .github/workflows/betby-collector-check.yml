@@ -1,0 +1,25 @@
+name: BETBY collector validation
+
+on:
+  push:
+    branches:
+      - feature/betby-data-collector
+    paths:
+      - "services/betby-collector/**"
+      - ".github/workflows/betby-collector-check.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "services/betby-collector/**"
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check collector syntax
+        run: node --check services/betby-collector/index.mjs
