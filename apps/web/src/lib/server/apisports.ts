@@ -24,32 +24,47 @@ const HOST: Record<Api, string> = {
   rugby: 'v1.rugby.api-sports.io',
 };
 
+const API_NAMES: Api[] = Object.keys(HOST) as Api[];
+const usage = Object.fromEntries(API_NAMES.map((api) => [api, {
+  day: '', used: 0, minute: 0, minuteCalls: 0, remaining: null as number | null,
+}])) as Record<Api, { day: string; used: number; minute: number; minuteCalls: number; remaining: number | null }>;
+
 const state = {
-  day: '',
-  used: 0,
-  minute: 0,
-  minuteCalls: 0,
-  remaining: null as number | null,
   lastError: null as string | null,
   lastOkAt: null as string | null,
 };
 
 export function apiSportsStatus() {
-  return { configured: !!API_KEY(), usedToday: state.used, dailyLimit: DAILY, remaining: state.remaining, lastError: state.lastError, lastOkAt: state.lastOkAt };
+  const usedToday = API_NAMES.reduce((sum, api) => sum + usage[api].used, 0);
+  const remainingValues = API_NAMES.map((api) => usage[api].remaining);
+  const remaining = remainingValues.every((v) => v !== null)
+    ? remainingValues.reduce((sum, v) => sum + (v ?? 0), 0)
+    : null;
+  return {
+    configured: !!API_KEY(),
+    usedToday,
+    dailyLimit: DAILY * API_NAMES.length,
+    remaining,
+    bySportApi: Object.fromEntries(API_NAMES.map((api) => [api, { usedToday: usage[api].used, dailyLimit: DAILY, remaining: usage[api].remaining }])),
+    lastError: state.lastError,
+    lastOkAt: state.lastOkAt,
+  };
 }
 
-function canCall() {
+function canCall(api: Api) {
+  const current = usage[api];
   const day = new Date().toISOString().slice(0, 10);
-  if (state.day !== day) {
-    state.day = day;
-    state.used = 0;
+  if (current.day !== day) {
+    current.day = day;
+    current.used = 0;
+    current.remaining = null;
   }
   const minute = Math.floor(Date.now() / 60_000);
-  if (state.minute !== minute) {
-    state.minute = minute;
-    state.minuteCalls = 0;
+  if (current.minute !== minute) {
+    current.minute = minute;
+    current.minuteCalls = 0;
   }
-  return !!API_KEY() && state.used < DAILY && state.minuteCalls < PER_MINUTE && state.remaining !== 0;
+  return !!API_KEY() && current.used < DAILY && current.minuteCalls < PER_MINUTE && current.remaining !== 0;
 }
 
 function plainGet(url: string, headers: Record<string, string>): Promise<{ status: number; body: string; remaining: string | undefined }> {
@@ -70,11 +85,11 @@ function plainGet(url: string, headers: Record<string, string>): Promise<{ statu
 /** Um pedido à API (conta para a quota). Devolve `response`, ou lança o erro da API. */
 export async function apiCall<T = unknown>(api: Api, pathAndQuery: string): Promise<T[]> {
   if (!API_KEY()) throw new Error('API_FOOTBALL_KEY não está definida.');
-  if (!canCall()) throw new Error('Limite de pedidos à API-Football atingido (minuto ou dia).');
-  state.used += 1;
-  state.minuteCalls += 1;
+  if (!canCall(api)) throw new Error(`Limite de pedidos atingido para API-Sports (${api}).`);
+  usage[api].used += 1;
+  usage[api].minuteCalls += 1;
   const r = await plainGet(`https://${HOST[api]}/${pathAndQuery}`, { 'x-apisports-key': API_KEY() });
-  if (r.remaining !== undefined && Number.isFinite(Number(r.remaining))) state.remaining = Number(r.remaining);
+  if (r.remaining !== undefined && Number.isFinite(Number(r.remaining))) usage[api].remaining = Number(r.remaining);
   let data: { response?: T[]; errors?: unknown } | null = null;
   try {
     data = JSON.parse(r.body);
@@ -142,7 +157,7 @@ async function leaguePack(leagueId: number) {
   if (packInflight.has(leagueId)) return packInflight.get(leagueId)!;
   const p = (async () => {
     for (const season of seasonsToTry()) {
-      if (!canCall()) return [];
+      if (!canCall('football')) return [];
       try {
         const list = await apiCall<{ team: { name: string; logo: string } }>('football', `teams?league=${leagueId}&season=${season}`);
         if (list.length) {
@@ -197,7 +212,7 @@ export async function teamLogo(sport: string, name: string, leagueId?: number): 
       .map((t) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim())
       .filter((t) => t.length >= 3);
     for (const q of terms) {
-      if (!canCall()) return null; // sem quota: não guarda, tenta mais tarde
+      if (!canCall(api)) return null; // sem quota: não guarda, tenta mais tarde
       const list = await apiCall<{ team?: { name: string; logo: string }; name?: string; logo?: string }>(api, `teams?search=${encodeURIComponent(q)}`);
       const teams = list.map((x) => x.team || (x as { name: string; logo: string }));
       const t = teams.find((x) => x.logo && sameTeam(x.name, name)) || (teams.length === 1 ? teams[0] : undefined);
