@@ -67,6 +67,48 @@ export function feedUrl(feed: BetbyFeed, cursor: string | number) {
   return `${baseUrl}/api/v4/${feed}/brand/${brandId}/${locale}/${cursor}`;
 }
 
+// ---------- side feed: widgets por jogo (minicampo, estatísticas e transmissão) ----------
+// O feed de odds (live/prematch) não traz os widgets de cada jogo. Esses vêm num feed próprio
+// (sem locale), com o mesmo esquema de versões/deltas:
+//   GET {base}/api/v1/side/brand/{brand}/0          -> índice { version }
+//   GET {base}/api/v1/side/brand/{brand}/{version}  -> { items, version, snapshot_complete? }
+// Cada item é [[idDoJogo, tipo], valor|null]; o tipo é "widget" (minicampo/estatísticas) ou
+// "broadcasts" (transmissão). A chave é o MESMO id de evento do feed de odds. Cada valor:
+//   { id: "statscore", type: "scoreboard", event_id: 6820840 }   <- Statscore: id do jogo no fornecedor
+//   { id: "oddin", type: "statistics", url: "https://…" }        <- Oddin/Betgenius: endereço pronto
+export interface BetbySideItem {
+  /** Fornecedor/id do widget: statscore, oddin, betgenius… */
+  id: string;
+  /** scoreboard, statistics, iframe… */
+  type: string;
+  /** Evento no fornecedor (Statscore) — é o que abre o minicampo. */
+  event_id?: number | string;
+  /** Endereço pronto do widget (Oddin, Betgenius, transmissões). */
+  url?: string;
+}
+
+export type BetbySideKind = 'widget' | 'broadcasts';
+
+export function sideFeedUrl(cursor: string | number) {
+  const { baseUrl, brandId } = BETBY_CONFIG;
+  return `${baseUrl}/api/v1/side/brand/${brandId}/${cursor}`;
+}
+
+/** Aplica um pedaço do side feed (índice ou delta) a um mapa evento -> itens, para um dos tipos. */
+export function applySideItems(store: Map<string, BetbySideItem[]>, payload: Record<string, unknown> | null, kind: BetbySideKind) {
+  const items = payload?.items;
+  if (!Array.isArray(items)) return;
+  for (const item of items) {
+    if (!Array.isArray(item) || item.length !== 2) continue;
+    const key = item[0];
+    if (!Array.isArray(key) || key.length !== 2 || key[1] !== kind) continue;
+    const eventId = String(key[0]);
+    const value = item[1];
+    if (value === null || value === undefined) store.delete(eventId);
+    else if (Array.isArray(value)) store.set(eventId, value as BetbySideItem[]);
+  }
+}
+
 export interface BetbyDescriptions {
   markets?: Record<
     string,
@@ -312,4 +354,54 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
   }, [load, intervalMs]);
 
   return { events, dictionaries, loading, error, updatedAt, reload: load };
+}
+
+/**
+ * Lê o "side feed" da BETBY a cada `intervalMs`: os widgets por jogo (minicampo e estatísticas) e as
+ * transmissões. Não substitui o feed de odds — é o único sítio onde vem, p. ex., o id Statscore que
+ * abre o minicampo. Se falhar, o site continua a funcionar sem estes extras.
+ */
+export function useBetbySide(intervalMs = 20000) {
+  const widgetsRef = React.useRef(new Map<string, BetbySideItem[]>());
+  const broadcastsRef = React.useRef(new Map<string, BetbySideItem[]>());
+  const versionRef = React.useRef<string | null>(null);
+  const busyRef = React.useRef(false);
+  const [widgets, setWidgets] = React.useState(new Map<string, BetbySideItem[]>());
+  const [broadcasts, setBroadcasts] = React.useState(new Map<string, BetbySideItem[]>());
+  const [loading, setLoading] = React.useState(true);
+
+  const load = React.useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      // Ainda sem versão: o índice /0 diz qual é a atual.
+      if (!versionRef.current) {
+        const index = await getJson(sideFeedUrl(0), controller.signal);
+        if (index.version !== undefined && index.version !== null) versionRef.current = String(index.version);
+      }
+      if (!versionRef.current) return;
+      const payload = await getJson(sideFeedUrl(versionRef.current), controller.signal);
+      applySideItems(widgetsRef.current, payload, 'widget');
+      applySideItems(broadcastsRef.current, payload, 'broadcasts');
+      if (payload.version !== undefined && payload.version !== null) versionRef.current = String(payload.version);
+      setWidgets(new Map(widgetsRef.current));
+      setBroadcasts(new Map(broadcastsRef.current));
+    } catch {
+      // O side feed é um extra: sem ele a página mostra os mercados, só não mostra o minicampo.
+    } finally {
+      clearTimeout(timer);
+      busyRef.current = false;
+      setLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void load();
+    const id = setInterval(() => void load(), intervalMs);
+    return () => clearInterval(id);
+  }, [load, intervalMs]);
+
+  return { widgets, broadcasts, loading };
 }

@@ -17,7 +17,7 @@ import { useSlip } from '../../../../stores/slip.store';
 import { cn } from '../../../../lib/utils';
 import { fillTemplate, useSiteConfig } from '../../../../lib/site-config';
 import { trackerFor } from '../../../../lib/tracker';
-import type { BetbyMarkets } from '../../../../lib/betby';
+import { BETBY_CONFIG, type BetbyMarkets } from '../../../../lib/betby';
 
 // Nomes dos mercados mais comuns (ids Betradar usados pela BETBY). O nome da BETBY
 // (/api/v3/descriptions) tem prioridade; depois estes; senão o id.
@@ -425,7 +425,7 @@ function StatBars({ rows }: { rows: { key: string; home: number; away: number }[
 type View = 'mercados' | 'tracker' | 'live' | 'estatisticas';
 
 function Inner({ id }: { id: string }) {
-  const { events, loading } = useBoard();
+  const { events, loading, widgets, broadcasts } = useBoard();
   const e = events.find((x) => x.id === id);
   const picks = useSlip((s) => s.picks);
   const toggle = useSlip((s) => s.toggle);
@@ -465,7 +465,18 @@ function Inner({ id }: { id: string }) {
   for (const [m] of markets) counts.set(catOf(m, marketName(m)), (counts.get(catOf(m, marketName(m))) ?? 0) + 1);
   const activeCat = cat !== 'todos' && counts.has(cat) ? cat : 'todos';
   const shown = activeCat === 'todos' ? markets : markets.filter(([m]) => catOf(m, marketName(m)) === activeCat);
-  const tracker = live ? trackerFor(e.raw, e.betbySport, cfg?.trackerField) : null;
+  const sideWidgets = widgets.get(id);
+  const broadcast = broadcasts.get(id)?.find((b) => b.url)?.url;
+  const tracker = live ? trackerFor(e.raw, e.betbySport, cfg?.trackerField, sideWidgets, true) : null;
+  // Estatísticas: o widget do side feed que traz um endereço próprio (Oddin/Betgenius), senão a
+  // página de estatísticas da BETBY (ui.invisiblesport.com/stats.html), que só existe para jogos
+  // com fornecedor de estatísticas associado (os que têm widgets no side feed).
+  const statsWidget = sideWidgets?.find((w) => w.url && /statistic/i.test(w.type))?.url;
+  const statsFrame =
+    statsWidget ??
+    (sideWidgets?.length
+      ? `https://ui.invisiblesport.com/stats.html?brandId=${encodeURIComponent(BETBY_CONFIG.brandId)}&eventId=${encodeURIComponent(id)}&lang=${encodeURIComponent(BETBY_CONFIG.locale)}`
+      : null);
   const league = leagueApiId(e.sport, e.league, e.country);
   const extraStats = pairsOf(betbyStats.data);
   const distRows = (distribution.markets ?? [])
@@ -537,19 +548,25 @@ function Inner({ id }: { id: string }) {
             <iframe src={tracker} title="Tracker do jogo" className="block h-[340px] w-full md:h-[420px]" allow="fullscreen" />
           ) : (
             <p className="p-6 text-sm text-white/60">
-              Minicampo não disponível: este evento não contém um identificador reconhecido de um fornecedor de tracking. O ID interno da BETBY não é suficiente para abrir o tracker.
+              Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.
             </p>
           )}
         </div>
       )}
 
       {view === 'live' && (
-        <div className="grid aspect-video place-items-center rounded-2xl border border-bet62-border bg-black/40 p-6 text-center text-sm text-white/60">
-          <div>
-            <MonitorPlay size={32} className="mx-auto mb-2 text-white/40" />
-            Transmissão ao vivo indisponível para este jogo.
+        broadcast ? (
+          <div className="overflow-hidden rounded-2xl border border-bet62-border bg-black/40">
+            <iframe src={broadcast} title="Transmissão do jogo" className="block aspect-video w-full" allow="fullscreen; autoplay; encrypted-media" allowFullScreen />
           </div>
-        </div>
+        ) : (
+          <div className="grid aspect-video place-items-center rounded-2xl border border-bet62-border bg-black/40 p-6 text-center text-sm text-white/60">
+            <div>
+              <MonitorPlay size={32} className="mx-auto mb-2 text-white/40" />
+              Transmissão ao vivo indisponível para este jogo.
+            </div>
+          </div>
+        )
       )}
 
       {view === 'estatisticas' && (
@@ -562,6 +579,11 @@ function Inner({ id }: { id: string }) {
               <h3 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-white/60">{live ? 'Ao vivo' : 'Jogo'}</h3>
               <StatBars rows={stats} />
               {e.periods && e.periods.length > 0 && <p className="mt-3 text-center text-xs text-white/45">Parciais: {e.periods.map((p) => `${p.home_score}-${p.away_score}`).join(' · ')}</p>}
+            </div>
+          )}
+          {statsFrame && (
+            <div className="overflow-hidden rounded-2xl border border-bet62-border bg-bet62-surface/50">
+              <iframe src={statsFrame} title="Estatísticas do jogo" className="block h-[420px] w-full md:h-[520px]" allow="fullscreen" />
             </div>
           )}
           {extraStats.length > 0 && (
@@ -595,7 +617,7 @@ function Inner({ id }: { id: string }) {
             </div>
           )}
           {betbyStats.error && <EmptyPanel>Estatísticas da BETBY indisponíveis: {betbyStats.error}</EmptyPanel>}
-          {!stats.length && !extraStats.length && !distRows.length && !betbyStats.error && (
+          {!stats.length && !extraStats.length && !distRows.length && !statsFrame && !betbyStats.error && (
             <EmptyPanel>{live ? 'A BETBY não enviou estatísticas para este evento.' : cfg?.statsEndpoint ? 'A fonte configurada não devolveu estatísticas pré-jogo para este evento.' : 'Sem fonte de estatísticas pré-jogo configurada. O feed de odds da BETBY não inclui, por si só, forma, confrontos diretos ou estatísticas históricas.'}</EmptyPanel>
           )}
         </section>

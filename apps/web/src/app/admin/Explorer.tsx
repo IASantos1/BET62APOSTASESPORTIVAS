@@ -8,7 +8,7 @@ import * as React from 'react';
 import { CheckCircle2, AlertTriangle, Play, Save, Trash2 } from 'lucide-react';
 import { useBoard, type BoardEvent } from '../../lib/board';
 import { fillTemplate, loadSiteConfig, type SiteConfig } from '../../lib/site-config';
-import { trackerCandidates, trackerUrl } from '../../lib/tracker';
+import { trackerCandidates, trackerFromWidgets, trackerUrl } from '../../lib/tracker';
 import { cn } from '../../lib/utils';
 
 const box = 'rounded-2xl border border-bet62-border bg-bet62-surface/50 p-5 space-y-3 text-sm';
@@ -143,13 +143,14 @@ export function IntegrationsCard() {
 }
 
 export function BetbyExplorer() {
-  const { events } = useBoard();
+  const { events, widgets, broadcasts } = useBoard();
   const [id, setId] = React.useState('');
   const [cfg, setCfg] = React.useState<SiteConfig>({});
   const [probes, setProbes] = React.useState<Probe[]>([]);
   const [running, setRunning] = React.useState(false);
   const [custom, setCustom] = React.useState('');
   const [trk, setTrk] = React.useState<{ provider: string; eventId: string } | null>(null);
+  const [broadcast, setBroadcast] = React.useState<string | null>(null);
   const [msg, setMsg] = React.useState<string | null>(null);
   const [needle, setNeedle] = React.useState('');
   const hits = React.useMemo(() => {
@@ -175,6 +176,9 @@ export function BetbyExplorer() {
   const feed = e?.status === 'live' ? 'live' : 'prematch';
   const fill = (tpl: string) => (e ? fillTemplate(tpl, e.id, feed).replace(/\{sport\}/g, e.betbySport ?? '1') : tpl);
   const cands = e ? trackerCandidates(e.raw) : [];
+  const sideWidgets = e ? widgets.get(e.id) ?? [] : [];
+  const sideCasts = e ? broadcasts.get(e.id) ?? [] : [];
+  const sideTracker = e ? trackerFromWidgets(sideWidgets, e.betbySport ?? '1') : null;
   const { markets: _m, ...rawNoMarkets } = (e?.raw ?? {}) as Record<string, unknown>;
 
   const run = async (tpls: string[]) => {
@@ -273,6 +277,39 @@ export function BetbyExplorer() {
           </details>
 
           <div className="space-y-2 rounded-xl border border-bet62-border p-3">
+            <b className="text-xs">Side feed (widgets do jogo)</b>
+            <p className="text-xs text-white/55">
+              O feed de odds não traz o id do minicampo. Ele vem no side feed <code>api/v1/side/brand/…</code> ({sideWidgets.length} widget(s),{' '}
+              {sideCasts.length} transmissão(ões)).
+            </p>
+            {sideWidgets.length ? (
+              sideWidgets.map((w, i) => (
+                <div key={`${w.id}-${w.type}-${i}`} className="break-all font-mono text-[11px] text-white/70">
+                  {w.id}:{w.type}
+                  {w.event_id !== undefined ? ` · event_id = ${w.event_id}` : ''}
+                  {w.url ? ` · ${w.url}` : ''}
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-white/55">Sem widgets no side feed para este jogo.</p>
+            )}
+            {sideTracker && (
+              <>
+                <p className="break-all font-mono text-[11px] text-white/45">{sideTracker}</p>
+                <iframe src={sideTracker} title="Minicampo do side feed" className="h-80 w-full rounded-lg border border-bet62-border" />
+              </>
+            )}
+            {sideCasts.filter((b) => b.url).map((b, i) => (
+              <button key={`cast-${i}`} className={btn} onClick={() => setBroadcast(b.url!)}>
+                <Play size={12} /> Testar transmissão {b.id}
+              </button>
+            ))}
+            {broadcast && (
+              <iframe src={broadcast} title="Transmissão de teste" className="aspect-video w-full rounded-lg border border-bet62-border" allowFullScreen />
+            )}
+          </div>
+
+          <div className="space-y-2 rounded-xl border border-bet62-border p-3">
             <b className="text-xs">Minicampo (tracker)</b>
             {cands.length ? (
               cands.map((c) => (
@@ -289,7 +326,10 @@ export function BetbyExplorer() {
                 </div>
               ))
             ) : (
-              <p className="text-xs text-white/55">Sem ID externo de tracking neste evento. Não uses o ID interno da BETBY: precisas de um ID de jogo fornecido por STATSCORE, Sportradar/BetRadar ou outro fornecedor ativo.</p>
+              <p className="text-xs text-white/55">
+                O evento em bruto do feed não tem id de tracking. O caminho normal é o side feed acima; aqui só se quiseres fixar um campo
+                concreto do evento (STATSCORE, Sportradar/BetRadar, LMT).
+              </p>
             )}
             <form
               className="flex flex-wrap gap-2"

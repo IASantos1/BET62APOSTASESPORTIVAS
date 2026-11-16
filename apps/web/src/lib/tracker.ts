@@ -1,8 +1,13 @@
-// Tracker (minicampo) da BETBY: a página dela /tracker.html recebe o fornecedor e o id do jogo nesse
-// fornecedor, p. ex. {"id":"statscore","sportId":"1","lang":"en-gb","eventId":6390437}.
-// O id não vem nos campos que usamos; procuramos no evento campos com nome de fornecedor/tracker.
-// O admin (Explorador BETBY) mostra o que existe e pode fixar o campo a usar (/api/config).
-import { BETBY_CONFIG, type BetbyEvent } from './betby';
+// Tracker (minicampo) da BETBY. A página /tracker.html do ui.invisiblesport.com recebe, no parâmetro
+// `providers`, um ou mais fornecedores separados por "|", cada um um JSON
+// {"id":"statscore","sportId":"1","lang":"en-gb","liveEvent":true,"eventId":6390437}.
+// O id do fornecedor (Statscore) NÃO vem no evento do feed de odds: vem no side feed
+// (ver lib/betby.ts, useBetbySide). O admin (Explorador BETBY) pode também fixar um campo do evento.
+import { BETBY_CONFIG, type BetbyEvent, type BetbySideItem } from './betby';
+
+const TRACKER_BASE = (process.env.NEXT_PUBLIC_BETBY_TRACKER_URL || 'https://ui.invisiblesport.com').replace(/\/$/, '');
+// Fornecedores aceites pela página do tracker (a chave é o `id` de cada provider).
+const TRACKER_PROVIDERS = new Set(['statscore', 'oddin', 'betgenius']);
 
 export interface TrackerCandidate { path: string; value: string; provider: string; }
 
@@ -63,19 +68,44 @@ export function trackerCandidates(raw: unknown): TrackerCandidate[] {
   return out;
 }
 
-export function trackerUrl(provider: string, sportId: string, eventId: string) {
-  const providers = JSON.stringify({ id: provider, sportId: String(sportId), lang: BETBY_CONFIG.locale.toLowerCase(), eventId: Number(eventId) || eventId });
-  const trackerBase = (process.env.NEXT_PUBLIC_BETBY_TRACKER_URL || 'https://demo.betby.com').replace(/\/$/, '');
-  return `${trackerBase}/tracker.html?providers=${encodeURIComponent(providers)}`;
+export function trackerUrl(provider: string, sportId: string, eventId: string, live = true) {
+  const providers = JSON.stringify({
+    id: provider,
+    sportId: String(sportId),
+    lang: BETBY_CONFIG.locale.toLowerCase(),
+    liveEvent: live,
+    eventId: Number(eventId) || eventId,
+  });
+  return `${TRACKER_BASE}/tracker.html?providers=${encodeURIComponent(providers)}`;
 }
 
-/** O tracker deste jogo (campo fixado no admin, senão o primeiro candidato), ou null. */
-export function trackerFor(raw: BetbyEvent | undefined, sportId: string | undefined, pref?: { path: string; provider: string } | null): string | null {
-  if (!raw || !sportId) return null;
+/**
+ * O minicampo deste jogo a partir dos widgets do side feed: o Statscore traz o id do jogo no
+ * fornecedor (`event_id`); os outros trazem um endereço pronto, que não serve para esta página.
+ */
+export function trackerFromWidgets(widgets: BetbySideItem[] | undefined, sportId: string, live = true): string | null {
+  const withId = widgets?.find(
+    (w) => TRACKER_PROVIDERS.has(w.id) && w.event_id !== undefined && w.event_id !== null && /^\d{3,}$/.test(String(w.event_id)),
+  );
+  return withId ? trackerUrl(withId.id, sportId, String(withId.event_id), live) : null;
+}
+
+/** O tracker deste jogo: widget do side feed, senão o campo fixado no admin, senão o primeiro candidato. */
+export function trackerFor(
+  raw: BetbyEvent | undefined,
+  sportId: string | undefined,
+  pref?: { path: string; provider: string } | null,
+  widgets?: BetbySideItem[],
+  live = true,
+): string | null {
+  if (!sportId) return null;
+  const fromWidget = trackerFromWidgets(widgets, sportId, live);
+  if (fromWidget) return fromWidget;
+  if (!raw) return null;
   if (pref) {
     const v = getPath(raw, pref.path);
-    if (v !== undefined && v !== null && /^\d{3,}$/.test(String(v).replace(/^sr:match:/, '')) && providerOf(pref.provider)) return trackerUrl(providerOf(pref.provider)!, sportId, String(v).replace(/^sr:match:/, ''));
+    if (v !== undefined && v !== null && /^\d{3,}$/.test(String(v).replace(/^sr:match:/, '')) && providerOf(pref.provider)) return trackerUrl(providerOf(pref.provider)!, sportId, String(v).replace(/^sr:match:/, ''), live);
   }
   const c = trackerCandidates(raw)[0];
-  return c ? trackerUrl(c.provider, sportId, c.value) : null;
+  return c ? trackerUrl(c.provider, sportId, c.value, live) : null;
 }

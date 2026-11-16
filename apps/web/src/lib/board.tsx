@@ -4,7 +4,7 @@
 // desportos e ligas do catálogo e normalizados para as páginas (Destaques, Desporto, Ao Vivo,
 // Próximos, liga). Um único provider faz as leituras; as páginas só leem o resultado.
 import * as React from 'react';
-import { useBetbyFeed, type BetbyDictionaries, type BetbyEvent, type BetbyMarkets } from './betby';
+import { useBetbyFeed, useBetbySide, type BetbyDictionaries, type BetbyEvent, type BetbyMarkets, type BetbySideItem } from './betby';
 import { SPORT_BY_KEY, classifyLeague, isBigTeam, sportKeyOf, sportRank, type SportKey } from './sports/catalog';
 
 export interface BoardEvent {
@@ -81,6 +81,10 @@ interface BoardState {
   loading: boolean;
   error: string | null;
   updatedAt: Date | null;
+  /** Widgets por jogo (minicampo e estatísticas) do side feed da BETBY, por id de evento. */
+  widgets: Map<string, BetbySideItem[]>;
+  /** Transmissões por jogo, por id de evento. */
+  broadcasts: Map<string, BetbySideItem[]>;
   reload: () => void;
 }
 
@@ -284,6 +288,7 @@ export const byPriority = (a: BoardEvent, b: BoardEvent) => a.tier - b.tier || (
 export function BoardProvider({ children }: { children: React.ReactNode }) {
   const live = useBetbyFeed('live', 15000);
   const pre = useBetbyFeed('prematch', 30000);
+  const side = useBetbySide(20000);
 
   const value = React.useMemo<BoardState>(() => {
     const byId = new Map<string, BoardEvent>();
@@ -312,12 +317,14 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       loading: live.loading && pre.loading,
       error: live.error && pre.error ? live.error : null,
       updatedAt: live.updatedAt ?? pre.updatedAt,
+      widgets: side.widgets,
+      broadcasts: side.broadcasts,
       reload: () => {
         void live.reload();
         void pre.reload();
       },
     };
-  }, [live.events, live.dictionaries, live.loading, live.error, live.updatedAt, pre.events, pre.dictionaries, pre.loading, pre.error, pre.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [live.events, live.dictionaries, live.loading, live.error, live.updatedAt, pre.events, pre.dictionaries, pre.loading, pre.error, pre.updatedAt, side.widgets, side.broadcasts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const moves = useOddMoves(value.events);
   return (
