@@ -107,6 +107,17 @@ export default function CasinoPage() {
       });
   }, []);
   React.useEffect(() => setShown(PAGE), [tab, provider, q]);
+  // Vindo da página inicial (?game=ID): abre esse jogo assim que a lista chega.
+  const opened = React.useRef(false);
+  React.useEffect(() => {
+    if (opened.current || !games.length) return;
+    const id = Number(new URLSearchParams(window.location.search).get('game'));
+    const g = id ? games.find((x) => x.id === id) : undefined;
+    if (g) {
+      opened.current = true;
+      void play(g);
+    }
+  }, [games]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const providers = React.useMemo(() => {
     const m = new Map<string, number>();

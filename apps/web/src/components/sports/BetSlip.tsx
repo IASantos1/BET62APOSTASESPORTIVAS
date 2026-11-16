@@ -29,8 +29,8 @@ function SlipBody() {
               <Trash2 size={16} />
             </button>
           )}
-          <button onClick={() => setOpen(false)} className="rounded-md p-2 text-white/50 hover:text-white xl:hidden" aria-label="Fechar boletim">
-            <X size={16} />
+          <button onClick={() => setOpen(false)} className="grid h-10 w-10 place-items-center rounded-lg bg-white/5 text-white/70 hover:text-white xl:hidden" aria-label="Fechar boletim">
+            <X size={20} />
           </button>
         </div>
       </div>
@@ -95,14 +95,20 @@ function SlipBody() {
           )}
           <label className="flex items-center justify-between gap-2">
             <span className="text-white/60">{builder || mode === 'multiple' ? 'Valor' : 'Valor por aposta'}</span>
-            <input
-              type="number"
-              min={1}
-              value={stake}
-              onChange={(e) => setStake(Math.max(0, Number(e.target.value)))}
-              className="w-24 rounded-lg border border-bet62-border bg-bet62-bg px-2 py-1 text-right font-mono"
-            />
+            <StakeInput value={stake} onChange={setStake} />
           </label>
+          <div className="grid grid-cols-4 gap-1.5">
+            {[5, 10, 20, 50].map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setStake(v)}
+                className={cn('rounded-lg border py-1.5 text-xs font-bold', stake === v ? 'border-bet62-primary text-bet62-primary' : 'border-bet62-border text-white/70 hover:text-white')}
+              >
+                {v} €
+              </button>
+            ))}
+          </div>
           <div className="flex justify-between text-xs text-white/50">
             <span>Total apostado</span>
             <span className="font-mono">{totalStake.toFixed(2)} €</span>
@@ -120,6 +126,41 @@ function SlipBody() {
           {notice && <p className="text-xs text-amber-300">{notice}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Valor livre: o campo começa vazio (sem o 0 a atrapalhar), aceita só números e vírgula/ponto,
+ * nunca valores negativos.
+ */
+function StakeInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [text, setText] = React.useState(value > 0 ? String(value).replace('.', ',') : '');
+  React.useEffect(() => {
+    const parsed = Number(text.replace(',', '.'));
+    if (value !== parsed && !(value === 0 && text === '')) setText(value > 0 ? String(value).replace('.', ',') : '');
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <div className="flex items-center gap-1 rounded-lg border border-bet62-border bg-bet62-bg px-2 focus-within:border-bet62-primary">
+      <input
+        type="text"
+        inputMode="decimal"
+        autoComplete="off"
+        placeholder="0,00"
+        value={text}
+        onFocus={(e) => e.currentTarget.select()}
+        onChange={(e) => {
+          const clean = e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',').replace(/,(?=.*,)/g, '');
+          const [int, dec] = clean.split(',');
+          const next = dec !== undefined ? `${int.slice(0, 7)},${dec.slice(0, 2)}` : int.slice(0, 7);
+          setText(next);
+          const n = Number(next.replace(',', '.'));
+          onChange(Number.isFinite(n) && n > 0 ? n : 0);
+        }}
+        className="w-20 bg-transparent py-1.5 text-right font-mono outline-none"
+        aria-label="Valor da aposta"
+      />
+      <span className="text-xs text-white/50">€</span>
     </div>
   );
 }
@@ -144,8 +185,12 @@ export function BetSlip() {
         </button>
       )}
       {ready && open && (
-        <div className="xl:hidden fixed inset-0 z-50 flex justify-end bg-black/60" onClick={() => setOpen(false)}>
-          <div className="h-full w-full max-w-sm bg-bet62-bg border-l border-bet62-border" onClick={(e) => e.stopPropagation()}>
+        <div className="xl:hidden fixed inset-0 z-[60] flex justify-end bg-black/60" onClick={() => setOpen(false)}>
+          <div
+            className="h-full w-full max-w-sm border-l border-bet62-border bg-bet62-bg"
+            style={{ paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <SlipBody />
           </div>
         </div>

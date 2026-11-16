@@ -13,6 +13,7 @@ import {
   MatchCard,
   SectionHead,
 } from '../components/sports/blocks';
+import { CasinoBubbles } from '../components/sports/CasinoBubbles';
 import { drawAccas, drawBuilders, pickHighlights, useBoard } from '../lib/board';
 
 export default function HomePage() {
@@ -24,6 +25,7 @@ export default function HomePage() {
 
   return (
     <SportsShell>
+      <CasinoBubbles />
       <LeagueCards leagues={leagues} />
 
       {loading && !events.length ? (
