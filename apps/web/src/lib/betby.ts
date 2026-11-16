@@ -67,6 +67,29 @@ export function feedUrl(feed: BetbyFeed, cursor: string | number) {
   return `${baseUrl}/api/v4/${feed}/brand/${brandId}/${locale}/${cursor}`;
 }
 
+export interface BetbyDescriptions {
+  markets?: Record<
+    string,
+    { name: string; variants?: Record<string, { name: string; outcomes: { id: string; name: string }[] }[]> }
+  >;
+}
+
+export interface BetbyDistribution {
+  markets?: { market_id: number; outcomes: { outcome_id: number; percentage: number }[] }[];
+}
+
+/** Nomes dos mercados e seleções de um jogo (sobretudo mercados com jogadores ou variantes). */
+export async function fetchDescriptions(eventId: string): Promise<BetbyDescriptions> {
+  const { baseUrl, brandId, locale } = BETBY_CONFIG;
+  return getJson(`${baseUrl}/api/v3/descriptions/brand/${brandId}/event/${eventId}/${locale}`) as Promise<BetbyDescriptions>;
+}
+
+/** Percentagem das apostas em cada seleção (ex.: 1X2). */
+export async function fetchBetDistribution(eventId: string): Promise<BetbyDistribution> {
+  const { baseUrl, brandId } = BETBY_CONFIG;
+  return getJson(`${baseUrl}/api/v1/betdistribution/brand/${brandId}/event/${eventId}`) as Promise<BetbyDistribution>;
+}
+
 async function getJson(url: string, signal?: AbortSignal) {
   const res = await fetch(url, { headers: { accept: 'application/json' }, cache: 'no-store', signal });
   const text = await res.text();

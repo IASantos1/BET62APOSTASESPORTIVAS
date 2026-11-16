@@ -8,7 +8,17 @@ import { Header } from '../../../../components/layout/Header';
 import { Footer } from '../../../../components/layout/Footer';
 import { Card, CardContent } from '../../../../components/ui/Card';
 import { Button } from '../../../../components/ui/Button';
-import { eventLabel, eventStart, eventTitle, useBetbyFeed, type BetbyFeed } from '../../../../lib/betby';
+import {
+  eventLabel,
+  eventStart,
+  eventTitle,
+  fetchBetDistribution,
+  fetchDescriptions,
+  useBetbyFeed,
+  type BetbyDescriptions,
+  type BetbyDistribution,
+  type BetbyFeed,
+} from '../../../../lib/betby';
 
 interface LiveMatchPageProps {
   params: { matchId: string };
@@ -33,6 +43,8 @@ const OUTCOME_NAMES: Record<string, string> = {
 };
 
 function variantLabel(variant: string) {
+  // "variant=..." são ids internos (as seleções já trazem o nome); o resto são linhas como "total=2.5".
+  if (variant.startsWith('variant=') || variant === 'type=general') return '';
   return variant.replace(/\|/g, ' · ').replace(/=/g, ' ');
 }
 
@@ -42,6 +54,24 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
   const match = events.find((e) => e.id === params.matchId);
   const markets = match ? Object.entries(match.markets) : [];
   const start = match ? eventStart(match) : null;
+
+  const [descriptions, setDescriptions] = React.useState<BetbyDescriptions>({});
+  const [distribution, setDistribution] = React.useState<BetbyDistribution>({});
+  React.useEffect(() => {
+    fetchDescriptions(params.matchId).then(setDescriptions).catch(() => setDescriptions({}));
+    fetchBetDistribution(params.matchId).then(setDistribution).catch(() => setDistribution({}));
+  }, [params.matchId]);
+
+  const marketName = (marketId: string) =>
+    descriptions.markets?.[marketId]?.name ?? MARKET_NAMES[marketId] ?? `Mercado ${marketId}`;
+  const outcomeName = (marketId: string, variant: string, outcomeId: string) =>
+    descriptions.markets?.[marketId]?.variants?.[variant]?.[0]?.outcomes.find((o) => o.id === outcomeId)?.name ??
+    OUTCOME_NAMES[outcomeId] ??
+    outcomeId;
+  const share = (marketId: string, outcomeId: string) =>
+    distribution.markets
+      ?.find((m) => String(m.market_id) === marketId)
+      ?.outcomes.find((o) => String(o.outcome_id) === outcomeId)?.percentage;
 
   return (
     <div className="min-h-screen bg-bet62-bg">
@@ -103,18 +133,23 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
                     {markets.map(([marketId, variants]) => (
                       <div key={marketId} className="rounded-2xl border border-bet62-border bg-bet62-surface/40 p-4 space-y-3">
                         <p className="text-sm font-semibold text-white/85">
-                          {MARKET_NAMES[marketId] ?? `Mercado ${marketId}`}
+                          {marketName(marketId)}
                         </p>
                         {Object.entries(variants).map(([variant, outcomes]) => (
                           <div key={variant} className="space-y-2">
-                            {variant && <p className="text-xs text-white/40">{variantLabel(variant)}</p>}
+                            {variantLabel(variant) && <p className="text-xs text-white/40">{variantLabel(variant)}</p>}
                             <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
                               {Object.entries(outcomes).map(([outcomeId, o]) => (
                                 <div
                                   key={outcomeId}
                                   className="flex items-center justify-between gap-2 rounded-xl border border-bet62-border/70 bg-bet62-bg/40 px-3 py-2 text-sm"
                                 >
-                                  <span className="text-white/70 truncate">{OUTCOME_NAMES[outcomeId] ?? outcomeId}</span>
+                                  <span className="text-white/70 truncate" title={outcomeName(marketId, variant, outcomeId)}>
+                                    {outcomeName(marketId, variant, outcomeId)}
+                                    {share(marketId, outcomeId) !== undefined && (
+                                      <span className="ml-1 text-xs text-white/40">{share(marketId, outcomeId)}%</span>
+                                    )}
+                                  </span>
                                   <span className={o.b === 1 ? 'font-mono text-white/30 line-through' : 'font-mono font-bold text-bet62-primary'}>
                                     {o.k ?? '—'}
                                   </span>
