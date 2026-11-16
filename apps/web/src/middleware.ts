@@ -50,8 +50,33 @@ function checkRateLimit(ip: string): { limited: boolean; remaining: number; rese
   return { limited: false, remaining: MAX_REQUESTS - record.count, resetAt: record.resetAt };
 }
 
+// Proteção simples da área admin: ativa quando ADMIN_PASSWORD está definida (utilizador: admin).
+function isAdminRoute(pathname: string): boolean {
+  return pathname === '/admin' || pathname.startsWith('/admin/') || pathname.startsWith('/api/admin/');
+}
+
+function adminAuthorized(request: NextRequest): boolean {
+  const password = process.env.ADMIN_PASSWORD;
+  if (!password) return true;
+  const header = request.headers.get('authorization') ?? '';
+  if (!header.startsWith('Basic ')) return false;
+  try {
+    const [user, pass] = atob(header.slice(6)).split(':');
+    return user === 'admin' && pass === password;
+  } catch {
+    return false;
+  }
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (isAdminRoute(pathname) && !adminAuthorized(request)) {
+    return new NextResponse('Autenticação necessária', {
+      status: 401,
+      headers: { 'WWW-Authenticate': 'Basic realm="BET62 Admin", charset="UTF-8"' },
+    });
+  }
 
   if (isRateLimitedRoute(pathname)) {
     const ip = getClientIP(request);
@@ -120,5 +145,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/login', '/registro', '/api/:path*'],
+  matcher: ['/login', '/registro', '/admin/:path*', '/api/:path*'],
 };
