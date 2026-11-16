@@ -467,13 +467,36 @@ function Inner({ id }: { id: string }) {
 
   if (!e) return <EmptyPanel>{loading ? 'A carregar…' : 'Jogo não encontrado (pode já ter terminado).'}</EmptyPanel>;
 
-  const marketName = (m: string) => descriptions.markets?.[m]?.name ?? MARKET_NAMES[m] ?? `Mercado ${m}`;
+  // A BETBY identifica mercados e seleções por IDs numéricos. As descrições oficiais
+  // são a fonte principal; normalizamos as chaves porque algumas respostas podem usar números.
+  const marketDescription = (marketId: string) => {
+    const all = descriptions.markets ?? {};
+    if (all[marketId]) return all[marketId];
+    const normalized = String(Number(marketId));
+    const key = Object.keys(all).find((candidate) => /^\\d+$/.test(candidate) && String(Number(candidate)) === normalized);
+    return key ? all[key] : undefined;
+  };
+  const variantDescription = (marketId: string, variantId: string) => {
+    const variants = marketDescription(marketId)?.variants;
+    if (!variants) return undefined;
+    if (variants[variantId]) return variants[variantId][0];
+    const normalized = (value: string) => value.trim().replace(/^variant=/i, '').toLowerCase();
+    const match = Object.entries(variants).find(([key]) => normalized(key) === normalized(variantId));
+    if (match?.[1]?.length) return match[1][0];
+    // Só usamos a única descrição disponível quando não há ambiguidade.
+    const entries = Object.values(variants).flat();
+    return entries.length === 1 ? entries[0] : undefined;
+  };
+  const marketName = (m: string) => {
+    const official = marketDescription(m)?.name?.trim();
+    return official || MARKET_NAMES[m] || `Mercado ${m}`;
+  };
   const outcomeName = (m: string, variant: string, o: string) => {
-    const described = descriptions.markets?.[m]?.variants?.[variant]?.[0]?.outcomes.find((x) => x.id === o)?.name;
-    if (described) return described;
+    const described = variantDescription(m, variant)?.outcomes.find((x) => String(x.id) === String(o))?.name;
+    if (described?.trim()) return described.trim();
     if (o === '1' || o === '4' || o === '1714') return e.home;
     if (o === '3' || o === '5' || o === '1715') return e.away;
-    return OUTCOME_NAMES[o] ?? o;
+    return OUTCOME_NAMES[o] ?? `Seleção ${o}`;
   };
   const share = (m: string, o: string) =>
     distribution.markets?.find((x) => String(x.market_id) === m)?.outcomes.find((x) => String(x.outcome_id) === o)?.percentage;
