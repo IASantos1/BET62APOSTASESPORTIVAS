@@ -163,7 +163,7 @@ async function leaguePack(leagueId: number) {
 
 /**
  * Emblema de uma equipa (URL do media.api-sports.io) ou null. Com `leagueId` (ligas principais),
- * procura primeiro nas equipas da liga; senão pelo nome. Cada resposta fica guardada um mês.
+ * procura primeiro nas equipas da liga; senão pelo nome. O URL encontrado fica guardado sem expiração.
  */
 const API_BY_SPORT: Partial<Record<string, Api>> = {
   futebol: 'football',
