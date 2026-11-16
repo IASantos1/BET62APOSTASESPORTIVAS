@@ -13,14 +13,27 @@ import {
   type BoardEvent,
   type Builder,
   type LeagueNode,
+  useOddMove,
 } from '../../lib/board';
 import { SPORTS, SPORT_BY_KEY, countryLabel, popularLeagues, sportRank, type SportKey } from '../../lib/sports/catalog';
 import { useSlip } from '../../stores/slip.store';
 import { cn } from '../../lib/utils';
 import { Flag } from './Flag';
+import { LeagueLogo, TeamLogo, leagueApiId } from './Logos';
 import { fmtOdds, fmtWhen, leagueHref, matchHref } from './links';
 
 // ---------- odds ----------
+
+/** Seta da última mudança da odd (verde a subir, vermelha a descer). */
+export function OddArrow({ moveKey }: { moveKey: string }) {
+  const mv = useOddMove(moveKey);
+  if (!mv) return null;
+  return (
+    <span key={mv.at} className={cn('text-[10px] leading-none', mv.dir === 'up' ? 'odd-up' : 'odd-down')} aria-label={mv.dir === 'up' ? 'Odd a subir' : 'Odd a descer'}>
+      {mv.dir === 'up' ? '▲' : '▼'}
+    </span>
+  );
+}
 
 export function OddButton({ event, outcomeId, marketId, label, compact = false }: { event: BoardEvent; outcomeId: string; marketId: string; label: string; compact?: boolean }) {
   const toggle = useSlip((s) => s.toggle);
@@ -47,7 +60,10 @@ export function OddButton({ event, outcomeId, marketId, label, compact = false }
       )}
     >
       <span className={cn('text-xs', selected ? 'text-onbrand/80' : 'text-white/55')}>{label}</span>
-      <b className={cn('font-mono', selected ? 'text-onbrand' : 'text-bet62-odd-price')}>{blocked ? '—' : fmtOdds(odds)}</b>
+      <span className="flex items-center gap-1">
+        <OddArrow moveKey={`${event.id}|${marketId}||${outcomeId}`} />
+        <b className={cn('font-mono', selected ? 'text-onbrand' : 'text-bet62-odd-price')}>{blocked ? '—' : fmtOdds(odds)}</b>
+      </span>
     </button>
   );
 }
@@ -82,11 +98,17 @@ export function EventRow({ e }: { e: BoardEvent }) {
           </div>
           <div className="min-w-0 flex-1 text-sm">
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate">{e.home}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <TeamLogo sport={e.sport} name={e.home} league={leagueApiId(e.sport, e.league, e.country)} size={16} />
+                <span className="truncate">{e.home}</span>
+              </span>
               {live && e.score && <b className="font-mono">{e.score.home}</b>}
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="truncate">{e.away}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <TeamLogo sport={e.sport} name={e.away} league={leagueApiId(e.sport, e.league, e.country)} size={16} />
+                <span className="truncate">{e.away}</span>
+              </span>
               {live && e.score && <b className="font-mono">{e.score.away}</b>}
             </div>
           </div>
@@ -127,8 +149,7 @@ export function CompetitionGroups({ events, limit = Infinity }: { events: BoardE
               className="flex items-center justify-between gap-2 bg-white/[0.03] px-3 py-2 text-xs hover:bg-white/[0.06]"
             >
               <span className="flex min-w-0 items-center gap-2">
-                <span>{SPORT_BY_KEY[e.sport].icon}</span>
-                <Flag country={e.country} />
+                <LeagueLogo sport={e.sport} league={e.league} country={e.country} />
                 <span className="truncate text-white/50">{countryLabel(e.country)}</span>
                 <b className="truncate text-white">{e.league}</b>
               </span>
@@ -170,8 +191,9 @@ export function MatchCard({ e }: { e: BoardEvent }) {
     <div className="snap-start w-[17rem] shrink-0 rounded-2xl border border-bet62-border bg-bet62-surface/60 p-3 space-y-3">
       <Link href={matchHref(e.id, live)} className="block space-y-2">
         <div className="flex items-center justify-between gap-2 text-[11px]">
-          <span className="truncate text-white/50">
-            {SPORT_BY_KEY[e.sport].icon} {e.league}
+          <span className="flex min-w-0 items-center gap-1.5 truncate text-white/50">
+            <LeagueLogo sport={e.sport} league={e.league} country={e.country} className="h-4 w-4" />
+            <span className="truncate">{e.league}</span>
           </span>
           {live ? <span className="shrink-0 font-semibold text-bet62-primary">● {e.clock || 'Ao vivo'}</span> : <span className="shrink-0 text-white/50">{fmtWhen(e.startTime)}</span>}
         </div>
@@ -181,7 +203,10 @@ export function MatchCard({ e }: { e: BoardEvent }) {
             [e.away, e.score?.away],
           ].map(([name, s], i) => (
             <div key={i} className="flex justify-between gap-2">
-              <span className="truncate">{name}</span>
+              <span className="flex min-w-0 items-center gap-2">
+                <TeamLogo sport={e.sport} name={String(name)} league={leagueApiId(e.sport, e.league, e.country)} size={20} />
+                <span className="truncate">{name}</span>
+              </span>
               {live && s !== undefined && <b className="font-mono">{s}</b>}
             </div>
           ))}
@@ -219,7 +244,13 @@ export function LeagueCards({ leagues, sport = '' }: { leagues: LeagueNode[]; sp
           href={leagueHref(l.sport, l.competition)}
           className="flex w-28 shrink-0 flex-col items-center gap-1.5 rounded-2xl border border-bet62-border bg-bet62-surface/50 px-2 py-3 text-center hover:border-bet62-primary/40"
         >
-          <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-xl">{SPORT_BY_KEY[l.sport].icon}</span>
+          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/90 p-1.5 text-xl">
+            {leagueApiId(l.sport, l.label, l.country) || l.sport !== 'futebol' ? (
+              <LeagueLogo sport={l.sport} league={l.label} country={l.country} className="h-8 w-8" />
+            ) : (
+              SPORT_BY_KEY[l.sport].icon
+            )}
+          </span>
           <b className="line-clamp-2 text-[11px] leading-tight">{l.label}</b>
           <span className="flex items-center gap-1 text-[10px] text-white/40">
             <Flag country={l.country} className="h-2.5 w-3.5" />

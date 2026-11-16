@@ -138,7 +138,7 @@ export function BetSlip() {
       {ready && count > 0 && !open && (
         <button
           onClick={() => setOpen(true)}
-          className="xl:hidden fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full bg-bet62-primary px-4 py-3 font-bold text-onbrand shadow-lg"
+          className="xl:hidden fixed bottom-[calc(76px+env(safe-area-inset-bottom))] lg:bottom-4 right-4 z-40 flex items-center gap-2 rounded-full bg-bet62-primary px-4 py-3 font-bold text-onbrand shadow-lg"
         >
           <Ticket size={18} /> Boletim <span className="rounded-full bg-white/20 px-2 text-xs">{count}</span>
         </button>

@@ -191,3 +191,45 @@ html.light {
     background-position: 200% 0;
   }
 }
+
+/* Degradê vermelho (como o verde do outro projeto): brilho no topo da página e nos destaques. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 45% at 85% -5%, rgb(225 29 72 / 0.16), transparent 70%),
+    radial-gradient(45% 40% at 5% 105%, rgb(225 29 72 / 0.08), transparent 70%);
+}
+html.light body::before {
+  background:
+    radial-gradient(60% 45% at 85% -5%, rgb(225 29 72 / 0.14), transparent 70%),
+    radial-gradient(45% 40% at 5% 105%, rgb(225 29 72 / 0.07), transparent 70%);
+}
+.hero-glow {
+  background:
+    radial-gradient(60% 80% at 85% 10%, rgb(225 29 72 / 0.22), transparent 60%),
+    radial-gradient(50% 60% at 10% 100%, rgb(225 29 72 / 0.10), transparent 60%),
+    rgb(var(--c-surface) / 0.6);
+}
+.match-glow {
+  background: radial-gradient(70% 90% at 50% 0%, rgb(225 29 72 / 0.22), transparent 65%), rgb(var(--c-surface) / 0.6);
+}
+
+/* Odds a subir (verde) e a descer (vermelho): a seta aparece e desvanece. */
+@keyframes odd-move {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+.odd-up, .odd-down { animation: odd-move 6s ease-out forwards; }
+.odd-up { color: #22c55e; }
+.odd-down { color: #ef4444; }
+.odd-flash-up { box-shadow: inset 0 -2px 0 #22c55e; }
+.odd-flash-down { box-shadow: inset 0 -2px 0 #ef4444; }
+
+/* Espaço para o menu do rodapé no telemóvel. */
+@media (max-width: 1023px) {
+  body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+}

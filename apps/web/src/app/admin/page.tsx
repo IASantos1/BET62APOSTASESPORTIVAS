@@ -7,6 +7,7 @@ import { Card, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
+import { BetbyExplorer, IntegrationsCard } from './Explorer';
 import { BETBY_CONFIG, eventTitle, feedUrl, useBetbyFeed, type BetbyFeed } from '../../lib/betby';
 
 // Diagnóstico das URLs da BETBY, lidas no navegador de quem abre esta página.
@@ -94,7 +95,7 @@ export default function AdminPage() {
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl md:text-4xl font-black tracking-tight">Administração</h1>
-            <p className="mt-2 text-white/60">Diagnóstico das URLs da BETBY.</p>
+            <p className="mt-2 text-white/60">Integrações, Explorador BETBY e diagnóstico das URLs.</p>
           </div>
           {authorized && (
             <Button variant="ghost" onClick={() => void logout()} aria-label="Sair">
@@ -136,6 +137,8 @@ export default function AdminPage() {
                 base: {BETBY_CONFIG.baseUrl} · brand: {BETBY_CONFIG.brandId} · locale: {BETBY_CONFIG.locale}
               </CardContent>
             </Card>
+            <IntegrationsCard />
+            <BetbyExplorer />
             <FeedCard feed="live" />
             <FeedCard feed="prematch" />
           </>
