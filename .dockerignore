@@ -1,0 +1,9 @@
+.git
+**/node_modules
+**/.next
+**/.turbo
+**/.cache
+*.log
+.env
+.env.*
+services
