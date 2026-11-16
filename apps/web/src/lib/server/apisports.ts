@@ -112,7 +112,8 @@ export function sameTeam(a: string, b: string) {
 
 const logos = new FileCache<string | null>('team-logos');
 const missingLogos = new FileCache<boolean>('team-logos-missing');
-const NEGATIVE_CACHE = 30 * 60_000;
+// Falhas temporárias ou quota não devem esconder emblemas durante meia hora.
+const NEGATIVE_CACHE = 5 * 60_000;
 const MONTH = 30 * 86_400_000;
 const inflight = new Map<string, Promise<string | null>>();
 
