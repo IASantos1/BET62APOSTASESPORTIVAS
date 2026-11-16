@@ -91,7 +91,7 @@ function variantLabel(variant: string) {
 
 /** Ordena linhas de totais/handicaps pelo valor numérico, nunca pela ordem de chegada do JSON. */
 function variantLineValue(variant: string): number | null {
-  const match = variant.match(/(?:^|[|;])(?:total|hcp|handicap|spread|line)=(-?\\d+(?:\\.\\d+)?)/i);
+  const match = variant.match(/(?:^|[|;])(?:total|hcp|handicap|spread|line)=(-?\d+(?:\.\d+)?)/i);
   return match ? Number(match[1]) : null;
 }
 
