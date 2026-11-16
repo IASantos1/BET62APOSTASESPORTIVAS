@@ -4,7 +4,7 @@
 // cada odd clicável para o boletim.
 import Link from 'next/link';
 import * as React from 'react';
-import { Activity, ArrowLeft, BarChart3, Clock3, MonitorPlay, Ticket } from 'lucide-react';
+import { Activity, ArrowLeft, BarChart3, Clock3, MonitorPlay } from 'lucide-react';
 import { SportsShell } from '../../../../components/sports/SportsShell';
 import { EmptyPanel } from '../../../../components/sports/blocks';
 import { LeagueLogo, TeamLogo, leagueApiId } from '../../../../components/sports/Logos';
@@ -433,7 +433,6 @@ function Inner({ id }: { id: string }) {
   const e = events.find((x) => x.id === id);
   const picks = useSlip((s) => s.picks);
   const toggle = useSlip((s) => s.toggle);
-  const setSlipOpen = useSlip((s) => s.setOpen);
   const cfg = useSiteConfig();
   const { setTracker } = useSportsTracker();
   const live = e?.status === 'live';
@@ -446,7 +445,7 @@ function Inner({ id }: { id: string }) {
   const endpoint = useEventEndpoint(id, feed, cfg?.eventEndpoint, cfg !== null && !!e, e ? Object.keys(e.markets).length : 0);
   const fullMarketState = useFullMarkets(id, feed, endpoint);
   const fullMarkets = fullMarketState.markets;
-  const betbyStats = useBetbyStats(id, feed, cfg?.statsEndpoint, live || view === 'estatisticas');
+  const betbyStats = useBetbyStats(id, feed, cfg?.statsEndpoint, view === 'estatisticas');
   const sideWidgets = widgets.get(id);
   const tracker = live && e ? trackerFor(e.raw, e.betbySport, cfg?.trackerField, sideWidgets, true) : null;
   React.useEffect(() => {
@@ -467,20 +466,6 @@ function Inner({ id }: { id: string }) {
   }, [id]);
 
   if (!e) return <EmptyPanel>{loading ? 'A carregar…' : 'Jogo não encontrado (pode já ter terminado).'}</EmptyPanel>;
-
-  const currentPicks = picks.filter((pick) => pick.eventId === e.id);
-  const goToBet = () => {
-    if (currentPicks.length > 0) {
-      setSlipOpen(true);
-      if (window.matchMedia('(min-width: 1280px)').matches) {
-        window.requestAnimationFrame(() => document.getElementById('bet-slip')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-      }
-      return;
-    }
-    setView('mercados');
-    setCat('todos');
-    window.requestAnimationFrame(() => document.getElementById('match-markets')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-  };
 
   const marketName = (m: string) => descriptions.markets?.[m]?.name ?? MARKET_NAMES[m] ?? `Mercado ${m}`;
   const outcomeName = (m: string, variant: string, o: string) => {
@@ -516,8 +501,7 @@ function Inner({ id }: { id: string }) {
     .filter((m) => String(m.market_id) in allMarkets)
     .slice(0, 4);
 
-  // Ao vivo: só Tracker e Live. As estatísticas aparecem sempre abaixo dos mercados (não como aba).
-  // Pré-jogo: só Estatísticas (não há tracker nem transmissão).
+  // Ao vivo: Tracker e Live. Pré-jogo: Estatísticas (não há tracker nem transmissão).
   const views: [View, string, React.ReactNode][] = live
     ? [['tracker', 'Tracker', <Activity key="t" size={15} />], ['live', 'Live', <MonitorPlay key="l" size={15} />]]
     : [['estatisticas', 'Estatísticas', <BarChart3 key="s" size={15} />]];
@@ -566,7 +550,7 @@ function Inner({ id }: { id: string }) {
         {view === 'tracker' && !desktopTracker && (
           <div className="overflow-hidden rounded-2xl border border-bet62-border bg-bet62-surface/50 xl:hidden">
             {tracker ? (
-              <iframe src={tracker} title="Tracker do jogo" className="block h-[min(55dvh,420px)] min-h-[280px] w-full sm:h-[min(60dvh,520px)] sm:min-h-[360px]" allow="fullscreen" />
+              <iframe src={tracker} title="Tracker do jogo" className="block h-[min(55dvh,412px)] min-h-[280px] w-full sm:h-[min(60dvh,512px)] sm:min-h-[360px]" allow="fullscreen" />
             ) : (
               <p className="p-6 text-sm text-white/60">
                 Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.
@@ -607,14 +591,6 @@ function Inner({ id }: { id: string }) {
             {label}
           </button>
         ))}
-        <button
-          type="button"
-          onClick={goToBet}
-          className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-sm font-bold text-emerald-200 hover:bg-emerald-500/25 sm:flex-none"
-        >
-          <Ticket size={15} />
-          Aposta Já
-        </button>
       </div>
 
       {view === 'estatisticas' && (
@@ -735,29 +711,6 @@ function Inner({ id }: { id: string }) {
             )}
           </section>
 
-          {/* Estatísticas sempre visíveis abaixo dos mercados (ao vivo). */}
-          {live && (stats.length > 0 || statsFrame || extraStats.length > 0) && (
-            <section className="space-y-3">
-              {stats.length > 0 && (
-                <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
-                  <h3 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-white/60">Ao vivo</h3>
-                  <StatBars rows={stats} />
-                  {e.periods && e.periods.length > 0 && <p className="mt-3 text-center text-xs text-white/45">Parciais: {e.periods.map((p) => `${p.home_score}-${p.away_score}`).join(' · ')}</p>}
-                </div>
-              )}
-              {statsFrame && (
-                <div className="overflow-hidden rounded-2xl border border-bet62-border bg-bet62-surface/50">
-                  <iframe src={statsFrame} title="Estatísticas do jogo" className="block h-[360px] w-full md:h-[460px]" allow="fullscreen" />
-                </div>
-              )}
-              {extraStats.length > 0 && (
-                <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
-                  <h3 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-white/60">Estatísticas</h3>
-                  <StatBars rows={extraStats} />
-                </div>
-              )}
-            </section>
-          )}
         </>
       )}
     </>
