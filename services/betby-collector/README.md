@@ -1,0 +1,54 @@
+# BET62 — BETBY Data Collector
+
+Standalone Node.js service for collecting BETBY demo API snapshots. It is intentionally outside `apps/web` and does not modify the main BET62 web startup, wallet, payments, or database.
+
+## What it collects
+
+- Live feed: `/api/v4/live/brand/{brand}/{locale}/{cursor}`
+- Prematch feed: `/api/v4/prematch/brand/{brand}/{locale}/{cursor}`
+- Full raw JSON snapshots (only when the response changes), plus extracted event records with competitors, scores, clock, statistics and markets.
+
+The raw response is retained as the source of truth. The event extractor is best-effort and does not assume that every event has tracking data. Match/player coordinates are not fabricated.
+
+## Railway deployment
+
+Create a **new Railway service** from this same GitHub repository. Do not change the existing BET62 service.
+
+Recommended service settings:
+- Root directory: repository root
+- Build command: leave empty (no build required)
+- Start command: `node services/betby-collector/index.mjs`
+- Add a Railway Volume mounted at `/data`
+
+Set these variables on the new service only:
+
+| Variable | Suggested value | Purpose |
+|---|---|---|
+| `BETBY_ENABLED` | `true` | Enable polling |
+| `BETBY_BASE_URL` | `https://demoapi.betby.com` | API base |
+| `BETBY_BRAND_ID` | `1653815133341880320` | Demo brand ID used in current tests |
+| `BETBY_LOCALE` | `en-GB` | API locale |
+| `BETBY_LIVE_CURSOR` | `0` | Live URL suffix; keep fixed until cursor semantics are confirmed |
+| `BETBY_PREMATCH_CURSOR` | `0` | Prematch URL suffix; keep fixed until cursor semantics are confirmed |
+| `BETBY_POLL_INTERVAL_MS` | `15000` | Poll interval |
+| `BETBY_DATA_DIR` | `/data` | Persistent volume path |
+| `BETBY_STATUS_TOKEN` | generate a private random value | Protect detailed status endpoint |
+
+Railway supplies `PORT`. The service exposes `/health` for the Railway health check and `/status` for authenticated diagnostics.
+
+## Local check
+
+Requires Node.js 22.5+:
+
+```sh
+cd services/betby-collector
+npm run check
+BETBY_ENABLED=false npm start
+```
+
+## Important limitations
+
+- The current demo API paths and brand ID are configurable and must be replaced with production-approved values when BETBY supplies production access.
+- The numeric URL suffix is deliberately treated as a fixed cursor. Do not auto-increment it until BETBY confirms its meaning.
+- Polling stores snapshots and event data; it does not place bets, authenticate end users, or connect to the BET62 wallet.
+- Use only feeds and credentials that BETBY has authorized for your account and intended use.
