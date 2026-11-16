@@ -312,6 +312,11 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
 
 const SOCCER_FEED_SILENCE_MS = 5 * 60_000;
 
+function isBetbyEventEnded(raw: BetbyEvent) {
+  // O demo BETBY usa match_status 100 para ENDED; status é um campo separado.
+  return raw.state?.match_status === 100;
+}
+
 function isSoccerFeedSilentAfterRegulation(
   raw: BetbyEvent,
   sport: SportKey,
@@ -351,14 +356,14 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       && now - live.updatedAt.getTime() < 45_000,
     );
     for (const raw of pre.events) {
+      if (isBetbyEventEnded(raw)) continue;
       const e = toBoardEvent(raw, 'scheduled', pre.dictionaries);
       // Um jogo pré-jogo cujo início já passou sai da lista (entra no ao vivo).
       if (e && (!e.startTime || e.startTime > now - 5 * 60_000)) byId.set(e.id, e);
     }
     for (const raw of live.events) {
-      // O feed live também pode manter temporariamente eventos já encerrados; status 1 é o
-      // estado ativo observado na BETBY. match_status é uma fase específica do desporto.
-      if (raw.state?.status !== undefined && raw.state.status !== 1) {
+      // status=1 marca o evento ativo; match_status=100 é o sinal BETBY para ENDED.
+      if (isBetbyEventEnded(raw) || (raw.state?.status !== undefined && raw.state.status !== 1)) {
         byId.delete(raw.id);
         continue;
       }
