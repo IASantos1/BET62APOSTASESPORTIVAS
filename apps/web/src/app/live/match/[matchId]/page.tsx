@@ -439,7 +439,7 @@ function Inner({ id }: { id: string }) {
   const endpoint = useEventEndpoint(id, feed, cfg?.eventEndpoint, cfg !== null && !!e, e ? Object.keys(e.markets).length : 0);
   const fullMarketState = useFullMarkets(id, feed, endpoint);
   const fullMarkets = fullMarketState.markets;
-  const betbyStats = useBetbyStats(id, feed, cfg?.statsEndpoint, view === 'estatisticas');
+  const betbyStats = useBetbyStats(id, feed, cfg?.statsEndpoint, live || view === 'estatisticas');
   React.useEffect(() => {
     fetchDescriptions(id).then(setDescriptions).catch(() => setDescriptions({}));
     fetchBetDistribution(id).then(setDistribution).catch(() => setDistribution({}));
@@ -483,8 +483,10 @@ function Inner({ id }: { id: string }) {
     .filter((m) => String(m.market_id) in allMarkets)
     .slice(0, 4);
 
+  // Ao vivo: só Tracker e Live. As estatísticas aparecem sempre abaixo dos mercados (não como aba).
+  // Pré-jogo: só Estatísticas (não há tracker nem transmissão).
   const views: [View, string, React.ReactNode][] = live
-    ? [['tracker', 'Tracker', <Activity key="t" size={15} />], ['live', 'Live', <MonitorPlay key="l" size={15} />], ['estatisticas', 'Estatísticas', <BarChart3 key="s" size={15} />]]
+    ? [['tracker', 'Tracker', <Activity key="t" size={15} />], ['live', 'Live', <MonitorPlay key="l" size={15} />]]
     : [['estatisticas', 'Estatísticas', <BarChart3 key="s" size={15} />]];
 
   return (
@@ -493,38 +495,70 @@ function Inner({ id }: { id: string }) {
         <ArrowLeft size={16} /> Voltar
       </Link>
 
-      <section className="match-glow rounded-2xl border border-bet62-border p-5 md:p-6">
-        <p className="flex items-center justify-center gap-2 text-center text-xs font-semibold uppercase tracking-widest text-white/50">
-          <LeagueLogo sport={e.sport} league={e.league} country={e.country} />
-          {countryLabel(e.country)} · {e.league}
-        </p>
-        <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <div className="flex flex-col items-center gap-2 text-center">
-            <TeamLogo sport={e.sport} name={e.home} photoUrl={e.homePhoto} league={league} size={52} />
-            <p className="text-sm font-black md:text-lg">{e.home}</p>
+      {/* Cabeçalho + mídia (minicampo/transmissão) juntos, para o minicampo aparecer colado ao placar. */}
+      <div className="space-y-3">
+        <section className="match-glow rounded-2xl border border-bet62-border p-3 md:p-4">
+          <p className="flex items-center justify-center gap-2 text-center text-[11px] font-semibold uppercase tracking-widest text-white/50">
+            <LeagueLogo sport={e.sport} league={e.league} country={e.country} />
+            {countryLabel(e.country)} · {e.league}
+          </p>
+          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 md:gap-3">
+            <div className="flex flex-col items-center gap-1.5 text-center">
+              <TeamLogo sport={e.sport} name={e.home} photoUrl={e.homePhoto} league={league} size={44} />
+              <p className="text-xs font-black md:text-base">{e.home}</p>
+            </div>
+            <div className="text-center">
+              {live ? (
+                <>
+                  <p className="font-mono text-2xl font-black md:text-3xl">{e.score ? `${e.score.home} - ${e.score.away}` : '0 - 0'}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-bet62-primary">● {e.clock || 'Ao vivo'}</p>
+                </>
+              ) : (
+                <>
+                  <p className="flex items-center justify-center gap-1.5 text-base font-black">
+                    <Clock3 size={15} /> {e.startTime ? new Date(e.startTime).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-white/55">{fmtWhen(e.startTime)}</p>
+                </>
+              )}
+            </div>
+            <div className="flex flex-col items-center gap-1.5 text-center">
+              <TeamLogo sport={e.sport} name={e.away} photoUrl={e.awayPhoto} league={league} size={44} />
+              <p className="text-xs font-black md:text-base">{e.away}</p>
+            </div>
           </div>
-          <div className="text-center">
-            {live ? (
-              <>
-                <p className="font-mono text-3xl font-black md:text-4xl">{e.score ? `${e.score.home} - ${e.score.away}` : '0 - 0'}</p>
-                <p className="mt-1 text-sm font-semibold text-bet62-primary">● {e.clock || 'Ao vivo'}</p>
-              </>
+        </section>
+
+        {/* Minicampo / transmissão logo abaixo do cabeçalho (juntos). */}
+        {view === 'tracker' && (
+          <div className="overflow-hidden rounded-2xl border border-bet62-border bg-bet62-surface/50">
+            {tracker ? (
+              <iframe src={tracker} title="Tracker do jogo" className="block aspect-video w-full md:aspect-[16/9]" allow="fullscreen" />
             ) : (
-              <>
-                <p className="flex items-center justify-center gap-1.5 text-lg font-black">
-                  <Clock3 size={16} /> {e.startTime ? new Date(e.startTime).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                </p>
-                <p className="mt-1 text-xs text-white/55">{fmtWhen(e.startTime)}</p>
-              </>
+              <p className="p-6 text-sm text-white/60">
+                Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.
+              </p>
             )}
           </div>
-          <div className="flex flex-col items-center gap-2 text-center">
-            <TeamLogo sport={e.sport} name={e.away} photoUrl={e.awayPhoto} league={league} size={52} />
-            <p className="text-sm font-black md:text-lg">{e.away}</p>
-          </div>
-        </div>
-      </section>
+        )}
 
+        {view === 'live' && (
+          broadcast ? (
+            <div className="overflow-hidden rounded-2xl border border-bet62-border bg-black/40">
+              <iframe src={broadcast} title="Transmissão do jogo" className="block aspect-video w-full" allow="fullscreen; autoplay; encrypted-media" allowFullScreen />
+            </div>
+          ) : (
+            <div className="grid aspect-video place-items-center rounded-2xl border border-bet62-border bg-black/40 p-6 text-center text-sm text-white/60">
+              <div>
+                <MonitorPlay size={32} className="mx-auto mb-2 text-white/40" />
+                Transmissão ao vivo indisponível para este jogo.
+              </div>
+            </div>
+          )
+        )}
+      </div>
+
+      {/* Botões de view abaixo do minicampo. */}
       <div className="flex gap-2">
         {views.map(([k, label, icon]) => (
           <button
@@ -532,7 +566,7 @@ function Inner({ id }: { id: string }) {
             type="button"
             onClick={() => setView(view === k ? 'mercados' : k)}
             className={cn(
-              'flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold sm:flex-none',
+              'flex flex-1 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold sm:flex-none',
               view === k ? 'border-bet62-primary bg-bet62-primary text-onbrand' : 'border-bet62-border bg-bet62-surface/60 text-white/75 hover:text-white',
             )}
           >
@@ -541,33 +575,6 @@ function Inner({ id }: { id: string }) {
           </button>
         ))}
       </div>
-
-      {view === 'tracker' && (
-        <div className="overflow-hidden rounded-2xl border border-bet62-border bg-bet62-surface/50">
-          {tracker ? (
-            <iframe src={tracker} title="Tracker do jogo" className="block h-[340px] w-full md:h-[420px]" allow="fullscreen" />
-          ) : (
-            <p className="p-6 text-sm text-white/60">
-              Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.
-            </p>
-          )}
-        </div>
-      )}
-
-      {view === 'live' && (
-        broadcast ? (
-          <div className="overflow-hidden rounded-2xl border border-bet62-border bg-black/40">
-            <iframe src={broadcast} title="Transmissão do jogo" className="block aspect-video w-full" allow="fullscreen; autoplay; encrypted-media" allowFullScreen />
-          </div>
-        ) : (
-          <div className="grid aspect-video place-items-center rounded-2xl border border-bet62-border bg-black/40 p-6 text-center text-sm text-white/60">
-            <div>
-              <MonitorPlay size={32} className="mx-auto mb-2 text-white/40" />
-              Transmissão ao vivo indisponível para este jogo.
-            </div>
-          </div>
-        )
-      )}
 
       {view === 'estatisticas' && (
         <section className="space-y-3">
@@ -624,66 +631,92 @@ function Inner({ id }: { id: string }) {
       )}
 
       {view !== 'estatisticas' && (
-        <section className="space-y-3">
-          <h2 className="text-lg font-black">
-            Mercados <span className="text-sm font-normal text-white/40">{markets.length}</span>
-          </h2>
-          {cfg?.eventEndpoint && fullMarketState.error && (
-            <p className="text-xs text-amber-300/80">Mercados adicionais BETBY: {fullMarketState.error}. Os mercados do feed principal continuam disponíveis.</p>
+        <>
+          <section className="space-y-3">
+            <h2 className="text-lg font-black">
+              Mercados <span className="text-sm font-normal text-white/40">{markets.length}</span>
+            </h2>
+            {cfg?.eventEndpoint && fullMarketState.error && (
+              <p className="text-xs text-amber-300/80">Mercados adicionais BETBY: {fullMarketState.error}. Os mercados do feed principal continuam disponíveis.</p>
+            )}
+            {markets.length === 0 ? (
+              <EmptyPanel>{live ? 'Mercados suspensos de momento.' : 'Sem odds disponíveis para este jogo.'}</EmptyPanel>
+            ) : (
+              <>
+                <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
+                  {CATS.filter(([k]) => k === 'todos' || counts.has(k)).map(([k, l]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => setCat(k)}
+                      className={cn(
+                        'flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold',
+                        activeCat === k ? 'border-bet62-primary bg-bet62-primary text-onbrand' : 'border-bet62-border bg-bet62-surface/60 text-white/70 hover:text-white',
+                      )}
+                    >
+                      {l}
+                      <small className={activeCat === k ? 'text-onbrand/70' : 'text-white/40'}>{k === 'todos' ? markets.length : counts.get(k)}</small>
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-2.5">
+                  {shown.map(([m, variants]) => (
+                    <MarketBlock
+                      key={m}
+                      title={marketName(m)}
+                      rows={Object.entries(variants).map(([variant, outcomes]) => ({
+                        variant,
+                        label: variantLabel(variant),
+                        cells: Object.entries(outcomes).map(([o, v]) => {
+                          const label = outcomeName(m, variant, o);
+                          const vl = variantLabel(variant);
+                          const key = `${e.id}|${m}|${variant}|${o}`;
+                          return {
+                            id: o,
+                            moveKey: key,
+                            label,
+                            price: v.k,
+                            blocked: v.b === 1 || !(Number(v.k) > 1),
+                            selected: picks.some((p) => p.key === key),
+                            pct: share(m, o),
+                            onClick: () => {
+                              const pick = pickOf(ev, m, variant, o, vl ? `${marketName(m)} (${vl})` : marketName(m), label);
+                              if (pick) toggle(pick);
+                            },
+                          };
+                        }),
+                      })).sort((a, b) => compareVariants(a.variant, b.variant))}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+
+          {/* Estatísticas sempre visíveis abaixo dos mercados (ao vivo). */}
+          {live && (stats.length > 0 || statsFrame || extraStats.length > 0) && (
+            <section className="space-y-3">
+              {stats.length > 0 && (
+                <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
+                  <h3 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-white/60">Ao vivo</h3>
+                  <StatBars rows={stats} />
+                  {e.periods && e.periods.length > 0 && <p className="mt-3 text-center text-xs text-white/45">Parciais: {e.periods.map((p) => `${p.home_score}-${p.away_score}`).join(' · ')}</p>}
+                </div>
+              )}
+              {statsFrame && (
+                <div className="overflow-hidden rounded-2xl border border-bet62-border bg-bet62-surface/50">
+                  <iframe src={statsFrame} title="Estatísticas do jogo" className="block h-[360px] w-full md:h-[460px]" allow="fullscreen" />
+                </div>
+              )}
+              {extraStats.length > 0 && (
+                <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
+                  <h3 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-white/60">Estatísticas</h3>
+                  <StatBars rows={extraStats} />
+                </div>
+              )}
+            </section>
           )}
-          {markets.length === 0 ? (
-            <EmptyPanel>{live ? 'Mercados suspensos de momento.' : 'Sem odds disponíveis para este jogo.'}</EmptyPanel>
-          ) : (
-            <>
-              <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
-                {CATS.filter(([k]) => k === 'todos' || counts.has(k)).map(([k, l]) => (
-                  <button
-                    key={k}
-                    type="button"
-                    onClick={() => setCat(k)}
-                    className={cn(
-                      'flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold',
-                      activeCat === k ? 'border-bet62-primary bg-bet62-primary text-onbrand' : 'border-bet62-border bg-bet62-surface/60 text-white/70 hover:text-white',
-                    )}
-                  >
-                    {l}
-                    <small className={activeCat === k ? 'text-onbrand/70' : 'text-white/40'}>{k === 'todos' ? markets.length : counts.get(k)}</small>
-                  </button>
-                ))}
-              </div>
-              <div className="space-y-2.5">
-                {shown.map(([m, variants]) => (
-                  <MarketBlock
-                    key={m}
-                    title={marketName(m)}
-                    rows={Object.entries(variants).map(([variant, outcomes]) => ({
-                      variant,
-                      label: variantLabel(variant),
-                      cells: Object.entries(outcomes).map(([o, v]) => {
-                        const label = outcomeName(m, variant, o);
-                        const vl = variantLabel(variant);
-                        const key = `${e.id}|${m}|${variant}|${o}`;
-                        return {
-                          id: o,
-                          moveKey: key,
-                          label,
-                          price: v.k,
-                          blocked: v.b === 1 || !(Number(v.k) > 1),
-                          selected: picks.some((p) => p.key === key),
-                          pct: share(m, o),
-                          onClick: () => {
-                            const pick = pickOf(ev, m, variant, o, vl ? `${marketName(m)} (${vl})` : marketName(m), label);
-                            if (pick) toggle(pick);
-                          },
-                        };
-                      }),
-                    })).sort((a, b) => compareVariants(a.variant, b.variant))}
-                  />
-                ))}
-              </div>
-            </>
-          )}
-        </section>
+        </>
       )}
     </>
   );
