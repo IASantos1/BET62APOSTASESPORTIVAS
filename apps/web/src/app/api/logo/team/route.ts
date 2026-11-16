@@ -16,7 +16,8 @@ export async function GET(req: Request) {
   try {
     const image = await cachedLogoImage(logo);
     if (image) {
-      return new NextResponse(image.bytes, {
+      // Buffer fornece um BodyInit compatível com as tipagens Node/DOM usadas no build Next.js.
+      return new NextResponse(Buffer.from(image.bytes), {
         status: 200,
         headers: {
           'content-type': image.contentType,
