@@ -256,7 +256,7 @@ export function BetbyExplorer() {
                 </div>
               ))
             ) : (
-              <p className="text-xs text-white/55">Nenhum campo com nome de tracker neste evento. Pode testar um id à mão:</p>
+              <p className="text-xs text-white/55">Sem ID externo de tracking neste evento. Não uses o ID interno da BETBY: precisas de um ID de jogo fornecido por STATSCORE, Sportradar/BetRadar ou outro fornecedor ativo.</p>
             )}
             <form
               className="flex flex-wrap gap-2"

@@ -281,7 +281,10 @@ function useBetbyStats(id: string, feed: 'live' | 'prematch', tpl: string | null
   const [data, setData] = React.useState<unknown>(null);
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
-    if (!tpl || !on) return;
+    if (!tpl) { setData(null); setError(null); return; }
+    if (!on) return;
+    setData(null);
+    setError(null);
     let stop = false;
     const load = () =>
       fetch(fillTemplate(tpl, id, feed), { cache: 'no-store' })
@@ -299,12 +302,22 @@ function useBetbyStats(id: string, feed: 'live' | 'prematch', tpl: string | null
 }
 
 function pairsOf(v: unknown, prefix = '', out: { key: string; home: number; away: number }[] = [], depth = 0) {
-  if (!v || typeof v !== 'object' || depth > 5) return out;
+  if (!v || typeof v !== 'object' || depth > 8) return out;
   const o = v as Record<string, unknown>;
-  const h = o.home ?? o.home_value ?? o.team1 ?? o['1'];
-  const a = o.away ?? o.away_value ?? o.team2 ?? o['2'];
-  if (h !== undefined && a !== undefined && Number.isFinite(Number(String(h).replace('%', ''))) && Number.isFinite(Number(String(a).replace('%', '')))) {
-    out.push({ key: String(o.name ?? o.title ?? o.type ?? prefix), home: Number(String(h).replace('%', '')), away: Number(String(a).replace('%', '')) });
+  const h = o.home ?? o.home_value ?? o.homeValue ?? o.team1 ?? o['1'];
+  const a = o.away ?? o.away_value ?? o.awayValue ?? o.team2 ?? o['2'];
+  if (h !== undefined && a !== undefined && Number.isFinite(Number(String(h).replace('%', '').replace(',', '.'))) && Number.isFinite(Number(String(a).replace('%', '').replace(',', '.')))) {
+    out.push({ key: String(o.name ?? o.title ?? o.type ?? prefix), home: Number(String(h).replace('%', '').replace(',', '.')), away: Number(String(a).replace('%', '').replace(',', '.')) });
+    return out;
+  }
+  if (o.home && o.away && typeof o.home === 'object' && typeof o.away === 'object') {
+    const home = o.home as Record<string, unknown>;
+    const away = o.away as Record<string, unknown>;
+    for (const metric of new Set([...Object.keys(home), ...Object.keys(away)])) {
+      const hv = Number(String(home[metric]).replace('%', '').replace(',', '.'));
+      const av = Number(String(away[metric]).replace('%', '').replace(',', '.'));
+      if (Number.isFinite(hv) && Number.isFinite(av)) out.push({ key: metric, home: hv, away: av });
+    }
     return out;
   }
   for (const [k, x] of Object.entries(o)) pairsOf(x, k, out, depth + 1);
@@ -314,6 +327,8 @@ function pairsOf(v: unknown, prefix = '', out: { key: string; home: number; away
 const STAT_LABEL: Record<string, string> = {
   ...STAT_NAMES,
   possession: 'Posse de bola', ball_possession: 'Posse de bola', xg: 'Golos esperados (xG)', expected_goals: 'Golos esperados (xG)',
+  aces: 'Aces', double_faults: 'Duplas faltas', first_serve: 'Primeiro serviço', break_points: 'Pontos de break',
+  rebounds: 'Ressaltos', assists: 'Assistências', turnovers: 'Perdas de bola', steals: 'Roubos de bola', blocks: 'Desarmes / blocos', three_pointers: 'Triplos',
   shots: 'Remates', shots_total: 'Remates', shots_on_target: 'Remates à baliza', shots_off_target: 'Remates fora',
   attacks: 'Ataques', dangerous_attacks: 'Ataques perigosos', fouls: 'Faltas', offsides: 'Foras de jogo', free_kicks: 'Livres',
   goal_kicks: 'Pontapés de baliza', throw_ins: 'Lançamentos', saves: 'Defesas', penalties: 'Penáltis', substitutions: 'Substituições',
@@ -461,8 +476,7 @@ function Inner({ id }: { id: string }) {
             <iframe src={tracker} title="Tracker do jogo" className="block h-[340px] w-full md:h-[420px]" allow="fullscreen" />
           ) : (
             <p className="p-6 text-sm text-white/60">
-              Minicampo indisponível para este jogo: a BETBY não enviou o id do tracker. No admin, o Explorador BETBY mostra os campos do
-              evento e permite escolher o que tem o id.
+              Minicampo não disponível: este evento não contém um identificador reconhecido de um fornecedor de tracking. O ID interno da BETBY não é suficiente para abrir o tracker.
             </p>
           )}
         </div>
@@ -521,7 +535,7 @@ function Inner({ id }: { id: string }) {
           )}
           {betbyStats.error && <EmptyPanel>Estatísticas da BETBY indisponíveis: {betbyStats.error}</EmptyPanel>}
           {!stats.length && !extraStats.length && !distRows.length && !betbyStats.error && (
-            <EmptyPanel>{live ? 'Sem estatísticas da BETBY para este jogo.' : 'As estatísticas aparecem quando o jogo começar.'}</EmptyPanel>
+            <EmptyPanel>{live ? 'A BETBY não enviou estatísticas para este evento.' : cfg?.statsEndpoint ? 'A fonte configurada não devolveu estatísticas pré-jogo para este evento.' : 'Sem fonte de estatísticas pré-jogo configurada. O feed de odds da BETBY não inclui, por si só, forma, confrontos diretos ou estatísticas históricas.'}</EmptyPanel>
           )}
         </section>
       )}

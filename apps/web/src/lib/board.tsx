@@ -181,6 +181,51 @@ export function pickOf(e: BoardEvent, marketId: string, variant: string, outcome
   };
 }
 
+function numericStat(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  const n = Number(String(value).replace('%', '').replace(',', '.').trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Normaliza estatísticas de equipa de formatos BETBY distintos sem inventar valores. */
+function extractStatistics(raw: BetbyEvent): BoardEvent['statistics'] {
+  const root = raw as unknown as Record<string, unknown>;
+  const score = root.score && typeof root.score === 'object' ? root.score as Record<string, unknown> : {};
+  const sources = [score.statistics, score.stats, root.statistics, root.stats, root.match_statistics];
+  const result: NonNullable<BoardEvent['statistics']> = {};
+  const add = (key: string, home: unknown, away: unknown) => {
+    const h = numericStat(home);
+    const a = numericStat(away);
+    if (key && h !== null && a !== null) result[key] = { home: h, away: a };
+  };
+  const visit = (value: unknown, key = '', depth = 0) => {
+    if (!value || typeof value !== 'object' || depth > 8) return;
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => visit(item, key || String(index), depth + 1));
+      return;
+    }
+    const node = value as Record<string, unknown>;
+    const name = String(node.name ?? node.label ?? node.title ?? node.type ?? key);
+    const home = node.home ?? node.home_value ?? node.homeValue ?? node.team1 ?? node['1'];
+    const away = node.away ?? node.away_value ?? node.awayValue ?? node.team2 ?? node['2'];
+    if (home !== undefined && away !== undefined && numericStat(home) !== null && numericStat(away) !== null) {
+      add(name, home, away);
+      return;
+    }
+    // Alguns fornecedores agrupam todas as métricas em home{} e away{}.
+    if (node.home && node.away && typeof node.home === 'object' && typeof node.away === 'object') {
+      const h = node.home as Record<string, unknown>;
+      const a = node.away as Record<string, unknown>;
+      for (const metric of new Set([...Object.keys(h), ...Object.keys(a)])) add(metric, h[metric], a[metric]);
+    }
+    for (const [childKey, child] of Object.entries(node)) {
+      if (childKey !== 'home' && childKey !== 'away') visit(child, childKey, depth + 1);
+    }
+  };
+  for (const source of sources) visit(source);
+  return Object.keys(result).length ? result : undefined;
+}
+
 function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: BetbyDictionaries): BoardEvent | null {
   const d = raw.desc;
   if (!d || d.virtual || !d.competitors || d.competitors.length < 2) return null;
@@ -207,7 +252,7 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
     startTime: d.scheduled ? d.scheduled * 1000 : null,
     clock: raw.state?.clock?.match_time,
     score,
-    statistics: (raw.score?.statistics as BoardEvent['statistics']) || undefined,
+    statistics: extractStatistics(raw),
     periods: raw.score?.period_scores,
     markets: raw.markets,
     betbySport: d.sport,
