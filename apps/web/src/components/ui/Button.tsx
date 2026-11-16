@@ -21,7 +21,7 @@ const buttonVariants = cva(
         outline:
           'border border-bet62-border bg-bet62-surface/50 text-white hover:border-bet62-primary/60 hover:text-bet62-primary hover:bg-bet62-primary/5',
         danger:
-          'bg-bet62-danger/90 text-white hover:bg-bet62-danger',
+          'bg-bet62-danger/90 text-onbrand hover:bg-bet62-danger',
       },
       size: {
         xs: 'h-7 px-2.5 text-xs rounded-lg',

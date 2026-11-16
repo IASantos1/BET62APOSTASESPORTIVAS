@@ -9,9 +9,21 @@
   --bet62-red: #e11d48;
   --bet62-white: #ffffff;
 
-  --bet62-bg: #0a0e17;
-  --bet62-surface: #121a29;
-  --bet62-glass: rgba(18, 26, 41, 0.75);
+  --bet62-bg: rgb(var(--c-bg));
+  --bet62-surface: rgb(var(--c-surface));
+  --bet62-glass: rgb(var(--c-surface) / 0.75);
+
+  /* Tema escuro (por omissão). Valores "R G B" para os utilitários do Tailwind. */
+  --c-fg: 255 255 255;
+  --c-bg: 10 14 23;
+  --c-surface: 18 26 41;
+  --c-surface-2: 26 37 56;
+  --c-surface-3: 35 47 71;
+  --c-border: rgba(255, 255, 255, 0.08);
+  --c-odd: 30 42 64;
+  --c-odd-hover: 44 61 92;
+  --c-odd-price: 255 209 102;
+  color-scheme: dark;
 
   --bet62-primary-rgb: 225, 29, 72;
   --bet62-secondary-rgb: 255, 255, 255;
@@ -24,6 +36,20 @@
   --bet62-gradient-primary: linear-gradient(135deg, var(--bet62-primary) 0%, var(--bet62-white) 120%);
   --bet62-gradient-secondary: linear-gradient(135deg, var(--bet62-accent) 0%, var(--bet62-primary) 100%);
   --bet62-gradient-full: linear-gradient(135deg, var(--bet62-accent) 0%, var(--bet62-primary) 50%, #ffffff 110%);
+}
+
+/* Tema claro: html.light (escolhido no cabeçalho, guardado no navegador). */
+html.light {
+  --c-fg: 15 23 42;
+  --c-bg: 241 244 248;
+  --c-surface: 255 255 255;
+  --c-surface-2: 233 237 243;
+  --c-surface-3: 220 226 235;
+  --c-border: rgba(15, 23, 42, 0.12);
+  --c-odd: 232 237 245;
+  --c-odd-hover: 214 222 235;
+  --c-odd-price: 15 23 42;
+  color-scheme: light;
 }
 
 @layer base {
@@ -43,7 +69,7 @@
 
   body {
     background-color: var(--bet62-bg);
-    color: white;
+    color: rgb(var(--c-fg));
     margin: 0;
     padding: 0;
     max-width: 100vw;
@@ -78,7 +104,7 @@
     background: var(--bet62-glass);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--c-border);
   }
 
   .glassmorphism-hover {
@@ -86,7 +112,7 @@
   }
 
   .glassmorphism-hover:hover {
-    background: rgba(18, 26, 41, 0.9);
+    background: rgb(var(--c-surface) / 0.9);
     border-color: rgba(var(--bet62-primary-rgb), 0.3);
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   }

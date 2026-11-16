@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Space_Grotesk, JetBrains_Mono } from 'next/font/google';
 import Providers from '../providers/Providers';
 import '../styles/theme.css';
+import { themeScript } from '../lib/theme';
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin', 'latin-ext'],
@@ -45,9 +46,9 @@ export const metadata: Metadata = {
   themeColor: '#0a0e17',
   category: 'entertainment',
   icons: {
-    icon: '/favicon.svg',
+    icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }, { url: '/icons/icon-192x192.png', sizes: '192x192', type: 'image/png' }],
     shortcut: '/favicon.svg',
-    apple: '/favicon.svg',
+    apple: '/icons/apple-touch-icon.png',
   },
   openGraph: {
     type: 'website',
@@ -97,7 +98,7 @@ export const viewport: Viewport = {
   maximumScale: 5,
   minimumScale: 1,
   viewportFit: 'cover',
-  colorScheme: 'dark',
+  colorScheme: 'dark light',
 };
 
 const fontVars =
@@ -112,9 +113,10 @@ export default function RootLayout({
     <html
       lang="pt"
       className={`dark ${fontVars}`}
-      style={{ colorScheme: 'dark' }}
+      suppressHydrationWarning
     >
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <style
           dangerouslySetInnerHTML={{
             __html: `:root{--font-space:${spaceGrotesk.style.fontFamily},ui-sans-serif,system-ui;--font-mono:${jetBrainsMono.style.fontFamily},ui-monospace,SFMono-Regular;}`,
@@ -123,7 +125,7 @@ export default function RootLayout({
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </head>
       <body
-        className="bg-[var(--bet62-bg)] text-white font-sans antialiased min-h-screen selection:bg-bet62-primary/30 selection:text-white"
+        className="bg-bet62-bg text-white font-sans antialiased min-h-screen selection:bg-bet62-primary/30 selection:text-white"
       >
         <Providers>{children}</Providers>
       </body>

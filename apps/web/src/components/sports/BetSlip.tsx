@@ -40,7 +40,7 @@ function SlipBody() {
             <button
               key={m}
               onClick={() => setMode(m)}
-              className={cn('rounded-lg py-2 text-xs font-semibold', mode === m ? 'bg-bet62-primary text-white' : 'bg-white/5 text-white/60')}
+              className={cn('rounded-lg py-2 text-xs font-semibold', mode === m ? 'bg-bet62-primary text-onbrand' : 'bg-white/5 text-white/60')}
             >
               {m === 'single' ? 'Simples' : 'Múltipla'}
             </button>
@@ -113,7 +113,7 @@ function SlipBody() {
           </div>
           <button
             onClick={() => setNotice('O registo de apostas ainda não está ligado.')}
-            className="w-full rounded-xl bg-bet62-primary py-2.5 font-bold text-white hover:bg-bet62-primary-600"
+            className="w-full rounded-xl bg-bet62-primary py-2.5 font-bold text-onbrand hover:bg-bet62-primary-600"
           >
             Apostar
           </button>
@@ -138,7 +138,7 @@ export function BetSlip() {
       {ready && count > 0 && !open && (
         <button
           onClick={() => setOpen(true)}
-          className="xl:hidden fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full bg-bet62-primary px-4 py-3 font-bold text-white shadow-lg"
+          className="xl:hidden fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full bg-bet62-primary px-4 py-3 font-bold text-onbrand shadow-lg"
         >
           <Ticket size={18} /> Boletim <span className="rounded-full bg-white/20 px-2 text-xs">{count}</span>
         </button>

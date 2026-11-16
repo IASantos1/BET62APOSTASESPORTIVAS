@@ -53,7 +53,7 @@ const TIERS = [
     color: 'from-bet62-primary/40 via-bet62-primary/15 to-transparent',
     ring: 'ring-bet62-primary/40',
     border: 'border-bet62-primary/50',
-    chip: 'bg-bet62-gradient text-white border-transparent',
+    chip: 'bg-bet62-gradient text-onbrand border-transparent',
     badge: 'pink' as const,
     perks: ['CPA até €45 / FTD', 'Revenue Share 28%', 'CPA + Hybrid disponível', 'Bónus sub-afiliados 3%', 'Gestor de conta pessoal', 'Antecipação de pagamentos'],
   },

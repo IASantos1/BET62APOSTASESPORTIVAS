@@ -197,41 +197,113 @@ export function eventStart(event: BetbyEvent) {
   return event.desc?.scheduled ? new Date(event.desc.scheduled * 1000) : null;
 }
 
-/** Lê o feed no navegador a cada `intervalMs` e mantém o estado atual de cada jogo. */
+const SNAPSHOT_MAX_AGE = 10 * 60_000;
+interface Snapshot {
+  at: number;
+  events: [string, BetbyEvent][];
+  dict: BetbyDictionaries;
+  applied: string[];
+}
+const snapshotKey = (feed: BetbyFeed) => `bet62-feed-${BETBY_CONFIG.brandId}-${feed}`;
+function readSnapshot(feed: BetbyFeed): Snapshot | null {
+  try {
+    const s = JSON.parse(localStorage.getItem(snapshotKey(feed)) || 'null') as Snapshot | null;
+    return s && Date.now() - s.at < SNAPSHOT_MAX_AGE ? s : null;
+  } catch {
+    return null;
+  }
+}
+function writeSnapshot(feed: BetbyFeed, s: Snapshot) {
+  try {
+    localStorage.setItem(snapshotKey(feed), JSON.stringify(s));
+  } catch {
+    // Sem espaço ou bloqueado: a página funciona na mesma, só não abre com o último quadro.
+  }
+}
+
+/** Lê várias versões em paralelo (no máximo `n` de cada vez), devolvidas pela ordem pedida. */
+async function fetchVersions(feed: BetbyFeed, versions: string[], signal: AbortSignal, n = 6) {
+  const out: (Record<string, unknown> | null)[] = new Array(versions.length).fill(null);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(n, versions.length) }, async () => {
+      while (next < versions.length) {
+        const i = next++;
+        out[i] = await getJson(feedUrl(feed, versions[i]), signal);
+      }
+    }),
+  );
+  return out;
+}
+
+/**
+ * Lê o feed no navegador a cada `intervalMs` e mantém o estado atual de cada jogo.
+ * Só as versões novas do índice são descarregadas (as já aplicadas não mudam), em paralelo; o último
+ * quadro fica guardado no navegador para a página seguinte abrir logo com ele.
+ */
 export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
   const storeRef = React.useRef(new Map<string, BetbyEvent>());
   const dictRef = React.useRef(emptyDictionaries());
+  const appliedRef = React.useRef(new Set<string>());
+  const busyRef = React.useRef(false);
   const [events, setEvents] = React.useState<BetbyEvent[]>([]);
   const [dictionaries, setDictionaries] = React.useState<BetbyDictionaries>(emptyDictionaries());
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = React.useState<Date | null>(null);
 
+  const publish = React.useCallback(() => {
+    const dict = dictRef.current;
+    setEvents([...storeRef.current.values()]);
+    setDictionaries({ sports: { ...dict.sports }, categories: { ...dict.categories }, tournaments: { ...dict.tournaments } });
+  }, []);
+
+  // Abre com o último quadro guardado (até 10 min), enquanto o novo chega.
+  React.useEffect(() => {
+    const snap = readSnapshot(feed);
+    if (!snap || storeRef.current.size) return;
+    storeRef.current = new Map(snap.events);
+    dictRef.current = snap.dict;
+    appliedRef.current = new Set(snap.applied);
+    publish();
+    setUpdatedAt(new Date(snap.at));
+    setLoading(false);
+  }, [feed, publish]);
+
   const load = React.useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12000);
+    const timer = setTimeout(() => controller.abort(), 15000);
     try {
       const store = storeRef.current;
       const dict = dictRef.current;
       const index = await getJson(feedUrl(feed, 0), controller.signal);
       applyDictionaries(dict, index);
       applyDeltas(store, index);
-      for (const version of versionsOf(index)) {
-        const payload = await getJson(feedUrl(feed, version), controller.signal);
+      const versions = versionsOf(index);
+      const fresh = versions.filter((v) => !appliedRef.current.has(v));
+      const payloads = await fetchVersions(feed, fresh, controller.signal);
+      payloads.forEach((payload, i) => {
         applyDictionaries(dict, payload);
         applyDeltas(store, payload);
-      }
-      setEvents([...store.values()]);
-      setDictionaries({ sports: { ...dict.sports }, categories: { ...dict.categories }, tournaments: { ...dict.tournaments } });
+        appliedRef.current.add(fresh[i]);
+      });
+      // Esquece versões que já saíram do índice (a lista não cresce para sempre).
+      const current = new Set(versions);
+      for (const v of appliedRef.current) if (!current.has(v)) appliedRef.current.delete(v);
+      publish();
       setUpdatedAt(new Date());
       setError(null);
+      writeSnapshot(feed, { at: Date.now(), events: [...store.entries()], dict, applied: [...appliedRef.current] });
     } catch (err) {
       setError(err instanceof Error ? (err.name === 'AbortError' ? 'A BETBY não respondeu a tempo.' : err.message) : 'Falha ao ler a BETBY.');
     } finally {
       clearTimeout(timer);
+      busyRef.current = false;
       setLoading(false);
     }
-  }, [feed]);
+  }, [feed, publish]);
 
   React.useEffect(() => {
     void load();

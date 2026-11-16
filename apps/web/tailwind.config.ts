@@ -13,6 +13,10 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // "white" segue o tema: branco no escuro, quase preto no claro (text-white/60 etc. continuam a funcionar).
+        white: 'rgb(var(--c-fg) / <alpha-value>)',
+        // Texto sobre o vermelho da marca: sempre branco.
+        onbrand: '#ffffff',
         bet62: {
           primary: '#e11d48',
           'primary-100': '#fee2e2',
@@ -22,7 +26,7 @@ const config: Config = {
           'primary-500': '#e11d48',
           'primary-600': '#be123c',
           'primary-700': '#9f1239',
-          secondary: '#ffffff',
+          secondary: 'rgb(var(--c-fg) / <alpha-value>)',
           'secondary-100': '#ffffff',
           'secondary-200': '#f9fafb',
           'secondary-300': '#f3f4f6',
@@ -41,16 +45,20 @@ const config: Config = {
           'red-500': '#e11d48',
           'red-600': '#be123c',
           'red-700': '#9f1239',
-          white: '#ffffff',
+          white: 'rgb(var(--c-fg) / <alpha-value>)',
           'white-100': '#ffffff',
           'white-200': '#f9fafb',
           'white-300': '#f3f4f6',
-          bg: '#0a0e17',
-          surface: '#121a29',
-          'surface-2': '#1a2538',
-          'surface-3': '#232f47',
-          glass: 'rgba(18, 26, 41, 0.75)',
-          border: 'rgba(255,255,255,0.08)',
+          bg: 'rgb(var(--c-bg) / <alpha-value>)',
+          surface: 'rgb(var(--c-surface) / <alpha-value>)',
+          'surface-2': 'rgb(var(--c-surface-2) / <alpha-value>)',
+          'surface-3': 'rgb(var(--c-surface-3) / <alpha-value>)',
+          glass: 'var(--bet62-glass)',
+          border: 'var(--c-border)',
+          // Botões de odds (mais visíveis que o vermelho sobre fundo escuro).
+          odd: 'rgb(var(--c-odd) / <alpha-value>)',
+          'odd-hover': 'rgb(var(--c-odd-hover) / <alpha-value>)',
+          'odd-price': 'rgb(var(--c-odd-price) / <alpha-value>)',
           warning: '#fbbf24',
           danger: '#dc2626',
           success: '#16a34a',
