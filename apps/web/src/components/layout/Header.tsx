@@ -8,6 +8,7 @@ import {
   Activity,
   Calendar,
   Trophy,
+  LayoutGrid,
   Dices,
   User,
   Menu,
@@ -36,6 +37,7 @@ import { formatCurrencyEUR } from '../../lib/utils';
 
 const NAV = [
   { href: '/', label: 'Início', icon: Trophy },
+  { href: '/desporto', label: 'Desporto', icon: LayoutGrid },
   { href: '/live', label: 'Ao Vivo', icon: Activity },
   { href: '/events', label: 'Próximos', icon: Calendar },
   { href: '/casino', label: 'Cassino', icon: Dices },
