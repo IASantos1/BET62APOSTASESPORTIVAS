@@ -89,6 +89,21 @@ function variantLabel(variant: string) {
     .join(' · ');
 }
 
+/** Ordena linhas de totais/handicaps pelo valor numérico, nunca pela ordem de chegada do JSON. */
+function variantLineValue(variant: string): number | null {
+  const match = variant.match(/(?:^|[|;])(?:total|hcp|handicap|spread|line)=(-?\d+(?:\.\d+)?)/i);
+  return match ? Number(match[1]) : null;
+}
+
+function compareVariants(a: string, b: string): number {
+  const av = variantLineValue(a);
+  const bv = variantLineValue(b);
+  if (av !== null && bv !== null && av !== bv) return av - bv;
+  if (av !== null && bv === null) return -1;
+  if (av === null && bv !== null) return 1;
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+}
+
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v));
 function statRows(stats: BoardEvent['statistics']) {
   return Object.entries(stats ?? {})
@@ -565,7 +580,7 @@ function Inner({ id }: { id: string }) {
                           },
                         };
                       }),
-                    }))}
+                    })).sort((a, b) => compareVariants(a.variant, b.variant))}
                   />
                 ))}
               </div>
