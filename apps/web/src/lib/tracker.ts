@@ -44,7 +44,7 @@ export function trackerCandidates(raw: unknown): TrackerCandidate[] {
       const nextPath = path ? `${path}.${key}` : key;
       const keyProvider = providerOf(key);
       const provider = keyProvider ?? ownProvider;
-      const idField = ID_FIELD.test(key) || (!!keyProvider && /(?:^|_)(?:id|event_id|match_id|fixture_id|game_id)$/i.test(key));
+      const idField = ID_FIELD.test(key) || (!!keyProvider && /(?:event|match|fixture|game)?_?id$/i.test(key));
       if ((typeof child === 'string' || typeof child === 'number') && idField && provider) {
         const valueText = String(child).replace(/^sr:match:/i, '');
         if (/^\d{3,}$/.test(valueText)) {
