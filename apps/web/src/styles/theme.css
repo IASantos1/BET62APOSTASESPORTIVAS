@@ -233,3 +233,9 @@ html.light body::before {
 @media (max-width: 1023px) {
   body { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
 }
+
+/* Emblema da Liga Portugal sem a faixa do patrocinador (Betclic). */
+img.cut-sponsor {
+  clip-path: inset(0 0 26% 0);
+  transform: translateY(13%) scale(1.15);
+}

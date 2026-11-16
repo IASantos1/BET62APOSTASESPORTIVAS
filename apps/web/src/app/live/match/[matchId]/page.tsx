@@ -251,6 +251,66 @@ function mergeMarkets(base: BetbyMarkets, extra: BetbyMarkets | null): BetbyMark
 }
 
 /** Os mercados completos do jogo, quando o admin indicou o endereço da BETBY que os traz. */
+// Endereços possíveis da BETBY com todos os mercados de um jogo. Sem endereço fixado no admin, a
+// página testa-os uma vez (no navegador, a BETBY bloqueia servidores) e guarda o que trouxer mais
+// mercados do que a lista; nenhum serve → volta a tentar daqui a 6 h.
+const EVENT_CANDIDATES = [
+  '{base}/api/v4/{feed}/brand/{brand}/{locale}/event/{id}',
+  '{base}/api/v4/{feed}/brand/{brand}/{locale}/events/{id}',
+  '{base}/api/v4/{feed}/brand/{brand}/{locale}/match/{id}',
+  '{base}/api/v4/event/brand/{brand}/{locale}/{id}',
+  '{base}/api/v3/{feed}/brand/{brand}/{locale}/event/{id}',
+  '{base}/api/v2/{feed}/brand/{brand}/{locale}/event/{id}',
+  '{base}/api/v1/events/brand/{brand}/event/{id}/{locale}',
+];
+const DISCOVERY_KEY = 'bet62-event-endpoint';
+
+function useEventEndpoint(id: string, feed: 'live' | 'prematch', configured: string | null | undefined, ready: boolean, baseCount: number) {
+  const [tpl, setTpl] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (configured) {
+      setTpl(configured);
+      return;
+    }
+    if (!ready) return;
+    let saved: { tpl: string | null; at: number } | null = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(DISCOVERY_KEY) || 'null');
+    } catch {}
+    if (saved?.tpl) {
+      setTpl(saved.tpl);
+      return;
+    }
+    if (saved && Date.now() - saved.at < 6 * 3600_000) return;
+    let stop = false;
+    void (async () => {
+      for (const c of EVENT_CANDIDATES) {
+        try {
+          const r = await fetch(fillTemplate(c, id, feed), { cache: 'no-store' });
+          if (!r.ok) continue;
+          const found = extractMarkets(await r.json(), id);
+          if (found && Object.keys(found).length > baseCount) {
+            try {
+              localStorage.setItem(DISCOVERY_KEY, JSON.stringify({ tpl: c, at: Date.now() }));
+            } catch {}
+            if (!stop) setTpl(c);
+            return;
+          }
+        } catch {
+          // bloqueado, 404 ou não JSON: o seguinte
+        }
+      }
+      try {
+        localStorage.setItem(DISCOVERY_KEY, JSON.stringify({ tpl: null, at: Date.now() }));
+      } catch {}
+    })();
+    return () => {
+      stop = true;
+    };
+  }, [id, feed, configured, ready, baseCount]);
+  return tpl;
+}
+
 function useFullMarkets(id: string, feed: 'live' | 'prematch', tpl: string | null | undefined) {
   const [markets, setMarkets] = React.useState<BetbyMarkets | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -376,7 +436,8 @@ function Inner({ id }: { id: string }) {
   const [distribution, setDistribution] = React.useState<BetbyDistribution>({});
   const [cat, setCat] = React.useState('todos');
   const [view, setView] = React.useState<View>('mercados');
-  const fullMarketState = useFullMarkets(id, feed, cfg?.eventEndpoint);
+  const endpoint = useEventEndpoint(id, feed, cfg?.eventEndpoint, cfg !== null && !!e, e ? Object.keys(e.markets).length : 0);
+  const fullMarketState = useFullMarkets(id, feed, endpoint);
   const fullMarkets = fullMarketState.markets;
   const betbyStats = useBetbyStats(id, feed, cfg?.statsEndpoint, view === 'estatisticas');
   React.useEffect(() => {
