@@ -129,7 +129,7 @@ export default function AjudaPage() {
   }, [q]);
 
   return (
-    <div className="relative min-h-screen bg-bet62-bg overflow-hidden">
+    <div className="relative min-h-screen overflow-hidden">
       <Header />
       <div className="flex">
         <Sidebar compact />

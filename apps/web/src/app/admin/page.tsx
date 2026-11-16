@@ -89,7 +89,7 @@ export default function AdminPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bet62-bg">
+    <div className="min-h-screen">
       <Header />
       <main className="max-w-5xl mx-auto px-4 lg:px-8 py-10 space-y-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">

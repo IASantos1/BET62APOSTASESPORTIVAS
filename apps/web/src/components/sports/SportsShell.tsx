@@ -9,7 +9,7 @@ import { BetSlip } from './BetSlip';
 
 export function SportsShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-bet62-bg">
+    <div className="min-h-screen">
       <Header />
       <div className="flex">
         <SportsSidebar className="hidden lg:block" />

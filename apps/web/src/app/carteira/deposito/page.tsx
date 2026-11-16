@@ -49,7 +49,7 @@ export default function CarteiraDepositoPage() {
   };
 
   return (
-    <div className="relative min-h-screen bg-bet62-bg overflow-hidden">
+    <div className="relative min-h-screen overflow-hidden">
       <Header />
       <main className="min-w-0 w-full">
           <div className="relative">
