@@ -47,11 +47,24 @@ interface Probe {
 }
 
 function countMarkets(j: unknown, id: string): number {
-  if (!j || typeof j !== 'object') return 0;
-  const o = j as Record<string, unknown>;
-  if (o.markets && typeof o.markets === 'object') return Object.keys(o.markets).length;
-  const ev = (o.events as Record<string, unknown> | undefined)?.[id] ?? o.event ?? o.data;
-  return ev ? countMarkets(ev, id) : 0;
+  const seen = new Set<object>();
+  const visit = (value: unknown, depth = 0): number => {
+    if (!value || typeof value !== 'object' || depth > 8 || seen.has(value as object)) return 0;
+    seen.add(value as object);
+    if (Array.isArray(value)) {
+      for (const item of value) { const n = visit(item, depth + 1); if (n) return n; }
+      return 0;
+    }
+    const o = value as Record<string, unknown>;
+    if (o.markets && typeof o.markets === 'object' && !Array.isArray(o.markets)) return Object.keys(o.markets).length;
+    const keys = [id, 'events', 'event', 'response', 'result', 'payload', 'data', 'body'];
+    for (const key of keys) if (key in o) { const n = visit(o[key], depth + 1); if (n) return n; }
+    for (const [key, child] of Object.entries(o)) if (!keys.includes(key) && key !== 'markets') {
+      const n = visit(child, depth + 1); if (n) return n;
+    }
+    return 0;
+  };
+  return visit(j);
 }
 
 async function saveConfig(patch: SiteConfig) {

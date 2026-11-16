@@ -7,7 +7,7 @@ import { FileCache } from './store';
 // (100 no plano grátis), tudo guardado em cache.
 
 export const API_KEY = () =>
-  (process.env.API_FOOTBALL_KEY || process.env.APIFOOTBALL_KEY || process.env.API_SPORTS_KEY || process.env.RAPIDAPI_KEY || '').trim();
+  (process.env.API_FOOTBALL_KEY || process.env.APIFOOTBALL_KEY || process.env.API_SPORTS_KEY || '').trim();
 
 const DAILY = Number(process.env.API_FOOTBALL_DAILY || 95);
 const PER_MINUTE = Number(process.env.API_FOOTBALL_PER_MINUTE || 9);
@@ -111,6 +111,8 @@ export function sameTeam(a: string, b: string) {
 // ---------- emblemas ----------
 
 const logos = new FileCache<string | null>('team-logos');
+const missingLogos = new FileCache<boolean>('team-logos-missing');
+const NEGATIVE_CACHE = 30 * 60_000;
 const MONTH = 30 * 86_400_000;
 const inflight = new Map<string, Promise<string | null>>();
 
@@ -157,7 +159,8 @@ export async function teamLogo(sport: string, name: string, leagueId?: number): 
   if (!api || !name) return null;
   const key = `${api}|${loose(name)}`;
   const hit = logos.get(key, MONTH);
-  if (hit !== undefined) return hit;
+  if (typeof hit === 'string' && hit) return hit;
+  if (missingLogos.get(key, NEGATIVE_CACHE)) return null;
   if (api === 'football' && leagueId) {
     const team = (await leaguePack(leagueId).catch(() => [])).find((t) => sameTeam(t.name, name));
     if (team) {
@@ -180,10 +183,13 @@ export async function teamLogo(sport: string, name: string, leagueId?: number): 
         return t.logo;
       }
     }
-    logos.set(key, null);
+    missingLogos.set(key, true);
     return null;
   })()
-    .catch(() => null)
+    .catch((e) => {
+      state.lastError = e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200);
+      return null;
+    })
     .finally(() => inflight.delete(key));
   inflight.set(key, p);
   return p;

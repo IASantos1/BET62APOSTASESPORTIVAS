@@ -189,38 +189,76 @@ function MarketBlock({ title, rows }: { title: string; rows: { variant: string; 
   );
 }
 
+/** Extrai mercados mesmo quando a BETBY envolve o evento em response/result/payload/data. */
+function extractMarkets(payload: unknown, eventId: string): BetbyMarkets | null {
+  const seen = new Set<object>();
+  const preferred = ['markets', eventId, 'events', 'event', 'response', 'result', 'payload', 'data', 'body'];
+  const visit = (value: unknown, depth = 0): BetbyMarkets | null => {
+    if (!value || typeof value !== 'object' || depth > 8 || seen.has(value as object)) return null;
+    seen.add(value as object);
+    if (Array.isArray(value)) {
+      for (const item of value) { const found = visit(item, depth + 1); if (found) return found; }
+      return null;
+    }
+    const obj = value as Record<string, unknown>;
+    if (obj.markets && typeof obj.markets === 'object' && !Array.isArray(obj.markets)) {
+      return obj.markets as BetbyMarkets;
+    }
+    for (const key of preferred) {
+      if (key === 'markets') continue;
+      if (key in obj) { const found = visit(obj[key], depth + 1); if (found) return found; }
+    }
+    for (const [key, child] of Object.entries(obj)) {
+      if (preferred.includes(key) || key === 'markets') continue;
+      const found = visit(child, depth + 1);
+      if (found) return found;
+    }
+    return null;
+  };
+  return visit(payload);
+}
+
+/** Une mercados por id, variante e seleção; não descarta variantes já recebidas no feed live. */
+function mergeMarkets(base: BetbyMarkets, extra: BetbyMarkets | null): BetbyMarkets {
+  if (!extra) return base;
+  const merged: BetbyMarkets = {};
+  for (const [marketId, variants] of Object.entries(base)) {
+    merged[marketId] = {};
+    for (const [variant, outcomes] of Object.entries(variants ?? {})) merged[marketId][variant] = { ...outcomes };
+  }
+  for (const [marketId, variants] of Object.entries(extra)) {
+    const current = merged[marketId] ?? (merged[marketId] = {});
+    for (const [variant, outcomes] of Object.entries(variants ?? {})) {
+      current[variant] = { ...(current[variant] ?? {}), ...(outcomes ?? {}) };
+    }
+  }
+  return merged;
+}
+
 /** Os mercados completos do jogo, quando o admin indicou o endereço da BETBY que os traz. */
 function useFullMarkets(id: string, feed: 'live' | 'prematch', tpl: string | null | undefined) {
   const [markets, setMarkets] = React.useState<BetbyMarkets | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
-    if (!tpl) return;
+    if (!tpl) { setMarkets(null); setError(null); return; }
     let stop = false;
     const load = async () => {
       try {
         const r = await fetch(fillTemplate(tpl, id, feed), { cache: 'no-store' });
-        if (!r.ok) return;
-        const j = (await r.json()) as Record<string, unknown>;
-        const pick = (o: unknown): BetbyMarkets | null => {
-          if (!o || typeof o !== 'object') return null;
-          const x = o as Record<string, unknown>;
-          if (x.markets && typeof x.markets === 'object') return x.markets as BetbyMarkets;
-          const ev = (x.events as Record<string, unknown> | undefined)?.[id] ?? (x.event as unknown) ?? (x.data as unknown);
-          return ev ? pick(ev) : null;
-        };
-        const m = pick(j);
-        if (!stop && m && Object.keys(m).length) setMarkets(m);
-      } catch {
-        // endereço errado ou bloqueado: ficam os mercados da lista
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const j = await r.json();
+        const found = extractMarkets(j, id);
+        if (!found || !Object.keys(found).length) throw new Error('Resposta sem mercados reconhecidos (verifique o formato do endpoint BETBY).');
+        if (!stop) { setMarkets(found); setError(null); }
+      } catch (e) {
+        if (!stop) setError(e instanceof Error ? e.message : String(e));
       }
     };
     void load();
     const t = window.setInterval(load, feed === 'live' ? 15_000 : 60_000);
-    return () => {
-      stop = true;
-      window.clearInterval(t);
-    };
+    return () => { stop = true; window.clearInterval(t); };
   }, [id, feed, tpl]);
-  return markets;
+  return { markets, error };
 }
 
 /** Estatísticas da BETBY (endereço indicado no admin): qualquer par casa/fora vira uma barra. */
@@ -308,7 +346,8 @@ function Inner({ id }: { id: string }) {
   const [distribution, setDistribution] = React.useState<BetbyDistribution>({});
   const [cat, setCat] = React.useState('todos');
   const [view, setView] = React.useState<View>('mercados');
-  const fullMarkets = useFullMarkets(id, feed, cfg?.eventEndpoint);
+  const fullMarketState = useFullMarkets(id, feed, cfg?.eventEndpoint);
+  const fullMarkets = fullMarketState.markets;
   const betbyStats = useBetbyStats(id, feed, cfg?.statsEndpoint, view === 'estatisticas');
   React.useEffect(() => {
     fetchDescriptions(id).then(setDescriptions).catch(() => setDescriptions({}));
@@ -327,7 +366,7 @@ function Inner({ id }: { id: string }) {
   };
   const share = (m: string, o: string) =>
     distribution.markets?.find((x) => String(x.market_id) === m)?.outcomes.find((x) => String(x.outcome_id) === o)?.percentage;
-  const allMarkets: BetbyMarkets = fullMarkets ? { ...e.markets, ...fullMarkets } : e.markets;
+  const allMarkets: BetbyMarkets = mergeMarkets(e.markets, fullMarkets);
   const ev = { ...e, markets: allMarkets };
   const markets = Object.entries(allMarkets).sort((a, b) => marketRank(a[0]) - marketRank(b[0]));
   const stats = statRows(e.statistics);
@@ -477,6 +516,9 @@ function Inner({ id }: { id: string }) {
           <h2 className="text-lg font-black">
             Mercados <span className="text-sm font-normal text-white/40">{markets.length}</span>
           </h2>
+          {cfg?.eventEndpoint && fullMarketState.error && (
+            <p className="text-xs text-amber-300/80">Mercados adicionais BETBY: {fullMarketState.error}. Os mercados do feed principal continuam disponíveis.</p>
+          )}
           {markets.length === 0 ? (
             <EmptyPanel>{live ? 'Mercados suspensos de momento.' : 'Sem odds disponíveis para este jogo.'}</EmptyPanel>
           ) : (
