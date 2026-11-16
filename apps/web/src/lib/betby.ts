@@ -246,6 +246,21 @@ export function eventStart(event: BetbyEvent) {
 }
 
 const SNAPSHOT_MAX_AGE = 10 * 60_000;
+// Fallback conservador: um evento live sem qualquer delta durante 30 min é considerado obsoleto.
+// Não depende de códigos de estado BETBY que ainda não foram confirmados pelo fornecedor.
+export const LIVE_EVENT_STALE_MS = 30 * 60_000;
+
+function pruneStaleLiveEvents(
+  store: Map<string, BetbyEvent>,
+  lastEventUpdates: Map<string, number>,
+  now = Date.now(),
+) {
+  for (const [id, updatedAt] of lastEventUpdates) {
+    if (now - updatedAt < LIVE_EVENT_STALE_MS) continue;
+    store.delete(id);
+    lastEventUpdates.delete(id);
+  }
+}
 interface Snapshot {
   at: number;
   events: [string, BetbyEvent][];
@@ -319,6 +334,7 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
     );
     dictRef.current = snap.dict;
     appliedRef.current = new Set(snap.applied);
+    if (feed === 'live') pruneStaleLiveEvents(storeRef.current, lastEventUpdatesRef.current);
     publish();
     setLastEventUpdates(new Map(lastEventUpdatesRef.current));
     setUpdatedAt(new Date(snap.at));
@@ -347,6 +363,8 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
       // Esquece versões que já saíram do índice (a lista não cresce para sempre).
       const current = new Set(versions);
       for (const v of appliedRef.current) if (!current.has(v)) appliedRef.current.delete(v);
+      // Só expira após uma leitura bem-sucedida: uma falha temporária da BETBY não limpa o quadro.
+      if (feed === 'live') pruneStaleLiveEvents(store, lastEventUpdatesRef.current);
       publish();
       setLastEventUpdates(new Map(lastEventUpdatesRef.current));
       setUpdatedAt(new Date());
