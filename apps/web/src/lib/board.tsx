@@ -157,14 +157,42 @@ export interface MainOdd {
 }
 
 export function mainOddsOf(e: BoardEvent): MainOdd[] {
+  let fallback: MainOdd[] = [];
   for (const m of MAIN_MARKETS) {
     const outcomes = e.markets[m.id]?.[''];
     if (!outcomes) continue;
-    return Object.keys(m.labels)
+    const rows = Object.keys(m.labels)
       .filter((o) => outcomes[o])
-      .map((o) => ({ label: m.labels[o], outcomeId: o, marketId: m.id, odds: Number(outcomes[o].k) || 0, blocked: outcomes[o].b === 1 }));
+      .map((o) => {
+        const odds = Number(outcomes[o].k) || 0;
+        return { label: m.labels[o], outcomeId: o, marketId: m.id, odds, blocked: outcomes[o].b === 1 || odds <= 1 };
+      });
+    if (!rows.length) continue;
+    if (!fallback.length) fallback = rows;
+    if (rows.some((row) => !row.blocked)) return rows;
   }
-  return [];
+  return fallback;
+}
+
+function hasActiveSelection(variants: BetbyMarkets[string]) {
+  return Object.values(variants).some((outcomes) =>
+    Object.values(outcomes).some((outcome) => outcome.b !== 1 && Number(outcome.k) > 1),
+  );
+}
+
+/** Em futebol ao vivo, encaminha para o jogo se o 1X2 estiver fechado, incompleto ou sem valor. */
+export function shouldShowBetNow(e: BoardEvent) {
+  if (e.status !== 'live' || e.sport !== 'futebol') return false;
+
+  const outcomes = e.markets['1']?.[''] ?? {};
+  const main = ['1', '2', '3']
+    .map((id) => outcomes[id])
+    .filter((outcome): outcome is NonNullable<typeof outcome> => Boolean(outcome));
+  const active = main.filter((outcome) => outcome.b !== 1 && Number(outcome.k) > 1);
+  const mainUnavailable = active.length < 3 || active.some((outcome) => Number(outcome.k) <= 1.05);
+  if (!mainUnavailable) return false;
+
+  return Object.entries(e.markets).some(([marketId, variants]) => marketId !== '1' && hasActiveSelection(variants));
 }
 
 export const matchName = (e: Pick<BoardEvent, 'home' | 'away'>) => `${e.home} - ${e.away}`;

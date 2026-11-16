@@ -4,13 +4,26 @@
 // Ainda só no navegador: o botão de apostar avisa que o registo de apostas não está ligado.
 import * as React from 'react';
 import { Ticket, X, Trash2 } from 'lucide-react';
+import { useBoard } from '../../lib/board';
 import { useSlip } from '../../stores/slip.store';
 import { cn } from '../../lib/utils';
 import { fmtOdds } from './links';
 
 function SlipBody() {
   const { picks, builder, mode, stake, setMode, setStake, remove, clear, setOpen } = useSlip();
+  const { events } = useBoard();
   const [notice, setNotice] = React.useState<string | null>(null);
+  const unavailable = React.useMemo(() => {
+    const result = new Map<string, string>();
+    const legs = builder?.legs ?? picks;
+    for (const pick of legs) {
+      const event = events.find((item) => item.id === pick.eventId);
+      const outcome = event?.markets[pick.marketId]?.[pick.variant]?.[pick.outcomeId];
+      if (outcome?.b === 1) result.set(pick.key, 'Suspenso');
+      else if (outcome && Number(outcome.k) <= 1) result.set(pick.key, 'Indisponível');
+    }
+    return result;
+  }, [builder, events, picks]);
   const count = builder ? builder.legs.length : picks.length;
   const total = builder ? builder.odds : mode === 'multiple' ? picks.reduce((p, x) => p * x.odds, 1) : 0;
   const totalStake = builder || mode === 'multiple' ? stake : stake * picks.length;
@@ -56,6 +69,7 @@ function SlipBody() {
               {builder.legs.map((l) => (
                 <li key={l.key}>
                   {l.marketName}: <b className="text-white">{l.label}</b>
+                  {unavailable.has(l.key) && <span className="ml-2 font-semibold text-amber-300">{unavailable.get(l.key)}</span>}
                 </li>
               ))}
             </ul>
@@ -73,6 +87,7 @@ function SlipBody() {
                   <p className="font-semibold truncate">{p.label}</p>
                   <p className="text-xs text-white/50 truncate">{p.marketName}</p>
                   <p className="text-xs text-white/40 truncate">{p.match}</p>
+                  {unavailable.has(p.key) && <p className="mt-1 text-xs font-semibold text-amber-300">{unavailable.get(p.key)} no feed atual</p>}
                 </div>
                 <div className="flex items-center gap-2">
                   <b className="font-mono text-bet62-primary">{fmtOdds(p.odds)}</b>
@@ -118,11 +133,16 @@ function SlipBody() {
             <b className="font-mono text-emerald-400">{ret.toFixed(2)} €</b>
           </div>
           <button
+            disabled={unavailable.size > 0}
             onClick={() => setNotice('O registo de apostas ainda não está ligado.')}
-            className="w-full rounded-xl bg-bet62-primary py-2.5 font-bold text-onbrand hover:bg-bet62-primary-600"
+            className={cn(
+              'w-full rounded-xl bg-bet62-primary py-2.5 font-bold text-onbrand hover:bg-bet62-primary-600',
+              unavailable.size > 0 && 'cursor-not-allowed opacity-50',
+            )}
           >
             Apostar
           </button>
+          {unavailable.size > 0 && <p className="text-xs text-amber-300">Remova ou aguarde a reabertura das seleções indisponíveis.</p>}
           {notice && <p className="text-xs text-amber-300">{notice}</p>}
         </div>
       )}
@@ -182,7 +202,7 @@ export function BetSlip({ trackerUrl, trackerActive }: { trackerUrl?: string | n
                   <iframe
                     src={trackerUrl}
                     title="Minicampo do jogo"
-                    className="block h-[42vh] min-h-[320px] max-h-[520px] w-full"
+                    className="block h-[min(36dvh,420px)] min-h-[260px] max-h-[420px] w-full"
                     allow="fullscreen"
                   />
                 </div>

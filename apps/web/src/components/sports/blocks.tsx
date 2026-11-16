@@ -9,6 +9,7 @@ import {
   MAIN_MARKETS,
   mainOddsOf,
   pickOf,
+  shouldShowBetNow,
   type Acca,
   type BoardEvent,
   type Builder,
@@ -79,7 +80,28 @@ export function OddButton({ event, outcomeId, marketId, label, compact = false }
 function MainOdds({ e, compact }: { e: BoardEvent; compact?: boolean }) {
   const odds = mainOddsOf(e);
   const grid = cn('grid gap-1.5', compact ? 'grid-cols-[repeat(3,4.25rem)]' : 'w-full grid-cols-3');
+  if (shouldShowBetNow(e)) {
+    return (
+      <Link
+        href={matchHref(e.id, true)}
+        className={cn(grid, 'rounded-lg border border-emerald-400/30 bg-emerald-500/10 text-center text-xs font-bold text-emerald-200 hover:bg-emerald-500/20')}
+      >
+        <span className={cn('col-span-3 flex items-center justify-center gap-2', compact ? 'h-9' : 'h-10')}>
+          Aposte já <span aria-hidden="true">›</span>
+        </span>
+      </Link>
+    );
+  }
   if (!odds.length) {
+    if (e.status === 'live') {
+      return (
+        <div className={grid}>
+          <span className={cn('col-span-3 grid place-items-center rounded-lg bg-bet62-odd/40 text-xs text-white/55', compact ? 'h-9' : 'h-10')}>
+            Suspenso
+          </span>
+        </div>
+      );
+    }
     return (
       <div className={grid}>
         {[0, 1, 2].map((i) => (

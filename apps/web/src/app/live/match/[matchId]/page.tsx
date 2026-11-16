@@ -442,6 +442,7 @@ function Inner({ id }: { id: string }) {
   const [distribution, setDistribution] = React.useState<BetbyDistribution>({});
   const [cat, setCat] = React.useState('todos');
   const [view, setView] = React.useState<View>('mercados');
+  const [desktopTracker, setDesktopTracker] = React.useState(false);
   const endpoint = useEventEndpoint(id, feed, cfg?.eventEndpoint, cfg !== null && !!e, e ? Object.keys(e.markets).length : 0);
   const fullMarketState = useFullMarkets(id, feed, endpoint);
   const fullMarkets = fullMarketState.markets;
@@ -449,10 +450,17 @@ function Inner({ id }: { id: string }) {
   const sideWidgets = widgets.get(id);
   const tracker = live && e ? trackerFor(e.raw, e.betbySport, cfg?.trackerField, sideWidgets, true) : null;
   React.useEffect(() => {
-    const active = view === 'tracker' && !!live;
+    const media = window.matchMedia('(min-width: 1280px)');
+    const update = () => setDesktopTracker(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  React.useEffect(() => {
+    const active = view === 'tracker' && !!live && desktopTracker;
     setTracker(active ? tracker : null, active);
     return () => setTracker(null, false);
-  }, [live, setTracker, tracker, view]);
+  }, [desktopTracker, live, setTracker, tracker, view]);
   React.useEffect(() => {
     fetchDescriptions(id).then(setDescriptions).catch(() => setDescriptions({}));
     fetchBetDistribution(id).then(setDistribution).catch(() => setDistribution({}));
@@ -470,7 +478,7 @@ function Inner({ id }: { id: string }) {
       return;
     }
     setView('mercados');
-    setCat('principais');
+    setCat('todos');
     window.requestAnimationFrame(() => document.getElementById('match-markets')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
 
@@ -555,10 +563,10 @@ function Inner({ id }: { id: string }) {
         </section>
 
         {/* Minicampo / transmissão logo abaixo do cabeçalho (juntos). */}
-        {view === 'tracker' && (
+        {view === 'tracker' && !desktopTracker && (
           <div className="overflow-hidden rounded-2xl border border-bet62-border bg-bet62-surface/50 xl:hidden">
             {tracker ? (
-              <iframe src={tracker} title="Tracker do jogo" className="block h-[min(88vh,1000px)] min-h-[760px] w-full" allow="fullscreen" />
+              <iframe src={tracker} title="Tracker do jogo" className="block h-[min(60dvh,480px)] min-h-[300px] w-full sm:h-[min(68dvh,600px)] sm:min-h-[380px]" allow="fullscreen" />
             ) : (
               <p className="p-6 text-sm text-white/60">
                 Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.
