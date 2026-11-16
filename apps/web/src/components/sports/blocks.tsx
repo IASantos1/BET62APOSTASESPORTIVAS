@@ -99,14 +99,14 @@ export function EventRow({ e }: { e: BoardEvent }) {
           <div className="min-w-0 flex-1 text-sm">
             <div className="flex items-center justify-between gap-2">
               <span className="flex min-w-0 items-center gap-1.5">
-                <TeamLogo sport={e.sport} name={e.home} league={leagueApiId(e.sport, e.league, e.country)} size={16} />
+                <TeamLogo sport={e.sport} name={e.home} photoUrl={e.homePhoto} league={leagueApiId(e.sport, e.league, e.country)} size={16} />
                 <span className="truncate">{e.home}</span>
               </span>
               {live && e.score && <b className="font-mono">{e.score.home}</b>}
             </div>
             <div className="flex items-center justify-between gap-2">
               <span className="flex min-w-0 items-center gap-1.5">
-                <TeamLogo sport={e.sport} name={e.away} league={leagueApiId(e.sport, e.league, e.country)} size={16} />
+                <TeamLogo sport={e.sport} name={e.away} photoUrl={e.awayPhoto} league={leagueApiId(e.sport, e.league, e.country)} size={16} />
                 <span className="truncate">{e.away}</span>
               </span>
               {live && e.score && <b className="font-mono">{e.score.away}</b>}
