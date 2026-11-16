@@ -84,7 +84,15 @@ const LOGO_SPORTS = new Set(['futebol', 'basquetebol']);
 
 export function TeamLogo({ sport, name, league, size = 28, className }: { sport: string; name: string; league?: number | null; size?: number; className?: string }) {
   const src = LOGO_SPORTS.has(sport) ? `/api/logo/team?s=${encodeURIComponent(sport)}&n=${encodeURIComponent(name)}${league ? `&l=${league}` : ''}` : null;
-  const [failed, setFailed] = React.useState(() => !src || broken.has(src));
+  const [failed, setFailed] = React.useState(false);
+  // Um erro transitório (quota, timeout ou cold start) não deve condenar o emblema
+  // durante toda a sessão. Volta a tentar periodicamente e quando o nome muda.
+  React.useEffect(() => {
+    setFailed(false);
+    if (!src) return;
+    const retry = window.setInterval(() => setFailed(false), 60_000);
+    return () => window.clearInterval(retry);
+  }, [src]);
   const box = { width: size, height: size };
   if (!src || failed) {
     return (
@@ -106,7 +114,6 @@ export function TeamLogo({ sport, name, league, size = 28, className }: { sport:
       height={size}
       style={box}
       onError={() => {
-        broken.add(src);
         setFailed(true);
       }}
       className={cn('shrink-0 object-contain', className)}
