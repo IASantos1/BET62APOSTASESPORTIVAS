@@ -4,7 +4,7 @@
 // cada odd clicável para o boletim.
 import Link from 'next/link';
 import * as React from 'react';
-import { Activity, ArrowLeft, BarChart3, Clock3, MonitorPlay } from 'lucide-react';
+import { Activity, ArrowLeft, BarChart3, Clock3, MonitorPlay, Ticket } from 'lucide-react';
 import { SportsShell } from '../../../../components/sports/SportsShell';
 import { EmptyPanel } from '../../../../components/sports/blocks';
 import { LeagueLogo, TeamLogo, leagueApiId } from '../../../../components/sports/Logos';
@@ -18,6 +18,7 @@ import { cn } from '../../../../lib/utils';
 import { fillTemplate, useSiteConfig } from '../../../../lib/site-config';
 import { trackerFor } from '../../../../lib/tracker';
 import { BETBY_CONFIG, type BetbyMarkets } from '../../../../lib/betby';
+import { useSportsTracker } from '../../../../components/sports/SportsTrackerContext';
 
 // Nomes dos mercados mais comuns (ids Betradar usados pela BETBY). O nome da BETBY
 // (/api/v3/descriptions) tem prioridade; depois estes; senão o id.
@@ -145,7 +146,7 @@ function OddCell({ c, priceOnly }: { c: Cell; priceOnly?: boolean }) {
       )}
       <span className="flex shrink-0 items-center gap-1">
         <OddArrow moveKey={c.moveKey} />
-        <b className={cn('font-mono', c.selected ? 'text-onbrand' : 'text-bet62-odd-price')}>{c.blocked ? '🔒' : c.price}</b>
+        <b className={cn('font-mono', c.selected ? 'text-onbrand' : 'text-bet62-odd-price')}>{c.blocked ? '—' : c.price}</b>
       </span>
     </button>
   );
@@ -429,7 +430,9 @@ function Inner({ id }: { id: string }) {
   const e = events.find((x) => x.id === id);
   const picks = useSlip((s) => s.picks);
   const toggle = useSlip((s) => s.toggle);
+  const setSlipOpen = useSlip((s) => s.setOpen);
   const cfg = useSiteConfig();
+  const { setTracker } = useSportsTracker();
   const live = e?.status === 'live';
   const feed = live ? 'live' : 'prematch';
   const [descriptions, setDescriptions] = React.useState<BetbyDescriptions>({});
@@ -440,12 +443,33 @@ function Inner({ id }: { id: string }) {
   const fullMarketState = useFullMarkets(id, feed, endpoint);
   const fullMarkets = fullMarketState.markets;
   const betbyStats = useBetbyStats(id, feed, cfg?.statsEndpoint, live || view === 'estatisticas');
+  const sideWidgets = widgets.get(id);
+  const tracker = live && e ? trackerFor(e.raw, e.betbySport, cfg?.trackerField, sideWidgets, true) : null;
+  React.useEffect(() => {
+    const active = view === 'tracker' && !!live;
+    setTracker(active ? tracker : null, active);
+    return () => setTracker(null, false);
+  }, [live, setTracker, tracker, view]);
   React.useEffect(() => {
     fetchDescriptions(id).then(setDescriptions).catch(() => setDescriptions({}));
     fetchBetDistribution(id).then(setDistribution).catch(() => setDistribution({}));
   }, [id]);
 
   if (!e) return <EmptyPanel>{loading ? 'A carregar…' : 'Jogo não encontrado (pode já ter terminado).'}</EmptyPanel>;
+
+  const currentPicks = picks.filter((pick) => pick.eventId === e.id);
+  const goToBet = () => {
+    if (currentPicks.length > 0) {
+      setSlipOpen(true);
+      if (window.matchMedia('(min-width: 1280px)').matches) {
+        window.requestAnimationFrame(() => document.getElementById('bet-slip')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      }
+      return;
+    }
+    setView('mercados');
+    setCat('principais');
+    window.requestAnimationFrame(() => document.getElementById('match-markets')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
 
   const marketName = (m: string) => descriptions.markets?.[m]?.name ?? MARKET_NAMES[m] ?? `Mercado ${m}`;
   const outcomeName = (m: string, variant: string, o: string) => {
@@ -465,9 +489,7 @@ function Inner({ id }: { id: string }) {
   for (const [m] of markets) counts.set(catOf(m, marketName(m)), (counts.get(catOf(m, marketName(m))) ?? 0) + 1);
   const activeCat = cat !== 'todos' && counts.has(cat) ? cat : 'todos';
   const shown = activeCat === 'todos' ? markets : markets.filter(([m]) => catOf(m, marketName(m)) === activeCat);
-  const sideWidgets = widgets.get(id);
   const broadcast = broadcasts.get(id)?.find((b) => b.url)?.url;
-  const tracker = live ? trackerFor(e.raw, e.betbySport, cfg?.trackerField, sideWidgets, true) : null;
   // Estatísticas: o widget do side feed que traz um endereço próprio (Oddin/Betgenius), senão a
   // página de estatísticas da BETBY (ui.invisiblesport.com/stats.html), que só existe para jogos
   // com fornecedor de estatísticas associado (os que têm widgets no side feed).
@@ -531,9 +553,9 @@ function Inner({ id }: { id: string }) {
 
         {/* Minicampo / transmissão logo abaixo do cabeçalho (juntos). */}
         {view === 'tracker' && (
-          <div className="overflow-hidden rounded-2xl border border-bet62-border bg-bet62-surface/50">
+          <div className="overflow-hidden rounded-2xl border border-bet62-border bg-bet62-surface/50 xl:hidden">
             {tracker ? (
-              <iframe src={tracker} title="Tracker do jogo" className="block aspect-video w-full md:aspect-[16/9]" allow="fullscreen" />
+              <iframe src={tracker} title="Tracker do jogo" className="block h-[min(88vh,1000px)] min-h-[760px] w-full" allow="fullscreen" />
             ) : (
               <p className="p-6 text-sm text-white/60">
                 Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.
@@ -574,6 +596,14 @@ function Inner({ id }: { id: string }) {
             {label}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={goToBet}
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/15 px-3 py-2 text-sm font-bold text-emerald-200 hover:bg-emerald-500/25 sm:flex-none"
+        >
+          <Ticket size={15} />
+          Aposta Já
+        </button>
       </div>
 
       {view === 'estatisticas' && (
@@ -632,7 +662,7 @@ function Inner({ id }: { id: string }) {
 
       {view !== 'estatisticas' && (
         <>
-          <section className="space-y-3">
+          <section id="match-markets" className="space-y-3 scroll-mt-20">
             <h2 className="text-lg font-black">
               Mercados <span className="text-sm font-normal text-white/40">{markets.length}</span>
             </h2>

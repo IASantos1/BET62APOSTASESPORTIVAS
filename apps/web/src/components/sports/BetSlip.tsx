@@ -165,15 +165,36 @@ function StakeInput({ value, onChange }: { value: number; onChange: (v: number) 
   );
 }
 
-export function BetSlip() {
+export function BetSlip({ trackerUrl, trackerActive }: { trackerUrl?: string | null; trackerActive?: boolean }) {
   const { open, setOpen, picks, builder } = useSlip();
   const count = builder ? builder.legs.length : picks.length;
   const [ready, setReady] = React.useState(false);
   React.useEffect(() => setReady(true), []);
   return (
     <>
-      <aside className="hidden xl:block w-80 shrink-0 border-l border-bet62-border bg-bet62-bg/60">
-        <div className="sticky top-16 h-[calc(100vh-4rem)]">{ready && <SlipBody />}</div>
+      <aside id="bet-slip" className="hidden w-80 shrink-0 border-l border-bet62-border bg-bet62-bg/60 xl:block">
+        <div className="sticky top-16 flex h-[calc(100vh-4rem)] flex-col">
+          {trackerActive && (
+            <div className="shrink-0 border-b border-bet62-border p-2">
+              <p className="mb-2 px-1 text-xs font-bold text-white/70">Minicampo</p>
+              {trackerUrl ? (
+                <div className="overflow-hidden rounded-xl border border-bet62-border bg-black/40">
+                  <iframe
+                    src={trackerUrl}
+                    title="Minicampo do jogo"
+                    className="block h-[42vh] min-h-[320px] max-h-[520px] w-full"
+                    allow="fullscreen"
+                  />
+                </div>
+              ) : (
+                <p className="rounded-xl border border-bet62-border bg-black/40 p-3 text-xs text-white/60">
+                  Minicampo não disponível para este jogo.
+                </p>
+              )}
+            </div>
+          )}
+          <div className="min-h-0 flex-1">{ready && <SlipBody />}</div>
+        </div>
       </aside>
       {/* Telemóvel / tablet: botão flutuante e gaveta */}
       {ready && count > 0 && !open && (
