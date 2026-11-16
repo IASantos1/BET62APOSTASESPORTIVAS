@@ -39,16 +39,7 @@ export default function CarteiraLevantamentoPage() {
   const handleSubmit = async () => {
     if (amount < 20 || amount > availableBalance) return;
     setLoading(true);
-    try {
-      await fetch('/api/client/withdraw', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, method, iban: method === 'bank' ? iban : undefined }),
-      });
-    } catch {
-    } finally {
-      setLoading(false);
-    }
+    setLoading(false);
   };
 
   return (

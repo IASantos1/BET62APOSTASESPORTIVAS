@@ -2,7 +2,6 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { setTokens, clearTokens, type ApiError, apiClient } from '../lib/api-client';
 
 export interface AuthUser {
   id: string;
@@ -42,7 +41,6 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
 
       setCredentials: ({ user, accessToken, refreshToken }) => {
-        setTokens(accessToken, refreshToken ?? null);
         set({
           user,
           accessToken,
@@ -51,7 +49,6 @@ export const useAuthStore = create<AuthState>()(
         });
       },
       clearCredentials: () => {
-        clearTokens();
         set({
           user: null,
           accessToken: null,
@@ -66,74 +63,16 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      login: async (email: string, password: string) => {
-        set({ isLoading: true });
-        try {
-          const res = await apiClient.post<{
-            user?: AuthUser;
-            userId?: string;
-            accessToken?: string;
-            refreshToken?: string;
-            expiresInSec?: number;
-            tokenType?: string;
-          }>('/auth/login', { email, password }, { auth: false });
-
-          const user: AuthUser = (res.user ?? {
-            id: res.userId,
-            email,
-            roles: ['USER'],
-            twoFactorEnabled: false,
-          }) as AuthUser;
-
-          get().setCredentials({
-            user,
-            accessToken: res.accessToken ?? '',
-            refreshToken: res.refreshToken ?? null,
-          });
-        } catch (err) {
-          const e = err as ApiError;
-          if (e.status === 401) {
-            get().clearCredentials();
-          }
-          throw err;
-        } finally {
-          set({ isLoading: false });
-        }
+      // Autenticação ainda sem backend: os métodos mantêm a interface usada pelas páginas.
+      login: async (_email: string, _password: string) => {
+        throw new Error('Autenticação ainda não configurada.');
       },
 
-      register: async (payload) => {
-        set({ isLoading: true });
-        try {
-          const res = await apiClient.post<{
-            user?: AuthUser;
-            accessToken?: string;
-            refreshToken?: string;
-          }>('/auth/register', payload, { auth: false });
-
-          if (res.accessToken) {
-            const u: AuthUser = (res.user ?? {
-              id: '',
-              email: String((payload.email as string) ?? ''),
-              roles: ['USER'],
-              twoFactorEnabled: false,
-            }) as AuthUser;
-            get().setCredentials({
-              user: u,
-              accessToken: res.accessToken,
-              refreshToken: res.refreshToken ?? null,
-            });
-          }
-        } finally {
-          set({ isLoading: false });
-        }
+      register: async (_payload) => {
+        throw new Error('Registo ainda não configurado.');
       },
 
       logout: async () => {
-        try {
-          await apiClient.post('/auth/logout', {}, { skipAuthError: true });
-        } catch {
-          // ignore
-        }
         get().clearCredentials();
       },
     }),

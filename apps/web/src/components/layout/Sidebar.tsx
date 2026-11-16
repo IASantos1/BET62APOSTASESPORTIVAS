@@ -46,7 +46,7 @@ export function Sidebar({ compact = false, className }: SidebarProps) {
             Futebol e casino ativos
           </div>
           <p className="mt-2 text-xs text-white/60 leading-relaxed">
-            A navegação lateral destaca o feed de futebol via MrDoge e a operação de casino integrada ao BigBang.
+            Futebol ao vivo, agenda de partidas e lobby de casino num só lugar.
           </p>
         </div>
       </div>

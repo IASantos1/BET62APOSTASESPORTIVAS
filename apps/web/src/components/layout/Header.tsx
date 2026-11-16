@@ -33,7 +33,6 @@ import {
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../stores/auth.store';
 import { formatCurrencyEUR } from '../../lib/utils';
-import { apiClient, ApiError } from '../../lib/api-client';
 
 const NAV = [
   { href: '/', label: 'Início', icon: Trophy },
@@ -75,25 +74,9 @@ export function Header() {
     const paymentMethod = normalizeDepositMethod(selectedMethod);
     setDepositLoading(true);
     setDepositError(null);
-    try {
-      const data = await apiClient.post<{ checkoutUrl?: string }>('/wallet/deposit/stripe/create-intent', {
-        provider: 'STRIPE',
-        amount: depositAmount,
-        currency: 'EUR',
-        paymentMethod,
-        returnUrl: `${window.location.origin}/carteira`,
-      });
-      if (data?.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
-      } else {
-        setDepositError('Não foi possível iniciar o pagamento. Tenta novamente.');
-      }
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Erro ao iniciar o depósito.';
-      setDepositError(message);
-    } finally {
-      setDepositLoading(false);
-    }
+    void paymentMethod;
+    setDepositError('Pagamentos ainda não configurados.');
+    setDepositLoading(false);
   };
 
   return (

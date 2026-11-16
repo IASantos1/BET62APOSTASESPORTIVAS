@@ -7,7 +7,6 @@ import { Header } from '../../components/layout/Header';
 import { Footer } from '../../components/layout/Footer';
 import { Card, CardContent } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
-import { apiClient } from '../../lib/api-client';
 
 interface MatchItem {
   id: string;
@@ -26,8 +25,7 @@ export default function EventsPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiClient.get<MatchItem[]>('/odds/events/prematch', { auth: false });
-      setMatches(Array.isArray(data) ? data : []);
+      setMatches([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Falha ao carregar agenda.');
     } finally {
@@ -46,7 +44,7 @@ export default function EventsPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl md:text-4xl font-black tracking-tight">Próximos Jogos</h1>
-            <p className="mt-2 text-white/60">Agenda de futebol alimentada por MrDoge.</p>
+            <p className="mt-2 text-white/60">Agenda de partidas.</p>
           </div>
           <Button variant="outline" onClick={() => void loadMatches()}>
             <RefreshCw size={16} />
