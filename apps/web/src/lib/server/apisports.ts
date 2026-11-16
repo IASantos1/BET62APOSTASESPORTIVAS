@@ -12,8 +12,17 @@ export const API_KEY = () =>
 const DAILY = Number(process.env.API_FOOTBALL_DAILY || 95);
 const PER_MINUTE = Number(process.env.API_FOOTBALL_PER_MINUTE || 9);
 
-type Api = 'football' | 'basketball';
-const HOST: Record<Api, string> = { football: 'v3.football.api-sports.io', basketball: 'v1.basketball.api-sports.io' };
+type Api = 'football' | 'basketball' | 'hockey' | 'american-football' | 'baseball' | 'volleyball' | 'handball' | 'rugby';
+const HOST: Record<Api, string> = {
+  football: 'v3.football.api-sports.io',
+  basketball: 'v1.basketball.api-sports.io',
+  hockey: 'v1.hockey.api-sports.io',
+  'american-football': 'v1.american-football.api-sports.io',
+  baseball: 'v1.baseball.api-sports.io',
+  volleyball: 'v1.volleyball.api-sports.io',
+  handball: 'v1.handball.api-sports.io',
+  rugby: 'v1.rugby.api-sports.io',
+};
 
 const state = {
   day: '',
@@ -110,15 +119,16 @@ export function sameTeam(a: string, b: string) {
 
 // ---------- emblemas ----------
 
-const logos = new FileCache<string | null>('team-logos');
-const missingLogos = new FileCache<boolean>('team-logos-missing');
-// Falhas temporárias ou quota não devem esconder emblemas durante meia hora.
-const NEGATIVE_CACHE = 5 * 60_000;
-const MONTH = 30 * 86_400_000;
+// Cache positivo sem expiração: depois de encontrado, o URL do emblema fica guardado.
+ // A persistência entre deploys depende de DATA_DIR / RAILWAY_VOLUME_MOUNT_PATH estar num volume.
+const logos = new FileCache<string | null>('team-logos-v2');
+const missingLogos = new FileCache<boolean>('team-logos-missing-v2');
+const NEGATIVE_CACHE = 10 * 60_000;
+const FOREVER = Number.POSITIVE_INFINITY;
 const inflight = new Map<string, Promise<string | null>>();
 
 // Equipas de uma liga inteira num só pedido (as ligas principais): poupa a quota diária.
-const packs = new FileCache<{ name: string; logo: string }[]>('league-packs');
+const packs = new FileCache<{ name: string; logo: string }[]>('league-packs-v2');
 const packInflight = new Map<number, Promise<{ name: string; logo: string }[]>>();
 function seasonsToTry() {
   const d = new Date();
@@ -127,7 +137,7 @@ function seasonsToTry() {
   return [...new Set([euro, y, euro - 1, y - 1, y - 2])];
 }
 async function leaguePack(leagueId: number) {
-  const hit = packs.get(String(leagueId), MONTH);
+  const hit = packs.get(String(leagueId), FOREVER);
   if (hit) return hit;
   if (packInflight.has(leagueId)) return packInflight.get(leagueId)!;
   const p = (async () => {
@@ -155,11 +165,23 @@ async function leaguePack(leagueId: number) {
  * Emblema de uma equipa (URL do media.api-sports.io) ou null. Com `leagueId` (ligas principais),
  * procura primeiro nas equipas da liga; senão pelo nome. Cada resposta fica guardada um mês.
  */
+const API_BY_SPORT: Partial<Record<string, Api>> = {
+  futebol: 'football',
+  basquetebol: 'basketball',
+  hoquei: 'hockey',
+  futamericano: 'american-football',
+  basebol: 'baseball',
+  voleibol: 'volleyball',
+  andebol: 'handball',
+  raguebi: 'rugby',
+};
+
+/** Emblema de equipa nos desportos com endpoint oficial de equipas da API-Sports. */
 export async function teamLogo(sport: string, name: string, leagueId?: number): Promise<string | null> {
-  const api: Api | null = sport === 'futebol' ? 'football' : sport === 'basquetebol' ? 'basketball' : null;
+  const api = API_BY_SPORT[sport] ?? null;
   if (!api || !name) return null;
   const key = `${api}|${loose(name)}`;
-  const hit = logos.get(key, MONTH);
+  const hit = logos.get(key, FOREVER);
   if (typeof hit === 'string' && hit) return hit;
   if (missingLogos.get(key, NEGATIVE_CACHE)) return null;
   if (api === 'football' && leagueId) {
