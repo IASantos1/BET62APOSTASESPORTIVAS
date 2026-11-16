@@ -19,6 +19,9 @@ export interface BoardEvent {
   tier: number;
   home: string;
   away: string;
+  /** Retratos fornecidos diretamente no descriptor BETBY (sobretudo jogadores de ténis). */
+  homePhoto?: string;
+  awayPhoto?: string;
   startTime: number | null;
   clock?: string;
   score?: { home: string; away: string };
@@ -226,6 +229,19 @@ function extractStatistics(raw: BetbyEvent): BoardEvent['statistics'] {
   return Object.keys(result).length ? result : undefined;
 }
 
+function competitorPhoto(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const node = value as Record<string, unknown>;
+  const candidate = node.photo ?? node.photo_url ?? node.photoUrl ?? node.image ?? node.image_url ?? node.imageUrl ?? node.avatar ?? node.avatar_url ?? node.logo ?? node.picture;
+  if (typeof candidate !== 'string') return undefined;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: BetbyDictionaries): BoardEvent | null {
   const d = raw.desc;
   if (!d || d.virtual || !d.competitors || d.competitors.length < 2) return null;
@@ -249,6 +265,8 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
     tier: league.tier,
     home: d.competitors[0].name,
     away: d.competitors[1].name,
+    homePhoto: competitorPhoto(d.competitors[0]),
+    awayPhoto: competitorPhoto(d.competitors[1]),
     startTime: d.scheduled ? d.scheduled * 1000 : null,
     clock: raw.state?.clock?.match_time,
     score,
