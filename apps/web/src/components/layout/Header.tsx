@@ -22,6 +22,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
+import { ThemeToggle } from './ThemeToggle';
 import { Badge } from '../ui/Badge';
 import { Avatar, AvatarFallback } from '../ui/Avatar';
 import { PaymentMethodLogo } from '../ui/PaymentMethodLogo';
@@ -47,11 +48,11 @@ const NAV = [
 export function Bet62Logo({ className }: { className?: string }) {
   return (
     <Link href="/" className={cn('flex items-center gap-2 group', className)}>
-      <svg viewBox="0 0 128 48" width="140" height="52" className="h-9 w-auto">
+      <svg viewBox="0 0 128 48" width="140" height="52" className="h-9 w-auto text-white">
         <text x="14" y="34" fontFamily="'Space Grotesk',sans-serif"
               fontSize="32" fontWeight="900" letterSpacing="-1.2">
           <tspan fill="#e11d48">BET</tspan>
-          <tspan fill="#ffffff">62</tspan>
+          <tspan fill="currentColor">62</tspan>
         </text>
       </svg>
     </Link>
@@ -105,7 +106,7 @@ export function Header() {
                     className={cn(
                       'relative group inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all',
                       active
-                        ? 'text-bet62-bg bg-bet62-primary'
+                        ? 'text-onbrand bg-bet62-primary'
                         : 'text-white/70 hover:text-white hover:bg-white/5',
                     )}
                   >
@@ -123,6 +124,7 @@ export function Header() {
           </div>
 
           <div className="flex items-center gap-2 lg:gap-3">
+            <ThemeToggle />
             {!isAuthenticated || !user ? (
               <>
                 <Button variant="primary" size="sm" className="px-5 font-bold uppercase tracking-wider" asChild>

@@ -7,6 +7,7 @@ import * as React from 'react';
 import { usePathname } from 'next/navigation';
 import { ChevronDown, ChevronRight, Calendar, Dices, Gift, ShieldCheck, Activity } from 'lucide-react';
 import { useBoard } from '../../lib/board';
+import { Flag } from './Flag';
 import { SPORTS, countryLabel, type SportKey } from '../../lib/sports/catalog';
 import { cn } from '../../lib/utils';
 import { leagueHref } from './links';
@@ -61,6 +62,7 @@ export function SportsSidebar({ className }: { className?: string }) {
                           onClick={() => toggle(ck)}
                         >
                           {cOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                          <Flag country={country} />
                           <span className="flex-1 text-left truncate">{countryLabel(country)}</span>
                           <b className="font-normal text-white/35">{list.reduce((n, l) => n + l.count, 0)}</b>
                         </button>

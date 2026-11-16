@@ -17,6 +17,7 @@ import {
 import { SPORTS, SPORT_BY_KEY, countryLabel, popularLeagues, sportRank, type SportKey } from '../../lib/sports/catalog';
 import { useSlip } from '../../stores/slip.store';
 import { cn } from '../../lib/utils';
+import { Flag } from './Flag';
 import { fmtOdds, fmtWhen, leagueHref, matchHref } from './links';
 
 // ---------- odds ----------
@@ -40,13 +41,13 @@ export function OddButton({ event, outcomeId, marketId, label, compact = false }
         'flex items-center justify-between gap-1 rounded-lg border px-2 text-sm transition',
         compact ? 'h-9 min-w-[3.6rem]' : 'h-10 flex-1',
         selected
-          ? 'border-bet62-primary bg-bet62-primary text-white'
-          : 'border-bet62-border bg-bet62-bg/50 hover:border-bet62-primary/50',
+          ? 'border-bet62-primary bg-bet62-primary text-onbrand'
+          : 'border-transparent bg-bet62-odd hover:bg-bet62-odd-hover',
         blocked && 'opacity-40 cursor-not-allowed',
       )}
     >
-      <span className={cn('text-xs', selected ? 'text-white/80' : 'text-white/45')}>{label}</span>
-      <b className={cn('font-mono', selected ? 'text-white' : 'text-bet62-primary')}>{blocked ? '—' : fmtOdds(odds)}</b>
+      <span className={cn('text-xs', selected ? 'text-onbrand/80' : 'text-white/55')}>{label}</span>
+      <b className={cn('font-mono', selected ? 'text-onbrand' : 'text-bet62-odd-price')}>{blocked ? '—' : fmtOdds(odds)}</b>
     </button>
   );
 }
@@ -127,6 +128,7 @@ export function CompetitionGroups({ events, limit = Infinity }: { events: BoardE
             >
               <span className="flex min-w-0 items-center gap-2">
                 <span>{SPORT_BY_KEY[e.sport].icon}</span>
+                <Flag country={e.country} />
                 <span className="truncate text-white/50">{countryLabel(e.country)}</span>
                 <b className="truncate text-white">{e.league}</b>
               </span>
@@ -219,7 +221,10 @@ export function LeagueCards({ leagues, sport = '' }: { leagues: LeagueNode[]; sp
         >
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5 text-xl">{SPORT_BY_KEY[l.sport].icon}</span>
           <b className="line-clamp-2 text-[11px] leading-tight">{l.label}</b>
-          <span className="text-[10px] text-white/40">{countryLabel(l.country)}</span>
+          <span className="flex items-center gap-1 text-[10px] text-white/40">
+            <Flag country={l.country} className="h-2.5 w-3.5" />
+            {countryLabel(l.country)}
+          </span>
         </Link>
       ))}
     </div>
@@ -279,7 +284,7 @@ export function AccaCard({ a }: { a: Acca }) {
         <span className="text-sm text-white/60">
           Odds totais <b className="font-mono text-white">{fmtOdds(a.odds)}</b>
         </span>
-        <button onClick={() => addMany(a.legs)} className="rounded-xl bg-bet62-primary px-3 py-2 text-xs font-bold text-white">
+        <button onClick={() => addMany(a.legs)} className="rounded-xl bg-bet62-primary px-3 py-2 text-xs font-bold text-onbrand">
           Adicionar ao boletim
         </button>
       </div>
@@ -303,7 +308,7 @@ export function BuilderCard({ b }: { b: Builder }) {
           </li>
         ))}
       </ul>
-      <button onClick={() => setBuilder(b)} className="mt-3 flex items-center justify-between rounded-xl bg-bet62-primary px-3 py-2 text-white">
+      <button onClick={() => setBuilder(b)} className="mt-3 flex items-center justify-between rounded-xl bg-bet62-primary px-3 py-2 text-onbrand">
         <b className="font-mono">{fmtOdds(b.odds)}</b>
         <span className="text-[10px] font-bold tracking-widest">CRIADOR DE APOSTAS</span>
       </button>

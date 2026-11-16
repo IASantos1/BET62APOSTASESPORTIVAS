@@ -7,6 +7,7 @@ import * as React from 'react';
 import { ArrowLeft, Clock3 } from 'lucide-react';
 import { SportsShell } from '../../../../components/sports/SportsShell';
 import { EmptyPanel } from '../../../../components/sports/blocks';
+import { Flag } from '../../../../components/sports/Flag';
 import { fmtWhen } from '../../../../components/sports/links';
 import { fetchBetDistribution, fetchDescriptions, type BetbyDescriptions, type BetbyDistribution } from '../../../../lib/betby';
 import { pickOf, useBoard, type BoardEvent } from '../../../../lib/board';
@@ -35,6 +36,33 @@ const OUTCOME_NAMES: Record<string, string> = {
 const STAT_NAMES: Record<string, string> = {
   corners: 'Cantos', yellow_cards: 'Cartões amarelos', red_cards: 'Cartões vermelhos', yellow_red_cards: 'Segundo amarelo',
 };
+// Categorias como no outro projeto (só aparecem as que têm mercados neste jogo).
+const CATS: [string, string][] = [
+  ['todos', 'Todos'], ['principais', 'Principais'], ['golos', 'Golos'], ['handicap', 'Handicap'], ['equipa', 'Equipa'],
+  ['combinadas', 'Combinadas'], ['resultados', 'Resultados'], ['periodos', 'Períodos'], ['marcadores', 'Marcadores'],
+  ['cantos', 'Cantos e cartões'], ['especiais', 'Especiais'],
+];
+const CAT_BY_ID: Record<string, string> = {
+  '1': 'principais', '10': 'principais', '11': 'principais', '186': 'principais', '219': 'principais', '340': 'principais', '406': 'principais',
+  '8': 'golos', '18': 'golos', '26': 'golos', '29': 'golos', '225': 'golos', '189': 'golos',
+  '19': 'equipa', '20': 'equipa', '69': 'periodos', '70': 'periodos',
+  '14': 'handicap', '16': 'handicap', '187': 'handicap', '223': 'handicap',
+  '35': 'combinadas', '36': 'combinadas', '37': 'combinadas',
+  '45': 'resultados', '47': 'resultados', '199': 'resultados',
+  '60': 'periodos', '63': 'periodos', '66': 'periodos', '68': 'periodos', '74': 'periodos', '75': 'periodos', '81': 'periodos', '83': 'periodos', '202': 'periodos',
+};
+const CAT_BY_NAME: [string, RegExp][] = [
+  ['cantos', /corner|card|booking|canto|cart[aã]o/i],
+  ['marcadores', /scorer|player|marcador|jogador/i],
+  ['periodos', /\b(half|quarter|period|set|innings?)\b|intervalo|parte\b|per[ií]odo|quarto/i],
+  ['combinadas', /&|\band\b|\be\b.*(total|golos|ambas)/i],
+  ['handicap', /handicap|spread/i],
+  ['equipa', /\b(team [12]|home team|away team)\b|\(casa\)|\(fora\)|equipa/i],
+  ['golos', /goal|total|both|golo|odd|even|par|ímpar|marcam/i],
+  ['resultados', /result|score|exact|margin|exato|resultado/i],
+];
+const catOf = (id: string, name: string) => CAT_BY_ID[id] ?? CAT_BY_NAME.find(([, re]) => re.test(name))?.[0] ?? 'especiais';
+
 // Mercados principais primeiro, depois pelo id.
 const ORDER = ['1', '186', '219', '340', '406', '10', '18', '29', '16', '11', '60', '68', '37', '35', '45'];
 const marketRank = (id: string) => (ORDER.includes(id) ? ORDER.indexOf(id) : 100 + Number(id) / 1e6);
@@ -64,6 +92,95 @@ function statRows(stats: BoardEvent['statistics']) {
     .map(([k, v]) => ({ key: k, name: STAT_NAMES[k] ?? k.replace(/_/g, ' '), home: num(v.home), away: num(v.away) }));
 }
 
+interface Cell {
+  id: string;
+  label: string;
+  price: string;
+  blocked: boolean;
+  selected: boolean;
+  pct?: number;
+  onClick: () => void;
+}
+
+/** Uma odd: nome à esquerda, preço à direita (ou só o preço, nas linhas com cabeçalho). */
+function OddCell({ c, priceOnly }: { c: Cell; priceOnly?: boolean }) {
+  return (
+    <button
+      type="button"
+      disabled={c.blocked}
+      title={c.label}
+      onClick={c.onClick}
+      className={cn(
+        'flex min-w-0 items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition',
+        priceOnly ? 'justify-center' : 'justify-between',
+        c.selected ? 'bg-bet62-primary text-onbrand' : 'bg-bet62-odd hover:bg-bet62-odd-hover',
+        c.blocked && 'cursor-not-allowed opacity-40',
+      )}
+    >
+      {!priceOnly && (
+        <span className={cn('min-w-0 truncate text-xs font-semibold', c.selected ? 'text-onbrand/85' : 'text-white/70')}>
+          {c.label}
+          {c.pct !== undefined && <span className="ml-1 font-normal opacity-60">{c.pct}%</span>}
+        </span>
+      )}
+      <b className={cn('shrink-0 font-mono', c.selected ? 'text-onbrand' : 'text-bet62-odd-price')}>{c.blocked ? '🔒' : c.price}</b>
+    </button>
+  );
+}
+
+const colsClass = (n: number) => (n <= 1 ? 'grid-cols-1' : n === 2 ? 'grid-cols-2' : 'grid-cols-3');
+
+/**
+ * Um mercado como no outro projeto: sem linhas, as seleções lado a lado (até 3 por fila);
+ * com linhas (total 2.5, handicap -1…), uma fila por linha: a linha à esquerda e as odds ao lado,
+ * com os nomes das seleções (Mais / Menos, equipas) no cabeçalho.
+ */
+function MarketBlock({ title, rows }: { title: string; rows: { variant: string; label: string; cells: Cell[] }[] }) {
+  const lined = rows.some((r) => r.label);
+  const head = rows[0]?.cells.map((c) => c.label) ?? [];
+  const sameHead = lined && rows.every((r) => r.cells.length === head.length && r.cells.every((c, i) => c.label === head[i])) && head.length <= 3;
+  return (
+    <div className="rounded-xl border border-bet62-border bg-bet62-surface/50 p-3">
+      <p className="mb-2.5 text-xs font-extrabold uppercase tracking-wide text-white/60">{title}</p>
+      {sameHead ? (
+        <div className="space-y-1.5">
+          <div className="grid grid-cols-[5.5rem_1fr] gap-2 md:grid-cols-[7rem_1fr]">
+            <span />
+            <div className={cn('grid gap-1.5 text-center text-[11px] font-semibold text-white/45', colsClass(head.length))}>
+              {head.map((h) => (
+                <span key={h} className="truncate">{h}</span>
+              ))}
+            </div>
+          </div>
+          {rows.map((r) => (
+            <div key={r.variant} className="grid grid-cols-[5.5rem_1fr] items-center gap-2 md:grid-cols-[7rem_1fr]">
+              <span className="truncate text-xs font-bold text-white/55">{r.label.replace(/^Linha /, '')}</span>
+              <div className={cn('grid gap-1.5', colsClass(r.cells.length))}>
+                {r.cells.map((c) => (
+                  <OddCell key={c.id} c={c} priceOnly />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {rows.map((r) => (
+            <div key={r.variant} className="space-y-1.5">
+              {r.label && <p className="text-[11px] font-semibold text-white/45">{r.label}</p>}
+              <div className={cn('grid gap-1.5', colsClass(r.cells.length))}>
+                {r.cells.map((c) => (
+                  <OddCell key={c.id} c={c} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Inner({ id }: { id: string }) {
   const { events, loading } = useBoard();
   const e = events.find((x) => x.id === id);
@@ -71,6 +188,7 @@ function Inner({ id }: { id: string }) {
   const toggle = useSlip((s) => s.toggle);
   const [descriptions, setDescriptions] = React.useState<BetbyDescriptions>({});
   const [distribution, setDistribution] = React.useState<BetbyDistribution>({});
+  const [cat, setCat] = React.useState('todos');
   React.useEffect(() => {
     fetchDescriptions(id).then(setDescriptions).catch(() => setDescriptions({}));
     fetchBetDistribution(id).then(setDistribution).catch(() => setDistribution({}));
@@ -92,6 +210,10 @@ function Inner({ id }: { id: string }) {
   const live = e.status === 'live';
   const markets = Object.entries(e.markets).sort((a, b) => marketRank(a[0]) - marketRank(b[0]));
   const stats = statRows(e.statistics);
+  const counts = new Map<string, number>();
+  for (const [m] of markets) counts.set(catOf(m, marketName(m)), (counts.get(catOf(m, marketName(m))) ?? 0) + 1);
+  const activeCat = cat !== 'todos' && counts.has(cat) ? cat : 'todos';
+  const shown = activeCat === 'todos' ? markets : markets.filter(([m]) => catOf(m, marketName(m)) === activeCat);
 
   return (
     <>
@@ -100,8 +222,8 @@ function Inner({ id }: { id: string }) {
       </Link>
 
       <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-5 md:p-6">
-        <p className="text-center text-xs uppercase tracking-widest text-white/40">
-          {SPORT_BY_KEY[e.sport]?.icon} {countryLabel(e.country)} · {e.league}
+        <p className="flex items-center justify-center gap-1.5 text-center text-xs uppercase tracking-widest text-white/40">
+          {SPORT_BY_KEY[e.sport]?.icon} <Flag country={e.country} /> {countryLabel(e.country)} · {e.league}
         </p>
         <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <p className="text-right text-lg md:text-2xl font-black">{e.home}</p>
@@ -139,54 +261,56 @@ function Inner({ id }: { id: string }) {
         <h2 className="text-lg font-black">
           Mercados <span className="text-sm font-normal text-white/40">{markets.length}</span>
         </h2>
-        {markets.length === 0 && <EmptyPanel>Sem odds disponíveis para este jogo.</EmptyPanel>}
-        <div className="grid gap-3 md:grid-cols-2">
-          {markets.map(([m, variants]) => (
-            <div key={m} className="space-y-2 rounded-2xl border border-bet62-border bg-bet62-surface/40 p-3">
-              <p className="text-sm font-semibold">{marketName(m)}</p>
-              {Object.entries(variants).map(([variant, outcomes]) => (
-                <div key={variant} className="space-y-1.5">
-                  {variantLabel(variant) && <p className="text-[11px] text-white/40">{variantLabel(variant)}</p>}
-                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                    {Object.entries(outcomes).map(([o, v]) => {
-                      const label = outcomeName(m, variant, o);
-                      const key = `${e.id}|${m}|${variant}|${o}`;
-                      const selected = picks.some((p) => p.key === key);
-                      const blocked = v.b === 1 || !(Number(v.k) > 1);
-                      const pct = share(m, o);
-                      const vl = variantLabel(variant);
-                      return (
-                        <button
-                          key={o}
-                          type="button"
-                          disabled={blocked}
-                          title={label}
-                          onClick={() => {
-                            const pick = pickOf(e, m, variant, o, vl ? `${marketName(m)} (${vl})` : marketName(m), label);
-                            if (pick) toggle(pick);
-                          }}
-                          className={cn(
-                            'flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left text-sm transition',
-                            selected
-                              ? 'border-bet62-primary bg-bet62-primary text-white'
-                              : 'border-bet62-border bg-bet62-bg/50 hover:border-bet62-primary/60',
-                            blocked && 'cursor-not-allowed opacity-40',
-                          )}
-                        >
-                          <span className={cn('min-w-0 truncate text-xs', selected ? 'text-white' : 'text-white/70')}>
-                            {label}
-                            {pct !== undefined && <span className="ml-1 opacity-60">{pct}%</span>}
-                          </span>
-                          <b className={cn('font-mono', selected ? 'text-white' : 'text-bet62-primary')}>{blocked ? '—' : v.k}</b>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+        {markets.length === 0 ? (
+          <EmptyPanel>{live ? 'Mercados suspensos de momento.' : 'Sem odds disponíveis para este jogo.'}</EmptyPanel>
+        ) : (
+          <>
+            <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
+              {CATS.filter(([k]) => k === 'todos' || counts.has(k)).map(([k, l]) => (
+                <button
+                  key={k}
+                  type="button"
+                  onClick={() => setCat(k)}
+                  className={cn(
+                    'flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold',
+                    activeCat === k ? 'border-bet62-primary bg-bet62-primary text-onbrand' : 'border-bet62-border bg-bet62-surface/60 text-white/70 hover:text-white',
+                  )}
+                >
+                  {l}
+                  <small className={activeCat === k ? 'text-onbrand/70' : 'text-white/40'}>{k === 'todos' ? markets.length : counts.get(k)}</small>
+                </button>
               ))}
             </div>
-          ))}
-        </div>
+            <div className="space-y-2.5">
+              {shown.map(([m, variants]) => (
+                <MarketBlock
+                  key={m}
+                  title={marketName(m)}
+                  rows={Object.entries(variants).map(([variant, outcomes]) => ({
+                    variant,
+                    label: variantLabel(variant),
+                    cells: Object.entries(outcomes).map(([o, v]) => {
+                      const label = outcomeName(m, variant, o);
+                      const vl = variantLabel(variant);
+                      return {
+                        id: o,
+                        label,
+                        price: v.k,
+                        blocked: v.b === 1 || !(Number(v.k) > 1),
+                        selected: picks.some((p) => p.key === `${e.id}|${m}|${variant}|${o}`),
+                        pct: share(m, o),
+                        onClick: () => {
+                          const pick = pickOf(e, m, variant, o, vl ? `${marketName(m)} (${vl})` : marketName(m), label);
+                          if (pick) toggle(pick);
+                        },
+                      };
+                    }),
+                  }))}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </section>
     </>
   );
