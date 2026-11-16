@@ -25,6 +25,8 @@ export interface BoardEvent {
   startTime: number | null;
   clock?: string;
   score?: { home: string; away: string };
+  /** Pontos correntes do game no ténis (15/30/40/AD), separados dos sets. */
+  gameScore?: { home: string; away: string };
   /** Ao vivo: cartões, cantos… ({ home, away } por estatística). */
   statistics?: Record<string, { home: number; away: number }>;
   /** Parciais (tempos, sets, períodos). */
@@ -274,6 +276,12 @@ function competitorPhoto(value: unknown): string | undefined {
   }
 }
 
+function formatTennisPoint(value: string | number | undefined) {
+  if (value === undefined) return '0';
+  const point = String(value).toUpperCase();
+  return point === '50' || point === 'A' ? 'AD' : point;
+}
+
 function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: BetbyDictionaries): BoardEvent | null {
   const d = raw.desc;
   if (!d || d.virtual || !d.competitors || d.competitors.length < 2) return null;
@@ -286,6 +294,15 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
   if (!league) return null;
   if (!Object.keys(raw.markets).length) return null;
   const score = raw.score && raw.score.home_score !== undefined ? { home: String(raw.score.home_score), away: String(raw.score.away_score ?? 0) } : undefined;
+  const hasTennisPoints = sport === 'tenis'
+    && raw.score
+    && (raw.score.home_gamescore !== undefined || raw.score.away_gamescore !== undefined);
+  const gameScore = hasTennisPoints
+    ? {
+        home: formatTennisPoint(raw.score?.home_gamescore),
+        away: formatTennisPoint(raw.score?.away_gamescore),
+      }
+    : undefined;
   return {
     id: raw.id,
     status,
@@ -302,6 +319,7 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
     startTime: d.scheduled ? d.scheduled * 1000 : null,
     clock: raw.state?.clock?.match_time,
     score,
+    gameScore,
     statistics: extractStatistics(raw),
     periods: raw.score?.period_scores,
     markets: raw.markets,

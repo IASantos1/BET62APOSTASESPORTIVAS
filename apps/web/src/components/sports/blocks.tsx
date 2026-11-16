@@ -53,22 +53,55 @@ export function OddButton({ event, outcomeId, marketId, label, compact = false }
         if (p) toggle(p);
       }}
       className={cn(
-        'flex w-full items-center justify-between gap-1 rounded-lg border px-2 text-sm transition',
-        compact ? 'h-9' : 'h-10',
+        'flex w-full flex-col items-center justify-center gap-1 rounded-lg border px-2 text-sm transition',
+        compact ? 'h-11' : 'h-12',
         selected
           ? 'border-bet62-primary bg-bet62-primary text-onbrand'
           : 'border-transparent bg-bet62-odd hover:bg-bet62-odd-hover',
         blocked && 'opacity-40 cursor-not-allowed',
       )}
     >
-      <span className={cn('text-xs', selected ? 'text-onbrand/80' : 'text-white/55')}>{label}</span>
-      <span className="flex items-center gap-1">
+      <span className={cn('text-[11px] leading-none', selected ? 'text-onbrand/80' : 'text-white/55')}>{label}</span>
+      <span className="flex items-center justify-center gap-1 leading-none">
         <OddArrow moveKey={`${event.id}|${marketId}||${outcomeId}`} />
         <b className={cn('font-mono', suspended && 'text-[10px] leading-tight', selected ? 'text-onbrand' : 'text-bet62-odd-price')}>
           {suspended ? 'Suspenso' : blocked ? '—' : fmtOdds(odds)}
         </b>
       </span>
     </button>
+  );
+}
+
+function TennisScoreTable({ e, home, away }: { e: BoardEvent; home: React.ReactNode; away: React.ReactNode }) {
+  const setCount = Math.min(5, Math.max(3, ...(e.periods ?? []).map((period) => period.number)));
+  const sets = Array.from({ length: setCount }, (_, index) => e.periods?.find((period) => period.number === index + 1));
+  const columns = sets.length + (e.gameScore ? 1 : 0);
+
+  return (
+    <div
+      className="grid min-w-0 flex-1 items-center gap-x-2 gap-y-1 text-[11px]"
+      style={{ gridTemplateColumns: `minmax(0, 1fr) repeat(${columns}, minmax(1.5rem, auto))` }}
+    >
+      <span />
+      {sets.map((_, index) => (
+        <span key={`set-head-${index}`} className="text-center text-[9px] font-semibold text-white/45">
+          {index + 1}Set
+        </span>
+      ))}
+      {e.gameScore && <span className="text-center text-[9px] font-semibold text-white/45">Pts</span>}
+
+      <div className="min-w-0">{home}</div>
+      {sets.map((set, index) => (
+        <b key={`home-set-${index}`} className="text-center font-mono text-white/80">{set?.home_score ?? '—'}</b>
+      ))}
+      {e.gameScore && <b className="text-center font-mono text-bet62-primary">{e.gameScore.home}</b>}
+
+      <div className="min-w-0">{away}</div>
+      {sets.map((set, index) => (
+        <b key={`away-set-${index}`} className="text-center font-mono text-white/80">{set?.away_score ?? '—'}</b>
+      ))}
+      {e.gameScore && <b className="text-center font-mono text-bet62-primary">{e.gameScore.away}</b>}
+    </div>
   );
 }
 
@@ -86,7 +119,7 @@ function MainOdds({ e, compact }: { e: BoardEvent; compact?: boolean }) {
         href={matchHref(e.id, true)}
         className={cn(grid, 'rounded-lg border border-emerald-400/30 bg-emerald-500/10 text-center text-xs font-bold text-emerald-200 hover:bg-emerald-500/20')}
       >
-        <span className={cn('col-span-3 flex items-center justify-center gap-2', compact ? 'h-9' : 'h-10')}>
+        <span className={cn('col-span-3 flex items-center justify-center gap-2', compact ? 'h-11' : 'h-12')}>
           Aposte já <span aria-hidden="true">›</span>
         </span>
       </Link>
@@ -96,7 +129,7 @@ function MainOdds({ e, compact }: { e: BoardEvent; compact?: boolean }) {
     if (e.status === 'live') {
       return (
         <div className={grid}>
-          <span className={cn('col-span-3 grid place-items-center rounded-lg bg-bet62-odd/40 text-xs text-white/55', compact ? 'h-9' : 'h-10')}>
+          <span className={cn('col-span-3 grid place-items-center rounded-lg bg-bet62-odd/40 text-xs text-white/55', compact ? 'h-11' : 'h-12')}>
             Suspenso
           </span>
         </div>
@@ -105,7 +138,7 @@ function MainOdds({ e, compact }: { e: BoardEvent; compact?: boolean }) {
     return (
       <div className={grid}>
         {[0, 1, 2].map((i) => (
-          <span key={i} className={cn('grid place-items-center rounded-lg bg-bet62-odd/40 text-xs text-white/30', compact ? 'h-9' : 'h-10')}>
+          <span key={i} className={cn('grid place-items-center rounded-lg bg-bet62-odd/40 text-xs text-white/30', compact ? 'h-11' : 'h-12')}>
             —
           </span>
         ))}
@@ -128,9 +161,10 @@ function MainOdds({ e, compact }: { e: BoardEvent; compact?: boolean }) {
 
 export function EventRow({ e }: { e: BoardEvent }) {
   const live = e.status === 'live';
+  const tennis = live && e.sport === 'tenis';
   const more = Object.keys(e.markets).length;
   return (
-    <div className="border-t border-bet62-border/60 px-3 py-2 first:border-t-0">
+    <div className="border-t border-bet62-border/60 px-3 py-2.5 first:border-t-0">
       <div className="flex items-center gap-3">
         <Link href={matchHref(e.id, live)} className="flex min-w-0 flex-1 items-center gap-3">
           <div className="w-14 shrink-0 whitespace-pre-line text-[11px] leading-tight">
@@ -140,22 +174,40 @@ export function EventRow({ e }: { e: BoardEvent }) {
               <span className="text-white/50">{fmtWhen(e.startTime).replace(', ', '\n')}</span>
             )}
           </div>
-          <div className="min-w-0 flex-1 text-sm">
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex min-w-0 items-center gap-1.5">
-                <TeamLogo sport={e.sport} name={e.home} photoUrl={e.homePhoto} league={leagueApiId(e.sport, e.league, e.country)} size={16} />
-                <span className="truncate">{e.home}</span>
-              </span>
-              {live && e.score && <b className="font-mono">{e.score.home}</b>}
+          {tennis ? (
+            <TennisScoreTable
+              e={e}
+              home={(
+                <span className="flex min-w-0 items-center gap-1.5 text-[13px]">
+                  <TeamLogo sport={e.sport} name={e.home} photoUrl={e.homePhoto} league={leagueApiId(e.sport, e.league, e.country)} size={16} />
+                  <span className="truncate">{e.home}</span>
+                </span>
+              )}
+              away={(
+                <span className="flex min-w-0 items-center gap-1.5 text-[13px]">
+                  <TeamLogo sport={e.sport} name={e.away} photoUrl={e.awayPhoto} league={leagueApiId(e.sport, e.league, e.country)} size={16} />
+                  <span className="truncate">{e.away}</span>
+                </span>
+              )}
+            />
+          ) : (
+            <div className="min-w-0 flex-1 text-[15px]">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <TeamLogo sport={e.sport} name={e.home} photoUrl={e.homePhoto} league={leagueApiId(e.sport, e.league, e.country)} size={16} />
+                  <span className="truncate">{e.home}</span>
+                </span>
+                {live && e.score && <b className="font-mono">{e.score.home}</b>}
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <TeamLogo sport={e.sport} name={e.away} photoUrl={e.awayPhoto} league={leagueApiId(e.sport, e.league, e.country)} size={16} />
+                  <span className="truncate">{e.away}</span>
+                </span>
+                {live && e.score && <b className="font-mono">{e.score.away}</b>}
+              </div>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <span className="flex min-w-0 items-center gap-1.5">
-                <TeamLogo sport={e.sport} name={e.away} photoUrl={e.awayPhoto} league={leagueApiId(e.sport, e.league, e.country)} size={16} />
-                <span className="truncate">{e.away}</span>
-              </span>
-              {live && e.score && <b className="font-mono">{e.score.away}</b>}
-            </div>
-          </div>
+          )}
         </Link>
         <div className="hidden sm:block">
           <MainOdds e={e} compact />
@@ -231,8 +283,9 @@ export function Carousel({ children }: { children: React.ReactNode }) {
 
 export function MatchCard({ e }: { e: BoardEvent }) {
   const live = e.status === 'live';
+  const tennis = live && e.sport === 'tenis';
   return (
-    <div className="snap-start w-[17rem] shrink-0 rounded-2xl border border-bet62-border bg-bet62-surface/60 p-3 space-y-3">
+    <div className="snap-start w-[17rem] shrink-0 rounded-2xl border border-bet62-border bg-bet62-surface/60 p-4 space-y-4">
       <Link href={matchHref(e.id, live)} className="block space-y-2">
         <div className="flex items-center justify-between gap-2 text-[11px]">
           <span className="flex min-w-0 items-center gap-1.5 truncate text-white/50">
@@ -241,20 +294,38 @@ export function MatchCard({ e }: { e: BoardEvent }) {
           </span>
           {live ? <span className="shrink-0 font-semibold text-bet62-primary">● {e.clock || 'Ao vivo'}</span> : <span className="shrink-0 text-white/50">{fmtWhen(e.startTime)}</span>}
         </div>
-        <div className="space-y-1 text-sm font-semibold">
-          {[
-            [e.home, e.score?.home],
-            [e.away, e.score?.away],
-          ].map(([name, s], i) => (
-            <div key={i} className="flex justify-between gap-2">
-              <span className="flex min-w-0 items-center gap-2">
-                <TeamLogo sport={e.sport} name={String(name)} league={leagueApiId(e.sport, e.league, e.country)} size={20} />
-                <span className="truncate">{name}</span>
+        {tennis ? (
+          <TennisScoreTable
+            e={e}
+            home={(
+              <span className="flex min-w-0 items-center gap-2 text-[13px] font-semibold">
+                <TeamLogo sport={e.sport} name={e.home} photoUrl={e.homePhoto} league={leagueApiId(e.sport, e.league, e.country)} size={20} />
+                <span className="truncate">{e.home}</span>
               </span>
-              {live && s !== undefined && <b className="font-mono">{s}</b>}
-            </div>
-          ))}
-        </div>
+            )}
+            away={(
+              <span className="flex min-w-0 items-center gap-2 text-[13px] font-semibold">
+                <TeamLogo sport={e.sport} name={e.away} photoUrl={e.awayPhoto} league={leagueApiId(e.sport, e.league, e.country)} size={20} />
+                <span className="truncate">{e.away}</span>
+              </span>
+            )}
+          />
+        ) : (
+          <div className="space-y-1 text-[15px] font-semibold">
+            {[
+              [e.home, e.score?.home],
+              [e.away, e.score?.away],
+            ].map(([name, s], i) => (
+              <div key={i} className="flex justify-between gap-2">
+                <span className="flex min-w-0 items-center gap-2">
+                  <TeamLogo sport={e.sport} name={String(name)} league={leagueApiId(e.sport, e.league, e.country)} size={20} />
+                  <span className="truncate">{name}</span>
+                </span>
+                {live && s !== undefined && <b className="font-mono">{s}</b>}
+              </div>
+            ))}
+          </div>
+        )}
       </Link>
       <MainOdds e={e} />
     </div>

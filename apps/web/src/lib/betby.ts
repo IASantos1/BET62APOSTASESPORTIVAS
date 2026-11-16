@@ -49,6 +49,8 @@ export interface BetbyEvent {
   score?: {
     home_score?: string | number;
     away_score?: string | number;
+    home_gamescore?: string | number;
+    away_gamescore?: string | number;
     period_scores?: { number: number; home_score: number; away_score: number; match_status_code?: number }[];
     [key: string]: unknown;
   };
