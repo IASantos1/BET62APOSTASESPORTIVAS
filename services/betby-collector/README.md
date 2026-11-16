@@ -52,3 +52,15 @@ BETBY_ENABLED=false npm start
 - The numeric URL suffix is deliberately treated as a fixed cursor. Do not auto-increment it until BETBY confirms its meaning.
 - Polling stores snapshots and event data; it does not place bets, authenticate end users, or connect to the BET62 wallet.
 - Use only feeds and credentials that BETBY has authorized for your account and intended use.
+
+## Painel de diagnóstico (`/admin` no site)
+
+O site BET62 tem uma página `/admin` que mostra o `/status` deste collector (estado de cada feed, HTTP, motivo de bloqueio e uma pista do que corrigir). No serviço **web** do Railway defina:
+
+| Variável | Valor |
+|---|---|
+| `BETBY_COLLECTOR_URL` | URL pública deste serviço collector |
+| `BETBY_STATUS_TOKEN` | o mesmo valor definido no collector |
+| `ADMIN_PASSWORD` | senha da área admin (utilizador `admin`) |
+
+Sintoma conhecido: `HTTP 503 {"error":"access blocked"}` com cabeçalho `bb-rsn: bc` significa que a BETBY recusou o pedido na origem (IP/região do servidor não autorizado). Não é erro de código: é preciso pedir à BETBY a liberação do IP de saída do collector ou credenciais oficiais.

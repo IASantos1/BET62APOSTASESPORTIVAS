@@ -65,7 +65,19 @@ async function fetchFeed(feed, path) {
       signal: controller.signal
     });
     const bodyText = await response.text();
-    if (!response.ok) throw new Error(`${feed}: HTTP ${response.status} - ${bodyText.slice(0, 300)}`);
+    const blockReason = response.headers.get('bb-rsn');
+    state.feeds[feed] = {
+      ...state.feeds[feed],
+      url,
+      httpStatus: response.status,
+      blockReason,
+      bodyPreview: bodyText.slice(0, 300),
+      checkedAt: new Date().toISOString()
+    };
+    if (!response.ok) {
+      const reason = blockReason ? ` (bb-rsn: ${blockReason})` : '';
+      throw new Error(`${feed}: HTTP ${response.status}${reason} - ${bodyText.slice(0, 300)}`);
+    }
     let payload;
     try { payload = JSON.parse(bodyText); }
     catch { throw new Error(`${feed}: resposta não é JSON válido`); }
@@ -96,7 +108,7 @@ async function fetchFeed(feed, path) {
         }))
       });
     }
-    state.feeds[feed] = { ok: true, count: events.length, sha256: hash, lastCapturedAt: now };
+    state.feeds[feed] = { ...state.feeds[feed], ok: true, error: null, count: events.length, sha256: hash, lastCapturedAt: now };
   } finally {
     clearTimeout(timeout);
   }
@@ -107,19 +119,27 @@ async function poll() {
   state.running = true;
   state.lastRunAt = new Date().toISOString();
   try {
+    // Testa todos os feeds mesmo que um falhe, para o diagnóstico mostrar o estado de cada um.
+    const errors = [];
     for (const [feed, path] of Object.entries(paths)) {
       try {
         await fetchFeed(feed, path);
       } catch (error) {
-        state.feeds[feed] = { ...state.feeds[feed], ok: false, error: error.message };
-        throw error;
+        const cause = error.cause ? ` (${error.cause.code || error.cause.message})` : '';
+        const message = error.name === 'AbortError'
+          ? `${feed}: timeout após ${config.timeoutMs}ms`
+          : error.message.startsWith(`${feed}:`) ? error.message : `${feed}: ${error.message}${cause}`;
+        state.feeds[feed] = { ...state.feeds[feed], ok: false, error: message };
+        errors.push(message);
+        console.error('[betby-collector]', message);
       }
     }
-    state.lastSuccessAt = new Date().toISOString();
-    state.lastError = null;
-  } catch (error) {
-    state.lastError = error.message;
-    console.error('[betby-collector]', error.message);
+    if (errors.length) {
+      state.lastError = errors.join(' | ');
+    } else {
+      state.lastSuccessAt = new Date().toISOString();
+      state.lastError = null;
+    }
   } finally {
     state.running = false;
   }
@@ -139,6 +159,14 @@ const server = createServer((req, res) => {
   res.end(JSON.stringify({
     service: 'bet62-betby-collector',
     enabled: config.enabled,
+    config: {
+      baseUrl: config.baseUrl,
+      brandId: config.brandId,
+      locale: config.locale,
+      intervalMs: config.intervalMs,
+      timeoutMs: config.timeoutMs,
+      paths
+    },
     ...state
   }));
 });
