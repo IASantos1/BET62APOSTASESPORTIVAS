@@ -2,54 +2,46 @@
 
 import Link from 'next/link';
 import * as React from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ArrowLeft, Clock3, RefreshCw } from 'lucide-react';
 import { Header } from '../../../../components/layout/Header';
 import { Footer } from '../../../../components/layout/Footer';
 import { Card, CardContent } from '../../../../components/ui/Card';
 import { Button } from '../../../../components/ui/Button';
+import { eventLabel, eventStart, eventTitle, useBetbyFeed, type BetbyFeed } from '../../../../lib/betby';
 
 interface LiveMatchPageProps {
   params: { matchId: string };
 }
 
-interface MarketLine {
-  id: string;
-  code: string;
-  caption: string | null;
-  price: number;
-  isAvailable: boolean;
-}
+// A BETBY envia os mercados por id (padrão Betradar); nomes conhecidos dos mais comuns.
+const MARKET_NAMES: Record<string, string> = {
+  '1': '1X2',
+  '10': 'Dupla hipótese',
+  '11': 'Empate anula',
+  '16': 'Handicap',
+  '18': 'Total de golos',
+  '29': 'Ambas marcam',
+  '60': '1X2 — 1.ª parte',
+  '186': 'Vencedor',
+  '219': 'Vencedor (incl. prolongamento)',
+  '340': 'Vencedor',
+};
+const OUTCOME_NAMES: Record<string, string> = {
+  '1': '1', '2': 'X', '3': '2', '4': '1', '5': '2', '9': '1X', '10': '12', '11': 'X2',
+  '12': 'Mais', '13': 'Menos', '74': 'Sim', '76': 'Não', '1714': '1', '1715': '2',
+};
 
-interface Market {
-  id: string;
-  betType: string;
-  lines: MarketLine[];
+function variantLabel(variant: string) {
+  return variant.replace(/\|/g, ' · ').replace(/=/g, ' ');
 }
 
 export default function LiveMatchPage({ params }: LiveMatchPageProps) {
-  const [match, setMatch] = React.useState<any>(null);
-  const [markets, setMarkets] = React.useState<Market[]>([]);
-  const [timeline, setTimeline] = React.useState<any[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-
-  const loadData = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setMatch(null);
-      setMarkets([]);
-      setTimeline([]);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Falha ao carregar detalhe da partida.');
-    } finally {
-      setLoading(false);
-    }
-  }, [params.matchId]);
-
-  React.useEffect(() => {
-    void loadData();
-  }, [loadData]);
+  const feed: BetbyFeed = useSearchParams().get('feed') === 'prematch' ? 'prematch' : 'live';
+  const { events, dictionaries, loading, error, reload } = useBetbyFeed(feed);
+  const match = events.find((e) => e.id === params.matchId);
+  const markets = match ? Object.entries(match.markets) : [];
+  const start = match ? eventStart(match) : null;
 
   return (
     <div className="min-h-screen bg-bet62-bg">
@@ -57,12 +49,12 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
       <main className="max-w-7xl mx-auto px-4 lg:px-8 py-10 space-y-6">
         <div className="flex items-center justify-between gap-3">
           <Button variant="outline" asChild>
-            <Link href="/live">
+            <Link href={feed === 'prematch' ? '/events' : '/live'}>
               <ArrowLeft size={16} />
               Voltar
             </Link>
           </Button>
-          <Button variant="outline" onClick={() => void loadData()}>
+          <Button variant="outline" onClick={() => void reload()}>
             <RefreshCw size={16} />
             Atualizar
           </Button>
@@ -72,79 +64,71 @@ export default function LiveMatchPage({ params }: LiveMatchPageProps) {
           <Card>
             <CardContent className="p-8 text-white/60">A carregar detalhe da partida...</CardContent>
           </Card>
-        ) : error || !match ? (
+        ) : !match ? (
           <Card>
-            <CardContent className="p-8 text-bet62-danger">{error ?? 'Partida não encontrada.'}</CardContent>
+            <CardContent className="p-8 text-bet62-danger">{error ?? 'Partida não encontrada (pode já ter terminado).'}</CardContent>
           </Card>
         ) : (
           <>
             <Card>
               <CardContent className="p-6 md:p-8">
-                <p className="text-xs uppercase tracking-widest text-white/40">
-                  {match.competition?.name ?? 'Competição'}
-                </p>
-                <h1 className="mt-3 text-3xl md:text-4xl font-black tracking-tight">
-                  {match.homeTeam?.name} vs {match.awayTeam?.name}
-                </h1>
+                <p className="text-xs uppercase tracking-widest text-white/40">{eventLabel(match, dictionaries) || 'Competição'}</p>
+                <h1 className="mt-3 text-3xl md:text-4xl font-black tracking-tight">{eventTitle(match)}</h1>
                 <div className="mt-4 flex flex-wrap items-center gap-4 text-white/60">
                   <div className="inline-flex items-center gap-2">
                     <Clock3 size={14} />
-                    {match.stats?.clock?.display ?? new Date(match.startTime).toLocaleString('pt-PT')}
+                    {match.state?.clock?.match_time ?? start?.toLocaleString('pt-PT') ?? '—'}
                   </div>
-                  <div className="font-mono text-xl text-white">
-                    {match.stats?.homeScore ?? 0} - {match.stats?.awayScore ?? 0}
-                  </div>
+                  {match.score && (
+                    <div className="font-mono text-xl text-white">
+                      {match.score.home_score ?? 0} - {match.score.away_score ?? 0}
+                    </div>
+                  )}
                 </div>
+                {match.score?.period_scores && match.score.period_scores.length > 0 && (
+                  <p className="mt-3 text-sm text-white/50">
+                    Parciais: {match.score.period_scores.map((p) => `${p.home_score}-${p.away_score}`).join(' · ')}
+                  </p>
+                )}
               </CardContent>
             </Card>
 
-            <div className="grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
-              <Card>
-                <CardContent className="p-6 space-y-4">
-                  <h2 className="text-xl font-bold">Mercados</h2>
-                  {markets.length === 0 ? (
-                    <p className="text-white/55">Sem odds disponíveis para esta partida.</p>
-                  ) : (
-                    <div className="space-y-4">
-                      {markets.map((market) => (
-                        <div key={market.id} className="rounded-2xl border border-bet62-border bg-bet62-surface/40 p-4">
-                          <p className="text-sm font-semibold text-white/85">{market.betType}</p>
-                          <div className="mt-3 grid gap-2">
-                            {market.lines.map((line) => (
-                              <div
-                                key={line.id}
-                                className="flex items-center justify-between rounded-xl border border-bet62-border/70 bg-bet62-bg/40 px-3 py-2 text-sm"
-                              >
-                                <span className="text-white/70">{line.caption ?? line.code}</span>
-                                <span className="font-mono font-bold text-bet62-primary">{line.price?.toFixed?.(2) ?? line.price}</span>
-                              </div>
-                            ))}
+            <Card>
+              <CardContent className="p-6 space-y-4">
+                <h2 className="text-xl font-bold">Mercados</h2>
+                {markets.length === 0 ? (
+                  <p className="text-white/55">Sem odds disponíveis para esta partida.</p>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {markets.map(([marketId, variants]) => (
+                      <div key={marketId} className="rounded-2xl border border-bet62-border bg-bet62-surface/40 p-4 space-y-3">
+                        <p className="text-sm font-semibold text-white/85">
+                          {MARKET_NAMES[marketId] ?? `Mercado ${marketId}`}
+                        </p>
+                        {Object.entries(variants).map(([variant, outcomes]) => (
+                          <div key={variant} className="space-y-2">
+                            {variant && <p className="text-xs text-white/40">{variantLabel(variant)}</p>}
+                            <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
+                              {Object.entries(outcomes).map(([outcomeId, o]) => (
+                                <div
+                                  key={outcomeId}
+                                  className="flex items-center justify-between gap-2 rounded-xl border border-bet62-border/70 bg-bet62-bg/40 px-3 py-2 text-sm"
+                                >
+                                  <span className="text-white/70 truncate">{OUTCOME_NAMES[outcomeId] ?? outcomeId}</span>
+                                  <span className={o.b === 1 ? 'font-mono text-white/30 line-through' : 'font-mono font-bold text-bet62-primary'}>
+                                    {o.k ?? '—'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="p-6 space-y-4">
-                  <h2 className="text-xl font-bold">Timeline</h2>
-                  {timeline.length === 0 ? (
-                    <p className="text-white/55">Sem eventos cronológicos disponíveis.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {timeline.slice(0, 12).map((event, index) => (
-                        <div key={`${event.type}-${index}`} className="rounded-xl border border-bet62-border/70 bg-bet62-surface/30 p-3">
-                          <p className="text-xs uppercase tracking-widest text-white/40">{event.type}</p>
-                          <p className="mt-1 text-sm text-white/75">{Array.isArray(event.captions) ? event.captions.join(' · ') : ''}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </>
         )}
       </main>

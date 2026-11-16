@@ -1,7 +1,14 @@
 import { NextResponse } from 'next/server';
-import { ADMIN_COOKIE, adminPasswordMatches, adminToken } from '../../../../lib/admin-auth';
+import { ADMIN_COOKIE, adminPasswordMatches, adminToken, isAdminAuthorized } from '../../../../lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
+
+// Indica se o navegador já tem sessão de admin.
+export async function GET() {
+  return isAdminAuthorized()
+    ? NextResponse.json({ ok: true })
+    : NextResponse.json({ ok: false }, { status: 401 });
+}
 
 export async function POST(request: Request) {
   const { password } = (await request.json().catch(() => ({}))) as { password?: string };
