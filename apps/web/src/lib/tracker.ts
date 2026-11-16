@@ -37,7 +37,7 @@ export function trackerCandidates(raw: unknown): TrackerCandidate[] {
 
 export function trackerUrl(provider: string, sportId: string, eventId: string) {
   const providers = JSON.stringify({ id: provider, sportId: String(sportId), lang: BETBY_CONFIG.locale.toLowerCase(), eventId: Number(eventId) || eventId });
-  const trackerBase = (process.env.NEXT_PUBLIC_BETBY_TRACKER_URL || BETBY_CONFIG.baseUrl).replace(/\\/$/, '');
+  const trackerBase = (process.env.NEXT_PUBLIC_BETBY_TRACKER_URL || BETBY_CONFIG.baseUrl).replace(/\/$/, '');
   return `${trackerBase}/tracker.html?providers=${encodeURIComponent(providers)}`;
 }
 
