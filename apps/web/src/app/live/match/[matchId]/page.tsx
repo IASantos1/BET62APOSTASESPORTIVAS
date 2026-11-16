@@ -428,7 +428,7 @@ function Inner({ id }: { id: string }) {
         </p>
         <div className="mt-4 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
           <div className="flex flex-col items-center gap-2 text-center">
-            <TeamLogo sport={e.sport} name={e.home} league={league} size={52} />
+            <TeamLogo sport={e.sport} name={e.home} photoUrl={e.homePhoto} league={league} size={52} />
             <p className="text-sm font-black md:text-lg">{e.home}</p>
           </div>
           <div className="text-center">
@@ -447,7 +447,7 @@ function Inner({ id }: { id: string }) {
             )}
           </div>
           <div className="flex flex-col items-center gap-2 text-center">
-            <TeamLogo sport={e.sport} name={e.away} league={league} size={52} />
+            <TeamLogo sport={e.sport} name={e.away} photoUrl={e.awayPhoto} league={league} size={52} />
             <p className="text-sm font-black md:text-lg">{e.away}</p>
           </div>
         </div>
