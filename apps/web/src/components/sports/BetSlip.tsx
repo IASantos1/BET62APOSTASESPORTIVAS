@@ -165,7 +165,7 @@ function StakeInput({ value, onChange }: { value: number; onChange: (v: number) 
   );
 }
 
-export function BetSlip() {
+export function BetSlip({ asideTop }: { asideTop?: React.ReactNode }) {
   const { open, setOpen, picks, builder } = useSlip();
   const count = builder ? builder.legs.length : picks.length;
   const [ready, setReady] = React.useState(false);
@@ -173,7 +173,10 @@ export function BetSlip() {
   return (
     <>
       <aside className="hidden xl:block w-80 shrink-0 border-l border-bet62-border bg-bet62-bg/60">
-        <div className="sticky top-16 h-[calc(100vh-4rem)]">{ready && <SlipBody />}</div>
+        <div className="sticky top-16 flex h-[calc(100vh-4rem)] flex-col">
+          {asideTop}
+          <div className="min-h-0 flex-1 overflow-hidden">{ready && <SlipBody />}</div>
+        </div>
       </aside>
       {/* Telemóvel / tablet: botão flutuante e gaveta */}
       {ready && count > 0 && !open && (

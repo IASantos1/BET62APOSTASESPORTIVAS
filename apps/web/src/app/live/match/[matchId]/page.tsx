@@ -424,6 +424,19 @@ function StatBars({ rows }: { rows: { key: string; home: number; away: number }[
 
 type View = 'mercados' | 'tracker' | 'live' | 'estatisticas';
 
+/** Verdadeiro em ecrãs xl+ (1280px+), onde o boletim aparece na coluna da direita. */
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia('(min-width: 1280px)');
+    const handler = () => setIsDesktop(mq.matches);
+    handler();
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return isDesktop;
+}
+
 function Inner({ id }: { id: string }) {
   const { events, loading, widgets, broadcasts } = useBoard();
   const e = events.find((x) => x.id === id);
@@ -440,12 +453,19 @@ function Inner({ id }: { id: string }) {
   const fullMarketState = useFullMarkets(id, feed, endpoint);
   const fullMarkets = fullMarketState.markets;
   const betbyStats = useBetbyStats(id, feed, cfg?.statsEndpoint, live || view === 'estatisticas');
+  const isDesktop = useIsDesktop();
   React.useEffect(() => {
     fetchDescriptions(id).then(setDescriptions).catch(() => setDescriptions({}));
     fetchBetDistribution(id).then(setDistribution).catch(() => setDistribution({}));
   }, [id]);
 
-  if (!e) return <EmptyPanel>{loading ? 'A carregar…' : 'Jogo não encontrado (pode já ter terminado).'}</EmptyPanel>;
+  if (!e) {
+    return (
+      <SportsShell>
+        <EmptyPanel>{loading ? 'A carregar…' : 'Jogo não encontrado (pode já ter terminado).'}</EmptyPanel>
+      </SportsShell>
+    );
+  }
 
   const marketName = (m: string) => descriptions.markets?.[m]?.name ?? MARKET_NAMES[m] ?? `Mercado ${m}`;
   const outcomeName = (m: string, variant: string, o: string) => {
@@ -489,8 +509,32 @@ function Inner({ id }: { id: string }) {
     ? [['tracker', 'Tracker', <Activity key="t" size={15} />], ['live', 'Live', <MonitorPlay key="l" size={15} />]]
     : [['estatisticas', 'Estatísticas', <BarChart3 key="s" size={15} />]];
 
+  // Minicampo: o widget tem placar + campo + controlos, por isso a proporção é maior que 16:9.
+  // No desktop (xl+) usa um quadrado ligeiramente alto (encaixa na coluna da direita); no mobile
+  // usa retrato para não cortar o campo nem os botões.
+  const trackerFrame = tracker ? (
+    <iframe
+      src={tracker}
+      title="Tracker do jogo"
+      className={cn('block w-full', isDesktop ? 'aspect-[4/5]' : 'aspect-[3/4]')}
+      allow="fullscreen"
+    />
+  ) : null;
+
+  // No desktop o minicampo abre na coluna da direita, acima do boletim (slot asideTop).
+  const asideTop =
+    isDesktop && live && view === 'tracker' ? (
+      <div className="border-b border-bet62-border bg-bet62-bg/60">
+        {trackerFrame ?? (
+          <p className="p-4 text-xs text-white/60">
+            Minicampo não disponível: a BETBY não associou um widget de tracking a este jogo.
+          </p>
+        )}
+      </div>
+    ) : null;
+
   return (
-    <>
+    <SportsShell asideTop={asideTop}>
       <Link href={live ? '/live' : '/desporto'} className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white">
         <ArrowLeft size={16} /> Voltar
       </Link>
@@ -529,12 +573,10 @@ function Inner({ id }: { id: string }) {
           </div>
         </section>
 
-        {/* Minicampo / transmissão logo abaixo do cabeçalho (juntos). */}
-        {view === 'tracker' && (
+        {/* Minicampo no mobile (no desktop vai para a coluna da direita, acima do boletim). */}
+        {view === 'tracker' && !isDesktop && (
           <div className="overflow-hidden rounded-2xl border border-bet62-border bg-bet62-surface/50">
-            {tracker ? (
-              <iframe src={tracker} title="Tracker do jogo" className="block aspect-video w-full md:aspect-[16/9]" allow="fullscreen" />
-            ) : (
+            {trackerFrame ?? (
               <p className="p-6 text-sm text-white/60">
                 Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.
               </p>
@@ -718,14 +760,10 @@ function Inner({ id }: { id: string }) {
           )}
         </>
       )}
-    </>
+    </SportsShell>
   );
 }
 
 export default function MatchPage({ params }: { params: { matchId: string } }) {
-  return (
-    <SportsShell>
-      <Inner id={params.matchId} />
-    </SportsShell>
-  );
+  return <Inner id={params.matchId} />;
 }

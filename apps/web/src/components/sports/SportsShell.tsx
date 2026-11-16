@@ -7,7 +7,7 @@ import { Footer } from '../layout/Footer';
 import { SportsSidebar } from './SportsSidebar';
 import { BetSlip } from './BetSlip';
 
-export function SportsShell({ children }: { children: React.ReactNode }) {
+export function SportsShell({ children, asideTop }: { children: React.ReactNode; asideTop?: React.ReactNode }) {
   return (
     <div className="min-h-screen">
       <Header />
@@ -17,7 +17,7 @@ export function SportsShell({ children }: { children: React.ReactNode }) {
           <div className="mx-auto max-w-[1200px] px-3 sm:px-4 lg:px-6 py-5 space-y-6">{children}</div>
           <Footer />
         </main>
-        <BetSlip />
+        <BetSlip asideTop={asideTop} />
       </div>
     </div>
   );
