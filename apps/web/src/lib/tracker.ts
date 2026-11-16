@@ -4,7 +4,7 @@
 // O admin (Explorador BETBY) mostra o que existe e pode fixar o campo a usar (/api/config).
 import { BETBY_CONFIG, type BetbyEvent } from './betby';
 
-const NAME = /(statscore|tracker|lmt|betradar|sportradar|radar|ext(ernal)?_?(event_?)?id|provider|widget|stats?_?id|sr_?id)/i;
+const NAME = /(statscore|tracker|lmt|betradar|sportradar|radar|ext(ernal)?_?(event_?)?id|provider|widget|stats?_?id|sr_?id|match_?id|event_?id|fixture_?id|game_?id)/i;
 
 export interface TrackerCandidate {
   path: string;
@@ -18,7 +18,7 @@ export const getPath = (o: unknown, path: string) => path.split('.').reduce<unkn
 export function trackerCandidates(raw: unknown): TrackerCandidate[] {
   const out: TrackerCandidate[] = [];
   const walk = (v: unknown, path: string, depth: number) => {
-    if (!v || typeof v !== 'object' || depth > 4) return;
+    if (!v || typeof v !== 'object' || depth > 8) return;
     for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
       if (k === 'markets') continue;
       const p = path ? `${path}.${k}` : k;
@@ -37,7 +37,8 @@ export function trackerCandidates(raw: unknown): TrackerCandidate[] {
 
 export function trackerUrl(provider: string, sportId: string, eventId: string) {
   const providers = JSON.stringify({ id: provider, sportId: String(sportId), lang: BETBY_CONFIG.locale.toLowerCase(), eventId: Number(eventId) || eventId });
-  return `${BETBY_CONFIG.baseUrl}/tracker.html?providers=${encodeURIComponent(providers)}`;
+  const trackerBase = (process.env.NEXT_PUBLIC_BETBY_TRACKER_URL || BETBY_CONFIG.baseUrl).replace(/\\/$/, '');
+  return `${trackerBase}/tracker.html?providers=${encodeURIComponent(providers)}`;
 }
 
 /** O tracker deste jogo (campo fixado no admin, senão o primeiro candidato), ou null. */
