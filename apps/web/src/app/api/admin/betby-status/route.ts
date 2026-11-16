@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { isAdminAuthorized } from '../../../../lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -6,6 +7,9 @@ export const dynamic = 'force-dynamic';
 // BETBY_COLLECTOR_URL: URL do serviço collector no Railway (ex.: https://betby-collector.up.railway.app)
 // BETBY_STATUS_TOKEN: o mesmo valor configurado no serviço collector
 export async function GET() {
+  if (!isAdminAuthorized()) {
+    return NextResponse.json({ unauthorized: true }, { status: 401 });
+  }
   const baseUrl = process.env.BETBY_COLLECTOR_URL?.replace(/\/$/, '');
   if (!baseUrl) {
     return NextResponse.json(

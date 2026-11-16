@@ -61,6 +61,6 @@ O site BET62 tem uma página `/admin` que mostra o `/status` deste collector (es
 |---|---|
 | `BETBY_COLLECTOR_URL` | URL pública deste serviço collector |
 | `BETBY_STATUS_TOKEN` | o mesmo valor definido no collector |
-| `ADMIN_PASSWORD` | senha da área admin (utilizador `admin`) |
+| `ADMIN_PASSWORD` | senha da área admin (pedida num formulário em `/admin`) |
 
 Sintoma conhecido: `HTTP 503 {"error":"access blocked"}` com cabeçalho `bb-rsn: bc` significa que a BETBY recusou o pedido na origem (IP/região do servidor não autorizado). Não é erro de código: é preciso pedir à BETBY a liberação do IP de saída do collector ou credenciais oficiais.
