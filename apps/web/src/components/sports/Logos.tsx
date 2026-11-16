@@ -80,10 +80,16 @@ const initials = (name: string) =>
     .map((w) => w[0]?.toUpperCase())
     .join('');
 
-const LOGO_SPORTS = new Set(['futebol', 'basquetebol']);
+// Desportos com endpoint oficial de equipas na API-Sports.
+const LOGO_SPORTS = new Set(['futebol', 'basquetebol', 'hoquei', 'futamericano', 'basebol', 'voleibol', 'andebol', 'raguebi']);
 
-export function TeamLogo({ sport, name, league, size = 28, className }: { sport: string; name: string; league?: number | null; size?: number; className?: string }) {
-  const src = LOGO_SPORTS.has(sport) ? `/api/logo/team?s=${encodeURIComponent(sport)}&n=${encodeURIComponent(name)}${league ? `&l=${league}` : ''}` : null;
+export function TeamLogo({ sport, name, league, photoUrl, size = 28, className }: { sport: string; name: string; league?: number | null; photoUrl?: string | null; size?: number; className?: string }) {
+  // No ténis, usar retrato apenas quando o próprio fornecedor o envia no evento.
+  const src = sport === 'tenis'
+    ? (photoUrl || null)
+    : LOGO_SPORTS.has(sport)
+      ? `/api/logo/team?s=${encodeURIComponent(sport)}&n=${encodeURIComponent(name)}${league ? `&l=${league}` : ''}`
+      : null;
   const [failed, setFailed] = React.useState(false);
   // Um erro transitório (quota, timeout ou cold start) não deve condenar o emblema
   // durante toda a sessão. Volta a tentar periodicamente e quando o nome muda.
