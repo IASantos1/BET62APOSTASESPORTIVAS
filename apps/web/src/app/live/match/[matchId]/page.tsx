@@ -573,7 +573,16 @@ function Inner({ id }: { id: string }) {
         {view === 'tracker' && !desktopTracker && (
           <div className="overflow-hidden rounded-2xl border border-bet62-border bg-bet62-surface/50 xl:hidden">
             {tracker ? (
-              <iframe src={tracker} title="Tracker do jogo" className="block h-[min(49dvh,374px)] min-h-[260px] w-full sm:h-[min(54dvh,474px)] sm:min-h-[340px]" allow="fullscreen" />
+              <iframe
+                src={tracker}
+                title="Tracker do jogo"
+                className={`mx-auto block ${cfg?.trackerMobileWidthPx ? '' : 'w-full'} ${cfg?.trackerMobileHeightPx ? '' : 'h-[min(48dvh,368px)] min-h-[260px] sm:h-[min(53dvh,468px)] sm:min-h-[340px]'}`}
+                style={{
+                  ...(cfg?.trackerMobileWidthPx ? { width: `${cfg.trackerMobileWidthPx}px`, maxWidth: '100%' } : {}),
+                  ...(cfg?.trackerMobileHeightPx ? { height: `${cfg.trackerMobileHeightPx}px` } : {}),
+                }}
+                allow="fullscreen"
+              />
             ) : (
               <p className="p-6 text-sm text-white/60">
                 Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.

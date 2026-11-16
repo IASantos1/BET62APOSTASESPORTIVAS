@@ -11,6 +11,11 @@ export interface SiteConfig {
   trackerField?: { path: string; provider: string } | null;
   /** Endereço das estatísticas de um jogo na BETBY, com os mesmos marcadores. */
   statsEndpoint?: string | null;
+  /** Dimensões opcionais do tracker em pixels; null mantém o padrão responsivo. */
+  trackerMobileWidthPx?: number | null;
+  trackerMobileHeightPx?: number | null;
+  trackerDesktopWidthPx?: number | null;
+  trackerDesktopHeightPx?: number | null;
 }
 
 const FILE = path.join(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || '/tmp/bet62-data', 'site-config.json');
@@ -28,6 +33,10 @@ export function readConfig(): SiteConfig {
     trackerField:
       saved.trackerField ??
       (process.env.BETBY_TRACKER_FIELD ? { path: process.env.BETBY_TRACKER_FIELD, provider: process.env.BETBY_TRACKER_PROVIDER || 'statscore' } : null),
+    trackerMobileWidthPx: saved.trackerMobileWidthPx ?? null,
+    trackerMobileHeightPx: saved.trackerMobileHeightPx ?? null,
+    trackerDesktopWidthPx: saved.trackerDesktopWidthPx ?? null,
+    trackerDesktopHeightPx: saved.trackerDesktopHeightPx ?? null,
   };
 }
 

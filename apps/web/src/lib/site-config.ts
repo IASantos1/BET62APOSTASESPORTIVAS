@@ -8,6 +8,10 @@ export interface SiteConfig {
   eventEndpoint?: string | null;
   statsEndpoint?: string | null;
   trackerField?: { path: string; provider: string } | null;
+  trackerMobileWidthPx?: number | null;
+  trackerMobileHeightPx?: number | null;
+  trackerDesktopWidthPx?: number | null;
+  trackerDesktopHeightPx?: number | null;
 }
 
 let cached: Promise<SiteConfig> | null = null;

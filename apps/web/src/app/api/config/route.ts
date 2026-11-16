@@ -8,7 +8,7 @@ export function GET() {
   return NextResponse.json(readConfig(), { headers: { 'cache-control': 'public, max-age=60' } });
 }
 
-// Só o admin muda: { eventEndpoint?, statsEndpoint?, trackerField? } (null apaga).
+// Só o admin muda; dimensões do tracker são inteiros em pixels (null repõe o padrão).
 export async function POST(req: Request) {
   if (!isAdminAuthorized()) return NextResponse.json({ error: 'Sem sessão de admin.' }, { status: 401 });
   const body = (await req.json().catch(() => ({}))) as SiteConfig;
@@ -19,6 +19,23 @@ export async function POST(req: Request) {
   if ('trackerField' in body) {
     const t = body.trackerField;
     patch.trackerField = t && typeof t.path === 'string' && /^[\w.]{1,120}$/.test(t.path) ? { path: t.path, provider: String(t.provider || 'statscore').replace(/[^\w-]/g, '').slice(0, 30) } : null;
+  }
+  const dimensions = [
+    ['trackerMobileWidthPx', 240, 1200],
+    ['trackerMobileHeightPx', 220, 1000],
+    ['trackerDesktopWidthPx', 240, 900],
+    ['trackerDesktopHeightPx', 220, 1000],
+  ] as const;
+  for (const [key, min, max] of dimensions) {
+    if (!(key in body)) continue;
+    const value = body[key];
+    if (value === null) {
+      patch[key] = null;
+    } else if (typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max) {
+      patch[key] = value;
+    } else {
+      return NextResponse.json({ error: `${key} deve ser um inteiro entre ${min} e ${max} px, ou null.` }, { status: 400 });
+    }
   }
   try {
     return NextResponse.json(writeConfig(patch));

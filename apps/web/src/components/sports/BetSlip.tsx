@@ -185,14 +185,28 @@ function StakeInput({ value, onChange }: { value: number; onChange: (v: number) 
   );
 }
 
-export function BetSlip({ trackerUrl, trackerActive }: { trackerUrl?: string | null; trackerActive?: boolean }) {
+export function BetSlip({
+  trackerUrl,
+  trackerActive,
+  trackerWidthPx,
+  trackerHeightPx,
+}: {
+  trackerUrl?: string | null;
+  trackerActive?: boolean;
+  trackerWidthPx?: number | null;
+  trackerHeightPx?: number | null;
+}) {
   const { open, setOpen, picks, builder } = useSlip();
   const count = builder ? builder.legs.length : picks.length;
   const [ready, setReady] = React.useState(false);
   React.useEffect(() => setReady(true), []);
   return (
     <>
-      <aside id="bet-slip" className="hidden w-80 shrink-0 border-l border-bet62-border bg-bet62-bg/60 xl:block">
+      <aside
+        id="bet-slip"
+        className="hidden w-80 shrink-0 border-l border-bet62-border bg-bet62-bg/60 xl:block"
+        style={trackerActive && trackerWidthPx ? { width: `${trackerWidthPx}px`, maxWidth: '60vw' } : undefined}
+      >
         <div className="sticky top-16 flex h-[calc(100vh-4rem)] flex-col">
           {trackerActive && (
             <div className="shrink-0 border-b border-bet62-border p-2">
@@ -202,7 +216,8 @@ export function BetSlip({ trackerUrl, trackerActive }: { trackerUrl?: string | n
                   <iframe
                     src={trackerUrl}
                     title="Minicampo do jogo"
-                    className="block h-[min(36dvh,420px)] min-h-[260px] max-h-[420px] w-full"
+                    className={`block w-full ${trackerHeightPx ? '' : 'h-[min(36dvh,420px)] min-h-[260px] max-h-[420px]'}`}
+                    style={trackerHeightPx ? { height: `${trackerHeightPx}px` } : undefined}
                     allow="fullscreen"
                   />
                 </div>

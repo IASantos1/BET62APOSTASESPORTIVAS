@@ -7,9 +7,11 @@ import { Footer } from '../layout/Footer';
 import { SportsSidebar } from './SportsSidebar';
 import { BetSlip } from './BetSlip';
 import { SportsTrackerContext } from './SportsTrackerContext';
+import { useSiteConfig } from '../../lib/site-config';
 
 export function SportsShell({ children }: { children: React.ReactNode }) {
   const [trackerPanel, setTrackerPanel] = React.useState<{ url: string | null; active: boolean }>({ url: null, active: false });
+  const config = useSiteConfig();
   const setTracker = React.useCallback(
     (url: string | null, active: boolean) => setTrackerPanel({ url, active }),
     [],
@@ -25,7 +27,12 @@ export function SportsShell({ children }: { children: React.ReactNode }) {
             <div className="mx-auto max-w-[1200px] px-3 sm:px-4 lg:px-6 py-5 space-y-6">{children}</div>
             <Footer />
           </main>
-          <BetSlip trackerUrl={trackerPanel.url} trackerActive={trackerPanel.active} />
+          <BetSlip
+            trackerUrl={trackerPanel.url}
+            trackerActive={trackerPanel.active}
+            trackerWidthPx={config?.trackerDesktopWidthPx}
+            trackerHeightPx={config?.trackerDesktopHeightPx}
+          />
         </div>
       </SportsTrackerContext.Provider>
     </div>
