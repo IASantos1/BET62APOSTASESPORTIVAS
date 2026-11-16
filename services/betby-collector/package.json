@@ -1,0 +1,11 @@
+{
+  "name": "@bet62/betby-collector",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.5.0" },
+  "scripts": {
+    "start": "node index.mjs",
+    "check": "node --check index.mjs"
+  }
+}
