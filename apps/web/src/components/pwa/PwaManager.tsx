@@ -134,14 +134,20 @@ export function PwaManager() {
   return (
     <>
       {update && (
-        <div className="fixed inset-x-3 top-3 z-[100] mx-auto flex max-w-md items-center gap-3 rounded-2xl border border-bet62-border bg-bet62-surface p-3 shadow-glass">
-          <RefreshCw size={18} className="shrink-0 text-bet62-primary" />
-          <p className="flex-1 text-sm">
-            <b>Nova versão disponível.</b> <span className="text-white/60">Atualize para ver as novidades.</span>
-          </p>
-          <button onClick={applyUpdate} className="rounded-xl bg-bet62-primary px-3 py-2 text-xs font-bold text-onbrand">
-            Atualizar
-          </button>
+        <div className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Nova versão disponível">
+          <div className="w-full max-w-sm rounded-2xl border border-bet62-border bg-bet62-surface p-6 text-center shadow-glass">
+            <span className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-bet62-primary/15">
+              <RefreshCw size={22} className="text-bet62-primary" />
+            </span>
+            <p className="text-lg font-black">Nova versão disponível</p>
+            <p className="mt-1 text-sm text-white/60">Atualize para ver as novidades do BET62.</p>
+            <button onClick={applyUpdate} className="mt-5 w-full rounded-xl bg-bet62-primary py-3 text-sm font-bold text-onbrand">
+              Atualizar agora
+            </button>
+            <button onClick={() => setUpdate(false)} className="mt-2 w-full py-2 text-xs text-white/50 hover:text-white">
+              Mais tarde
+            </button>
+          </div>
         </div>
       )}
       {install && !update && (
