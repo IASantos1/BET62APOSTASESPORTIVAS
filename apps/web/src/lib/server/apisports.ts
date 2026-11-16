@@ -145,11 +145,21 @@ const inflight = new Map<string, Promise<string | null>>();
 // Equipas de uma liga inteira num só pedido (as ligas principais): poupa a quota diária.
 const packs = new FileCache<{ name: string; logo: string }[]>('league-packs-v2');
 const packInflight = new Map<number, Promise<{ name: string; logo: string }[]>>();
+// Épocas que o plano aceita: o plano grátis responde "try from 2022 to 2024" — guarda-se o máximo
+// e a época que funcionou, para cada liga gastar um pedido só (em vez de 2–3 tentativas recusadas).
+const seasonMemo = new FileCache<number>('apif-seasons');
 function seasonsToTry() {
   const d = new Date();
   const y = d.getUTCFullYear();
   const euro = d.getUTCMonth() >= 6 ? y : y - 1;
-  return [...new Set([euro, y, euro - 1, y - 1, y - 2])];
+  const max = seasonMemo.get('max', 7 * 86_400_000);
+  const ok = seasonMemo.get('ok', 7 * 86_400_000);
+  const all = [...new Set([...(ok ? [ok] : []), euro, y, euro - 1, y - 1, y - 2, y - 3])];
+  return max ? all.filter((s) => s <= max) : all;
+}
+function learnSeasonLimit(message: string) {
+  const m = /(?:from\s+)?(\d{4})\s*(?:to|-)\s*(\d{4})/i.exec(message);
+  if (m) seasonMemo.set('max', Number(m[2]));
 }
 async function leaguePack(leagueId: number) {
   const hit = packs.get(String(leagueId), FOREVER);
@@ -163,11 +173,14 @@ async function leaguePack(leagueId: number) {
         if (list.length) {
           const teams = list.map((x) => ({ name: x.team.name, logo: x.team.logo }));
           packs.set(String(leagueId), teams);
+          seasonMemo.set('ok', season);
           return teams;
         }
       } catch (e) {
-        // Época fora do plano: tenta a anterior.
-        if (!/season|plan/i.test(e instanceof Error ? e.message : '')) return [];
+        // Época fora do plano: aprende o limite e tenta a anterior.
+        const msg = e instanceof Error ? e.message : '';
+        if (!/season|plan/i.test(msg)) return [];
+        learnSeasonLimit(msg);
       }
     }
     return [];
@@ -179,8 +192,8 @@ async function leaguePack(leagueId: number) {
 // Ligas principais (os mesmos ids do Logos.tsx): descarregadas em segundo plano, uma a cada ~7 s, e
 // guardadas para sempre. Um clube que mudou de divisão (ou joga a Champions) é encontrado na liga
 // onde estava na época que o plano permite, sem gastar uma pesquisa.
-export const LEAGUE_IDS = [39, 40, 45, 140, 141, 143, 135, 136, 137, 78, 79, 81, 61, 62, 66, 94, 95, 96, 88, 89, 144, 179,
-  203, 197, 207, 218, 119, 113, 103, 106, 345, 2, 3, 848, 13, 11, 1, 4, 5, 71, 72, 128, 253, 262, 307, 98];
+export const LEAGUE_IDS = [71, 72, 39, 40, 45, 140, 141, 143, 135, 136, 137, 78, 79, 81, 61, 62, 66, 94, 95, 96, 88, 89, 144, 179,
+  203, 197, 207, 218, 119, 113, 103, 106, 345, 2, 3, 848, 13, 11, 1, 4, 5, 128, 253, 262, 307, 98];
 let warming = false;
 export function warmLeaguePacks() {
   if (warming || !API_KEY()) return;
@@ -245,8 +258,9 @@ export async function teamLogo(sport: string, name: string, leagueId?: number): 
       logos.set(key, packed);
       return packed;
     }
-    // Enquanto as ligas descarregam, não gasta pesquisas (o clube pode estar numa delas).
-    if (warming) return null;
+    // Enquanto as ligas principais descarregam, um clube de uma delas espera por elas (sem gastar
+    // uma pesquisa); um clube de outra liga pode ser procurado já pelo nome.
+    if (warming && leagueId) return null;
   }
   if (inflight.has(key)) return inflight.get(key)!;
   const p = (async () => {

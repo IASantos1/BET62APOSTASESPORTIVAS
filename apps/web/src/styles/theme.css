@@ -15,6 +15,7 @@
 
   /* Tema escuro (por omissão). Valores "R G B" para os utilitários do Tailwind. */
   --c-fg: 255 255 255;
+  --c-fg-theme: 255 255 255;
   --c-bg: 10 14 23;
   --c-surface: 18 26 41;
   --c-surface-2: 26 37 56;
@@ -41,6 +42,7 @@
 /* Tema claro: html.light (escolhido no cabeçalho, guardado no navegador). */
 html.light {
   --c-fg: 15 23 42;
+  --c-fg-theme: 15 23 42;
   --c-bg: 241 244 248;
   --c-surface: 255 255 255;
   --c-surface-2: 233 237 243;
@@ -238,4 +240,31 @@ html.light body::before {
 img.cut-sponsor {
   clip-path: inset(0 0 26% 0);
   transform: translateY(13%) scale(1.15);
+}
+
+/* Menu superior em vermelho intenso, e o vermelho a descer pela página até desaparecer
+   (degradê), nos dois modos. Dentro do menu o texto é sempre branco; os painéis que abrem a partir
+   dele (conta, notificações) voltam às cores do tema. */
+.header-red {
+  --c-fg: 255 255 255;
+  --c-border: rgba(255, 255, 255, 0.16);
+  background: linear-gradient(180deg, #c8102e 0%, #b00d2c 100%);
+  border-bottom-color: transparent !important;
+}
+.header-red .bg-bet62-surface,
+.header-red .bg-bet62-bg,
+.header-red .glassmorphism {
+  --c-fg: var(--c-fg-theme);
+  --c-border: rgba(127, 127, 127, 0.18);
+}
+.page-red-fade {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 520px;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgb(176 13 44) 0%, rgb(176 13 44 / 0.75) 14%, rgb(176 13 44 / 0.4) 38%, rgb(176 13 44 / 0.12) 70%, transparent 100%);
+}
+html.light .page-red-fade {
+  background: linear-gradient(180deg, rgb(200 16 46 / 0.9) 0%, rgb(200 16 46 / 0.45) 16%, rgb(200 16 46 / 0.16) 45%, transparent 100%);
 }

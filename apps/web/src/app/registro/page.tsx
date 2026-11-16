@@ -180,7 +180,7 @@ export default function RegistroPage() {
   });
 
   return (
-    <div className="min-h-screen bg-bet62-bg relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden">
       <div className="absolute inset-0 bg-bet62-grid [background-size:44px_44px] opacity-40 pointer-events-none" />
       <div className="absolute top-1/4 -left-24 w-[520px] h-[520px] rounded-full bg-bet62-accent/10 blur-3xl animate-pulse-slow" />
       <div className="absolute bottom-1/4 -right-24 w-[520px] h-[520px] rounded-full bg-bet62-secondary/10 blur-3xl animate-pulse-slow" style={{ animationDelay: '1.1s' }} />

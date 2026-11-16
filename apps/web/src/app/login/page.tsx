@@ -135,7 +135,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-bet62-bg relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden">
       <div className="absolute inset-0 bg-bet62-grid [background-size:44px_44px] opacity-40 pointer-events-none" />
       <div className="absolute -top-40 -left-40 w-[520px] h-[520px] rounded-full bg-bet62-primary/10 blur-3xl animate-pulse-slow" />
       <div className="absolute -bottom-40 -right-40 w-[520px] h-[520px] rounded-full bg-bet62-secondary/10 blur-3xl animate-pulse-slow" style={{ animationDelay: '1.2s' }} />

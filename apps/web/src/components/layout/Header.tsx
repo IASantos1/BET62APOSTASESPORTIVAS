@@ -45,14 +45,15 @@ const NAV = [
   { href: '/promocoes', label: 'Promoções', icon: Gift, badge: '5' },
 ];
 
-export function Bet62Logo({ className }: { className?: string }) {
+export function Bet62Logo({ className, onRed = false }: { className?: string; onRed?: boolean }) {
   return (
     <Link href="/" className={cn('flex items-center gap-2 group', className)}>
       <svg viewBox="0 0 128 48" width="140" height="52" className="h-9 w-auto text-white">
         <text x="14" y="34" fontFamily="'Space Grotesk',sans-serif"
               fontSize="32" fontWeight="900" letterSpacing="-1.2">
-          <tspan fill="#e11d48">BET</tspan>
-          <tspan fill="currentColor">62</tspan>
+          {/* No menu vermelho: BET em branco e 62 escuro, para continuar a ler-se. */}
+          <tspan fill={onRed ? '#ffffff' : '#e11d48'}>BET</tspan>
+          <tspan fill={onRed ? '#1a0509' : 'currentColor'}>62</tspan>
         </text>
       </svg>
     </Link>
@@ -84,7 +85,8 @@ export function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-bet62-border bg-bet62-bg/80 backdrop-blur-xl pt-[env(safe-area-inset-top)]">
+      <div className="page-red-fade" aria-hidden />
+      <header className="header-red sticky top-0 z-40 border-b shadow-[0_6px_24px_rgba(120,8,30,0.35)] pt-[env(safe-area-inset-top)]">
         <div className="mx-auto max-w-[1600px] px-4 lg:px-8 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-6">
             <button
@@ -94,7 +96,7 @@ export function Header() {
             >
               <Menu size={20} />
             </button>
-            <Bet62Logo />
+            <Bet62Logo onRed />
             <nav className="hidden lg:flex items-center gap-1">
               {NAV.map((item) => {
                 const active = pathname === item.href;
@@ -106,8 +108,8 @@ export function Header() {
                     className={cn(
                       'relative group inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all',
                       active
-                        ? 'text-onbrand bg-bet62-primary'
-                        : 'text-white/70 hover:text-white hover:bg-white/5',
+                        ? 'text-onbrand bg-black/25'
+                        : 'text-white/85 hover:text-white hover:bg-black/15',
                     )}
                   >
                     <Icon size={16} />
@@ -127,9 +129,12 @@ export function Header() {
             <ThemeToggle />
             {!isAuthenticated || !user ? (
               <>
-                <Button variant="primary" size="sm" className="px-5 font-bold uppercase tracking-wider" asChild>
-                  <Link href="/login">LOGIN</Link>
-                </Button>
+                <Link
+                  href="/login"
+                  className="inline-flex h-9 items-center rounded-xl bg-[#ffffff] px-5 text-sm font-bold uppercase tracking-wider text-[#c8102e] shadow-md hover:brightness-95"
+                >
+                  LOGIN
+                </Link>
               </>
             ) : (
               <>
