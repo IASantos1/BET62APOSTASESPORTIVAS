@@ -40,7 +40,8 @@ export function OddButton({ event, outcomeId, marketId, label, compact = false }
   const selected = useSlip((s) => s.picks.some((p) => p.key === `${event.id}|${marketId}||${outcomeId}`));
   const o = event.markets[marketId]?.['']?.[outcomeId];
   const odds = Number(o?.k) || 0;
-  const blocked = !o || o.b === 1 || odds <= 1;
+  const suspended = o?.b === 1;
+  const blocked = !o || suspended || odds <= 1;
   const market = MAIN_MARKETS.find((m) => m.id === marketId);
   const team = label === '1' ? event.home : label === '2' ? event.away : 'Empate';
   return (
@@ -62,7 +63,9 @@ export function OddButton({ event, outcomeId, marketId, label, compact = false }
       <span className={cn('text-xs', selected ? 'text-onbrand/80' : 'text-white/55')}>{label}</span>
       <span className="flex items-center gap-1">
         <OddArrow moveKey={`${event.id}|${marketId}||${outcomeId}`} />
-        <b className={cn('font-mono', selected ? 'text-onbrand' : 'text-bet62-odd-price')}>{blocked ? '—' : fmtOdds(odds)}</b>
+        <b className={cn('font-mono', suspended && 'text-[10px] leading-tight', selected ? 'text-onbrand' : 'text-bet62-odd-price')}>
+          {suspended ? 'Suspenso' : blocked ? '—' : fmtOdds(odds)}
+        </b>
       </span>
     </button>
   );

@@ -118,6 +118,7 @@ interface Cell {
   label: string;
   price: string;
   blocked: boolean;
+  suspended: boolean;
   selected: boolean;
   pct?: number;
   onClick: () => void;
@@ -129,7 +130,7 @@ function OddCell({ c, priceOnly }: { c: Cell; priceOnly?: boolean }) {
     <button
       type="button"
       disabled={c.blocked}
-      title={c.label}
+      title={c.suspended ? `${c.label} - Suspenso` : c.label}
       onClick={c.onClick}
       className={cn(
         'flex min-w-0 items-center gap-2 rounded-lg px-3 py-2.5 text-sm transition',
@@ -146,7 +147,9 @@ function OddCell({ c, priceOnly }: { c: Cell; priceOnly?: boolean }) {
       )}
       <span className="flex shrink-0 items-center gap-1">
         <OddArrow moveKey={c.moveKey} />
-        <b className={cn('font-mono', c.selected ? 'text-onbrand' : 'text-bet62-odd-price')}>{c.blocked ? '—' : c.price}</b>
+        <b className={cn('font-mono', c.suspended && 'text-[10px] leading-tight', c.selected ? 'text-onbrand' : 'text-bet62-odd-price')}>
+          {c.suspended ? 'Suspenso' : c.blocked ? '—' : c.price}
+        </b>
       </span>
     </button>
   );
@@ -706,6 +709,7 @@ function Inner({ id }: { id: string }) {
                             moveKey: key,
                             label,
                             price: v.k,
+                            suspended: v.b === 1,
                             blocked: v.b === 1 || !(Number(v.k) > 1),
                             selected: picks.some((p) => p.key === key),
                             pct: share(m, o),

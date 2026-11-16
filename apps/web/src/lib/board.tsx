@@ -299,6 +299,12 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       if (e && (!e.startTime || e.startTime > now - 5 * 60_000)) byId.set(e.id, e);
     }
     for (const raw of live.events) {
+      // O feed live também pode manter temporariamente eventos já encerrados; status 1 é o
+      // estado ativo observado na BETBY. match_status é uma fase específica do desporto.
+      if (raw.state?.status !== undefined && raw.state.status !== 1) {
+        byId.delete(raw.id);
+        continue;
+      }
       const e = toBoardEvent(raw, 'live', live.dictionaries);
       if (e) byId.set(e.id, e);
     }
