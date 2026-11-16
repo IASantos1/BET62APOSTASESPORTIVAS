@@ -20,6 +20,7 @@ interface FeedState {
   error?: string | null;
   indexKeys?: string[];
   versions?: { version: string; events: number; keys: string[] }[];
+  summary?: { events: number; withScore: number; withClock: number; withMarkets: number; fields: string[]; sample: string | null };
 }
 
 interface CollectorStatus {
@@ -206,6 +207,21 @@ export default function AdminPage() {
                     {feed.indexKeys && (
                       <p className="font-mono text-xs text-white/50 break-all">índice: {feed.indexKeys.join(', ')}</p>
                     )}
+                    {feed.summary && (
+                      <div className="rounded-xl border border-bet62-border bg-bet62-surface/50 p-3 text-xs space-y-2">
+                        <p className="text-white/80">
+                          Jogos no estado atual: <b>{feed.summary.events}</b> · com placar: {feed.summary.withScore} · com relógio:{' '}
+                          {feed.summary.withClock} · com odds: {feed.summary.withMarkets}
+                        </p>
+                        <p className="font-mono text-white/50">campos: {feed.summary.fields.join(', ') || '—'}</p>
+                        {feed.summary.sample && (
+                          <details>
+                            <summary className="cursor-pointer text-white/60">Ver um jogo de exemplo</summary>
+                            <pre className="mt-2 whitespace-pre-wrap break-all font-mono text-white/60">{feed.summary.sample}</pre>
+                          </details>
+                        )}
+                      </div>
+                    )}
                     {feed.versions && (
                       <div className="rounded-xl border border-bet62-border bg-bet62-surface/50 p-3 text-xs space-y-1">
                         {feed.versions.length === 0 ? (
@@ -213,7 +229,7 @@ export default function AdminPage() {
                         ) : (
                           feed.versions.map((v) => (
                             <p key={v.version} className="font-mono text-white/70 break-all">
-                              versão {v.version}: {v.events} eventos · campos: {v.keys.join(', ') || '—'}
+                              versão {v.version}: {v.events} jogos atualizados · campos: {v.keys.join(', ') || '—'}
                             </p>
                           ))
                         )}

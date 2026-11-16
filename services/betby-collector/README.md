@@ -50,6 +50,7 @@ BETBY_ENABLED=false npm start
 
 - The current demo API paths and brand ID are configurable and must be replaced with production-approved values when BETBY supplies production access.
 - The numeric URL suffix `0` returns a version index; the event versions it lists are requested next. This was inferred from a real index response and should be confirmed with BETBY.
+- A version response carries `events` as an object `{ eventId: delta | null }`. A delta holds only what changed: `state` (status, `clock.match_time`), `score` (`home_score`, `away_score`, `period_scores`) and `markets` (`{ marketId: { variant: { outcomeId: { k: odd, b: 1 = blocked } } } }`); `null` removes the event, market or variant. The collector merges deltas into the current state per event and writes it to `/data/events/{feed}-current.json`. Team and competition names are not in these responses.
 - Polling stores snapshots and event data; it does not place bets, authenticate end users, or connect to the BET62 wallet.
 - Use only feeds and credentials that BETBY has authorized for your account and intended use.
 
