@@ -67,6 +67,20 @@ function applyDeltas(store, payload) {
   return applied;
 }
 
+// Fallback conservador para eventos live sem novos deltas; não assume códigos BETBY não documentados.
+const LIVE_EVENT_STALE_MS = 30 * 60 * 1000;
+
+function pruneStaleLiveEvents(store, now = Date.now()) {
+  let removed = 0;
+  for (const [id, event] of store) {
+    const updatedAt = Date.parse(event.updatedAt || '');
+    if (!Number.isFinite(updatedAt) || now - updatedAt < LIVE_EVENT_STALE_MS) continue;
+    store.delete(id);
+    removed += 1;
+  }
+  return removed;
+}
+
 function storeSummary(store) {
   const all = [...store.values()];
   const withMarkets = all.filter(e => Object.keys(e.markets || {}).length);
@@ -178,12 +192,13 @@ async function fetchFeed(feed, path) {
     versionResults.push({ version, events: deltas || found.length, keys: Object.keys(payload || {}).slice(0, 12) });
     events = events.concat(found);
   }
+  // O TTL aplica-se apenas ao feed live; o pré-jogo tem regras de expiração diferentes.
+  const staleRemoved = feed === 'live' ? pruneStaleLiveEvents(store) : 0;
   const summary = storeSummary(store);
-  if (store.size) {
-    await mkdir(join(config.dataDir, 'events'), { recursive: true });
-    await writeFile(join(config.dataDir, 'events', `${feed}-current.json`),
-      JSON.stringify({ captured_at: now, feed, events: [...store.values()] }), 'utf8');
-  }
+  // Escrever também quando fica vazio evita que um snapshot antigo continue a ser servido.
+  await mkdir(join(config.dataDir, 'events'), { recursive: true });
+  await writeFile(join(config.dataDir, 'events', `${feed}-current.json`),
+    JSON.stringify({ captured_at: now, feed, events: [...store.values()], stale_removed: staleRemoved }), 'utf8');
 
   if (events.length) {
     await writeJsonLine(join(config.dataDir, 'events', `${feed}.jsonl`), {
