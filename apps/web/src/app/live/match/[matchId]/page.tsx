@@ -4,7 +4,6 @@
 // cada odd clicável para o boletim.
 import Link from 'next/link';
 import * as React from 'react';
-import { createPortal } from 'react-dom';
 import { Activity, ArrowLeft, BarChart3, Clock3, MonitorPlay } from 'lucide-react';
 import { SportsShell } from '../../../../components/sports/SportsShell';
 import { EmptyPanel } from '../../../../components/sports/blocks';
@@ -507,7 +506,6 @@ function Inner({ id }: { id: string }) {
   const [cat, setCat] = React.useState('todos');
   const [view, setView] = React.useState<View>('mercados');
   const [desktopTracker, setDesktopTracker] = React.useState(false);
-  const [portalReady, setPortalReady] = React.useState(false);
   const endpoint = useEventEndpoint(id, feed, cfg?.eventEndpoint, cfg !== null && !!e, e ? Object.keys(e.markets).length : 0);
   const fullMarketState = useFullMarkets(id, feed, endpoint);
   const fullMarkets = fullMarketState.markets;
@@ -515,7 +513,6 @@ function Inner({ id }: { id: string }) {
   const sideWidgets = widgets.get(id);
   const tracker = live && e ? trackerFor(e.raw, e.betbySport, cfg?.trackerField, sideWidgets, true) : null;
   React.useEffect(() => {
-    setPortalReady(true);
     const media = window.matchMedia('(min-width: 1280px)');
     const update = () => setDesktopTracker(media.matches);
     update();
@@ -674,33 +671,6 @@ function Inner({ id }: { id: string }) {
           </div>
         </section>
 
-        {/* Minicampo / transmissão logo abaixo do cabeçalho (juntos). */}
-        {portalReady && view === 'tracker' && !desktopTracker && typeof document !== 'undefined' && createPortal(
-          <div
-            className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 z-[60] w-[min(92vw,420px)] -translate-x-1/2 overflow-y-auto overflow-x-hidden rounded-b-2xl border border-t-0 border-bet62-border bg-bet62-surface/95 shadow-2xl backdrop-blur-sm xl:hidden"
-            style={{ maxHeight: 'calc(100dvh - 5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))' }}
-          >
-            {tracker ? (
-              <iframe
-                src={tracker}
-                title="Tracker do jogo"
-                className={`mx-auto block ${cfg?.trackerMobileWidthPx ? '' : 'w-full'} ${cfg?.trackerMobileHeightPx ? '' : 'h-[min(48dvh,368px)] min-h-[260px] sm:h-[min(53dvh,468px)] sm:min-h-[340px]'}`}
-                style={{
-                  ...(cfg?.trackerMobileWidthPx ? { width: `${cfg.trackerMobileWidthPx}px`, maxWidth: '100%' } : {}),
-                  ...(cfg?.trackerMobileHeightPx ? { height: `${cfg.trackerMobileHeightPx}px` } : {}),
-                  maxHeight: 'calc(100dvh - 6rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
-                }}
-                allow="fullscreen"
-              />
-            ) : (
-              <p className="p-6 text-sm text-white/60">
-                Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.
-              </p>
-            )}
-          </div>,
-          document.body,
-        )}
-
         {view === 'live' && (
           broadcast ? (
             <div className="overflow-hidden rounded-2xl border border-bet62-border bg-black/40">
@@ -716,6 +686,32 @@ function Inner({ id }: { id: string }) {
           )
         )}
       </div>
+
+      {/* O tracker permanece no fluxo da página e fixa-se abaixo do cabeçalho ao rolar. */}
+      {view === 'tracker' && !desktopTracker && (
+        <div
+          className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-[35] mx-auto w-[min(92vw,420px)] overflow-y-auto overflow-x-hidden rounded-2xl border border-bet62-border bg-bet62-surface/95 shadow-2xl backdrop-blur-sm xl:hidden"
+          style={{ maxHeight: 'calc(100dvh - 5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))' }}
+        >
+          {tracker ? (
+            <iframe
+              src={tracker}
+              title="Tracker do jogo"
+              className={`mx-auto block ${cfg?.trackerMobileWidthPx ? '' : 'w-full'} ${cfg?.trackerMobileHeightPx ? '' : 'h-[min(48dvh,368px)] min-h-[260px] sm:h-[min(53dvh,468px)] sm:min-h-[340px]'}`}
+              style={{
+                ...(cfg?.trackerMobileWidthPx ? { width: `${cfg.trackerMobileWidthPx}px`, maxWidth: '100%' } : {}),
+                ...(cfg?.trackerMobileHeightPx ? { height: `${cfg.trackerMobileHeightPx}px` } : {}),
+                maxHeight: 'calc(100dvh - 6rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
+              }}
+              allow="fullscreen"
+            />
+          ) : (
+            <p className="p-6 text-sm text-white/60">
+              Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Botões de view abaixo do minicampo. */}
       <div className="flex gap-2">
