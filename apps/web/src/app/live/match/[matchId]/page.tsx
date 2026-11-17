@@ -528,6 +528,7 @@ function Inner({ id }: { id: string }) {
     setTracker(active ? tracker : null, active);
     return () => setTracker(null, false);
   }, [desktopTracker, live, setTracker, tracker, view]);
+  const mobileTracker = view === 'tracker' && !!live && !desktopTracker && !!tracker;
   // Jogo ao vivo: o minicampo abre logo (cabeçalho do jogo → minicampo → Tracker/Live → mercados).
   const autoTracker = React.useRef(false);
   React.useEffect(() => {
@@ -643,12 +644,39 @@ function Inner({ id }: { id: string }) {
 
   return (
     <>
+      {/* Telemóvel/tablet: menu superior → minicampo → Tracker/Live → mercados. O minicampo cola-se
+          ao menu, a toda a largura e com fundo opaco, e fica fixo enquanto os mercados rolam por baixo
+          (o placar do jogo sai: o próprio minicampo mostra o resultado e o tempo).
+          PC largo: fica no topo da coluna do boletim (BetSlip), entre o menu superior e o boletim. */}
+      {view === 'tracker' && live && !desktopTracker && (
+        <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-[35] -mx-3 -mt-5 border-b border-bet62-border bg-bet62-bg shadow-[0_8px_18px_rgba(0,0,0,0.25)] sm:-mx-4 lg:static lg:mx-0 lg:overflow-hidden lg:rounded-2xl lg:border lg:shadow-none">
+          {tracker ? (
+            <iframe
+              src={tracker}
+              title="Tracker do jogo"
+              scrolling="no"
+              className="mx-auto block aspect-[114/100] w-full max-w-[min(100%,calc(40dvh*1.14),360px)] lg:max-w-[min(100%,calc(52vh*1.14),480px)]"
+              style={{
+                ...(cfg?.trackerMobileWidthPx ? { width: `${cfg.trackerMobileWidthPx}px`, maxWidth: '100%' } : {}),
+                ...(cfg?.trackerMobileHeightPx ? { height: `${cfg.trackerMobileHeightPx}px`, aspectRatio: 'auto' } : {}),
+              }}
+              allow="fullscreen"
+            />
+          ) : (
+            <p className="p-4 text-center text-sm text-white/60">
+              Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.
+            </p>
+          )}
+        </div>
+      )}
+
       <Link href={live ? '/live' : '/desporto'} className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white">
         <ArrowLeft size={16} /> Voltar
       </Link>
 
       {/* Cabeçalho + mídia (minicampo/transmissão) juntos, para o minicampo aparecer colado ao placar. */}
       <div className="space-y-3">
+        {!mobileTracker && (
         <section className="match-glow rounded-2xl border border-bet62-border p-3 md:p-4">
           <p className="flex items-center justify-center gap-2 text-center text-[11px] font-semibold uppercase tracking-widest text-white/50">
             <LeagueLogo sport={e.sport} league={e.league} country={e.country} />
@@ -680,6 +708,7 @@ function Inner({ id }: { id: string }) {
             </div>
           </div>
         </section>
+        )}
 
         {view === 'live' && (
           broadcast ? (
@@ -696,31 +725,6 @@ function Inner({ id }: { id: string }) {
           )
         )}
       </div>
-
-      {/* Telemóvel/tablet: minicampo logo abaixo do cabeçalho do jogo e acima de Tracker/Live e dos
-          mercados; ao rolar cola-se ao menu superior, a toda a largura e com fundo opaco.
-          PC largo: fica no topo da coluna do boletim (BetSlip), entre o menu superior e o boletim. */}
-      {view === 'tracker' && live && !desktopTracker && (
-        <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-[35] -mx-3 border-b border-bet62-border bg-bet62-bg shadow-[0_8px_18px_rgba(0,0,0,0.25)] sm:-mx-4 lg:static lg:mx-0 lg:overflow-hidden lg:rounded-2xl lg:border lg:shadow-none">
-          {tracker ? (
-            <iframe
-              src={tracker}
-              title="Tracker do jogo"
-              scrolling="no"
-              className="mx-auto block aspect-[114/100] w-full max-w-[min(100%,calc(40dvh*1.14),360px)] lg:max-w-[min(100%,calc(52vh*1.14),480px)]"
-              style={{
-                ...(cfg?.trackerMobileWidthPx ? { width: `${cfg.trackerMobileWidthPx}px`, maxWidth: '100%' } : {}),
-                ...(cfg?.trackerMobileHeightPx ? { height: `${cfg.trackerMobileHeightPx}px`, aspectRatio: 'auto' } : {}),
-              }}
-              allow="fullscreen"
-            />
-          ) : (
-            <p className="p-4 text-center text-sm text-white/60">
-              Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.
-            </p>
-          )}
-        </div>
-      )}
 
       {/* Botões de view abaixo do minicampo. */}
       <div className="flex gap-2">
