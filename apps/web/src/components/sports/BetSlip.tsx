@@ -209,7 +209,7 @@ export function BetSlip({
       >
         <div className="sticky top-16 flex h-[calc(100vh-4rem)] flex-col">
           {trackerActive && (
-            <div className="shrink-0 border-b border-bet62-border p-2">
+            <div className="fixed right-4 top-[calc(5rem+env(safe-area-inset-top))] z-[55] w-[min(28vw,420px)] shrink-0 rounded-xl border border-bet62-border bg-bet62-bg/95 p-2 shadow-2xl backdrop-blur-sm">
               <p className="mb-2 px-1 text-xs font-bold text-white/70">Minicampo</p>
               {trackerUrl ? (
                 <div className="overflow-hidden rounded-xl border border-bet62-border bg-black/40">
