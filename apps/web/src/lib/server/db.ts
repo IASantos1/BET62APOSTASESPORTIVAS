@@ -170,6 +170,56 @@ ALTER TABLE transactions ADD CONSTRAINT transactions_type_check CHECK (type IN (
 -- compara-a com a BETBY). Sem confirmação, um bilhete ganho não é pago sozinho: vai a análise.
 ALTER TABLE bets ADD COLUMN IF NOT EXISTS odds_check TEXT NOT NULL DEFAULT 'pending';
 ALTER TABLE bets ADD COLUMN IF NOT EXISTS odds_check_note TEXT;
+
+-- WinHouse: jogos, placar, relógio e cotações lidos pelo servidor (coletor em lib/server/winhouse).
+-- As cotações ficam como vêm (JSONB compacto): as da lista (2–3 mercados, frescas) e as da página
+-- do jogo (todos os mercados). betby_id liga o jogo ao mesmo jogo na BETBY (minicampo, mercados extra).
+CREATE TABLE IF NOT EXISTS wh_events (
+  id            TEXT        PRIMARY KEY,
+  sport         TEXT        NOT NULL,
+  sport_id      INT         NOT NULL,
+  competition   TEXT        NOT NULL,
+  country       TEXT,
+  home          TEXT        NOT NULL,
+  away          TEXT        NOT NULL,
+  home_logo     TEXT,
+  away_logo     TEXT,
+  start_time    TIMESTAMPTZ NOT NULL,
+  status        TEXT        NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'live', 'ended', 'gone', 'merged')),
+  home_score    INT,
+  away_score    INT,
+  minutes       NUMERIC(7, 2),
+  clock_raw     TEXT,
+  clock_since   TIMESTAMPTZ,
+  score_since   TIMESTAMPTZ,
+  live_since    TIMESTAMPTZ,
+  missing_since TIMESTAMPTZ,
+  list_odds     JSONB       NOT NULL DEFAULT '[]'::jsonb,
+  list_at       TIMESTAMPTZ,
+  page_odds     JSONB       NOT NULL DEFAULT '[]'::jsonb,
+  page_at       TIMESTAMPTZ,
+  page_status   INT,
+  watched_at    TIMESTAMPTZ,
+  verdict       JSONB,
+  end_reason    TEXT,
+  ended_at      TIMESTAMPTZ,
+  merged_into   TEXT,
+  betby_id      TEXT,
+  link_status   TEXT,
+  seen_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS wh_events_status ON wh_events(status, start_time);
+
+-- Estado do coletor (quem recolhe, saúde das rotas, fuso estimado), partilhado entre instâncias.
+CREATE TABLE IF NOT EXISTS wh_state (
+  key         TEXT        PRIMARY KEY,
+  value       JSONB       NOT NULL DEFAULT '{}'::jsonb,
+  owner       TEXT,
+  until       TIMESTAMPTZ,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 const g = globalThis as unknown as { __bet62Pool?: Pool; __bet62Schema?: Promise<void> };

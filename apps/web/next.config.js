@@ -19,7 +19,8 @@ const nextConfig = {
   },
   output: 'standalone',
   // O driver do PostgreSQL corre só no servidor e não deve ser empacotado pelo webpack.
-  experimental: { serverComponentsExternalPackages: ['pg'] },
+  // instrumentationHook: arranca o coletor do WinHouse (src/instrumentation.ts) com o servidor.
+  experimental: { serverComponentsExternalPackages: ['pg'], instrumentationHook: true },
   compress: true,
   reactStrictMode: true,
   eslint: {
