@@ -365,14 +365,17 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
       const versions = versionsOf(index);
       const fresh = versions.filter((v) => !appliedRef.current.has(v));
       const { payloads, failures } = await fetchVersions(feed, fresh, controller.signal);
-      payloads.forEach((payload, i) => {
-        // Só marcar como aplicada depois de receber e processar uma resposta válida.
-        // Versões falhadas permanecem fora do set e serão novamente tentadas no próximo ciclo.
-        if (!payload) return;
+      // Aplicar apenas o prefixo contínuo de versões válidas.
+      // Se uma versão falhar, nenhuma versão posterior é aplicada ou marcada como aplicada:
+      // no próximo ciclo, a versão em falta e as posteriores são descarregadas novamente
+      // e processadas pela ordem do índice, evitando que um delta antigo sobrescreva um novo.
+      for (let i = 0; i < payloads.length; i++) {
+        const payload = payloads[i];
+        if (!payload) break;
         applyDictionaries(dict, payload);
         applyDeltas(store, payload, lastEventUpdatesRef.current);
         appliedRef.current.add(fresh[i]);
-      });
+      }
       // Esquece versões que já saíram do índice (a lista não cresce para sempre).
       const current = new Set(versions);
       for (const v of appliedRef.current) if (!current.has(v)) appliedRef.current.delete(v);
