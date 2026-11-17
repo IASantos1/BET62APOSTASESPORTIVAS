@@ -11,6 +11,7 @@ import { useBoard, type BoardEvent } from '../../lib/board';
 import { useAuthStore } from '../../stores/auth.store';
 import { cn, formatCurrencyEUR as money } from '../../lib/utils';
 import { fmtOdds, fmtWhen } from '../sports/links';
+import { liveClockText } from '../../lib/clock';
 
 export interface TicketLeg {
   eventId: string;
@@ -68,7 +69,7 @@ const fmtDateTime = (iso: string) => new Date(iso).toLocaleString('pt-PT', { day
 function legState(l: TicketLeg, open: boolean, ev?: BoardEvent) {
   const live = ev?.status === 'live' || (open && l.eventStatus === 'live');
   const score = ev?.score ? `${ev.score.home}-${ev.score.away}` : l.score;
-  const clock = ev?.clock ?? l.clock;
+  const clock = ev ? liveClockText(ev) : l.clock;
   if (open && live) return { live: true, text: `${clock || 'Ao vivo'}${score ? ` · ${score}` : ''}` };
   if (l.eventStatus === 'finished') return { live: false, text: `Terminado${l.score ? ` · ${l.score}` : ''}` };
   if (l.eventStatus === 'cancelled') return { live: false, text: 'Jogo cancelado' };

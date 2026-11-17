@@ -20,6 +20,7 @@ import { trackerFor } from '../../../../lib/tracker';
 import { TrackerFrame } from '../../../../components/sports/TrackerFrame';
 import { closeDecidedMarkets } from '../../../../lib/lifecycle';
 import { useMarketTooltips } from '../../../../lib/tooltips';
+import { LiveClockText } from '../../../../lib/clock';
 import { useSportsTracker } from '../../../../components/sports/SportsTrackerContext';
 import { BETBY_CONFIG, type BetbyMarkets } from '../../../../lib/betby';
 
@@ -709,7 +710,7 @@ function Inner({ id }: { id: string }) {
               {live ? (
                 <>
                   <p className="font-mono text-2xl font-black md:text-3xl">{e.score ? `${e.score.home} - ${e.score.away}` : '0 - 0'}</p>
-                  <p className="mt-0.5 text-xs font-semibold text-bet62-primary">● {e.clock || 'Ao vivo'}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-bet62-primary">● <LiveClockText e={e} /></p>
                 </>
               ) : (
                 <>

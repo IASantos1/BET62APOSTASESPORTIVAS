@@ -25,6 +25,10 @@ export interface BoardEvent {
   awayPhoto?: string;
   startTime: number | null;
   clock?: string;
+  /** Relógio da BETBY parado (intervalo, paragem)? */
+  clockStopped?: boolean;
+  /** Momento (ms) a que o `clock` se refere, quando a BETBY o envia. */
+  clockAt?: number;
   score?: { home: string; away: string };
   /** Pontos correntes do game no ténis (15/30/40/AD), separados dos sets. */
   gameScore?: { home: string; away: string };
@@ -283,6 +287,14 @@ function formatTennisPoint(value: string | number | undefined) {
   return point === '50' || point === 'A' ? 'AD' : point;
 }
 
+/** O timestamp do relógio da BETBY em ms (vem em segundos ou ms); fora do razoável, ignorado. */
+function clockTimestamp(ts: unknown) {
+  const n = Number(ts);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  const ms = n > 1e12 ? n : n * 1000;
+  return Math.abs(Date.now() - ms) < 6 * 3600_000 ? ms : undefined;
+}
+
 function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: BetbyDictionaries): BoardEvent | null {
   const d = raw.desc;
   if (!d || d.virtual || !d.competitors || d.competitors.length < 2) return null;
@@ -322,6 +334,8 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
     awayPhoto: competitorPhoto(d.competitors[1]),
     startTime: d.scheduled ? d.scheduled * 1000 : null,
     clock: raw.state?.clock?.match_time,
+    clockStopped: raw.state?.clock?.stopped,
+    clockAt: clockTimestamp(raw.state?.clock?.timestamp),
     score,
     gameScore,
     statistics: extractStatistics(raw),

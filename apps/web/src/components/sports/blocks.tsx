@@ -22,6 +22,7 @@ import { cn } from '../../lib/utils';
 import { Flag } from './Flag';
 import { LeagueLogo, TeamLogo, leagueApiId } from './Logos';
 import { fmtOdds, fmtWhen, leagueHref, matchHref } from './links';
+import { LiveClockText } from '../../lib/clock';
 
 // ---------- odds ----------
 
@@ -82,7 +83,7 @@ export function LiveClock({ e, big = false }: { e: BoardEvent; big?: boolean }) 
   return (
     <span className={cn('inline-flex items-center gap-1.5 whitespace-nowrap font-black text-bet62-primary', big ? 'text-[15px]' : 'text-xs')}>
       <i className="pulse-dot" aria-hidden />
-      {e.clock || 'Ao vivo'}
+      <LiveClockText e={e} />
     </span>
   );
 }
@@ -372,18 +373,20 @@ export function LeagueCards({ leagues, sport = '' }: { leagues: LeagueNode[]; sp
 export function SportTiles({ events, active, onPick }: { events: BoardEvent[]; active: string; onPick: (s: string) => void }) {
   const counts: Record<string, number> = {};
   for (const e of events) counts[e.sport] = (counts[e.sport] || 0) + 1;
+  // Só o ícone do desporto (o nome fica no título e para leitores de ecrã).
   const tile = (key: string, icon: string, name: string, n?: number) => (
     <button
       key={key || 'all'}
       onClick={() => onPick(key)}
+      title={n !== undefined ? `${name} (${n})` : name}
+      aria-label={n !== undefined ? `${name}, ${n} jogos` : name}
+      aria-pressed={active === key}
       className={cn(
-        'flex w-20 shrink-0 flex-col items-center gap-1 rounded-2xl border px-2 py-2.5 text-center text-[11px]',
-        active === key ? 'border-bet62-primary bg-bet62-primary/15 text-white' : 'border-bet62-border bg-bet62-surface/40 text-white/70 hover:text-white',
+        'grid h-12 w-12 shrink-0 place-items-center rounded-xl border text-2xl leading-none transition-colors',
+        active === key ? 'border-bet62-primary bg-bet62-primary/15' : 'border-bet62-border bg-bet62-surface/40 hover:bg-bet62-surface-2',
       )}
     >
-      <span className="text-xl">{icon}</span>
-      <span className="leading-tight">{name}</span>
-      {n !== undefined && <span className="text-[10px] text-white/40">{n}</span>}
+      {icon}
     </button>
   );
   return (
