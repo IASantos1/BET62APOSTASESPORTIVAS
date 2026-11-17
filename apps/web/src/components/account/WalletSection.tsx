@@ -4,7 +4,7 @@
 import * as React from 'react';
 import Link from 'next/link';
 import { ArrowDownCircle, ArrowUpCircle, Loader2 } from 'lucide-react';
-import { AccountShell, Panel } from '../../components/account/AccountShell';
+import { Panel } from './ui';
 import { api, useAuthStore } from '../../stores/auth.store';
 import { cn, formatCurrencyEUR } from '../../lib/utils';
 
@@ -19,7 +19,7 @@ interface Tx {
   createdAt: string;
 }
 
-function Wallet() {
+export function WalletSection() {
   const refresh = useAuthStore((s) => s.refresh);
   const [data, setData] = React.useState<{ balance: number; inPlay: number; transactions: Tx[] } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -51,7 +51,7 @@ function Wallet() {
         <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-5">
           <p className="text-sm text-white/60">Em apostas abertas</p>
           <p className="font-mono text-3xl font-black">{formatCurrencyEUR(data.inPlay)}</p>
-          <Link href="/apostas" className="mt-4 inline-block text-sm font-semibold text-bet62-primary hover:underline">Ver as minhas apostas</Link>
+          <Link href="/conta/apostas" className="mt-4 inline-block text-sm font-semibold text-bet62-primary hover:underline">Ver as minhas apostas</Link>
         </div>
       </div>
       <Panel title="Movimentos">
@@ -81,8 +81,4 @@ function Wallet() {
       </Panel>
     </>
   );
-}
-
-export default function CarteiraPage() {
-  return <AccountShell title="Carteira">{() => <Wallet />}</AccountShell>;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-// Boletim de apostas (só no navegador; ainda sem backend para registar apostas).
+// Boletim de apostas. Ao apostar, os bilhetes são gravados no servidor (/api/bets).
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { BetPick, Builder } from '../lib/board';
@@ -20,6 +20,8 @@ interface SlipState {
   setMode: (m: 'single' | 'multiple') => void;
   setStake: (v: number) => void;
   setOpen: (v: boolean) => void;
+  /** Atualiza as odds das seleções (chave → odd atual). */
+  setOdds: (odds: Map<string, number>) => void;
 }
 
 export const useSlip = create<SlipState>()(
@@ -48,6 +50,11 @@ export const useSlip = create<SlipState>()(
       setMode: (mode) => set({ mode }),
       setStake: (stake) => set({ stake }),
       setOpen: (open) => set({ open }),
+      setOdds: (odds) =>
+        set((s) => ({
+          picks: s.picks.map((p) => (odds.has(p.key) ? { ...p, odds: odds.get(p.key)! } : p)),
+          builder: s.builder ? { ...s.builder, legs: s.builder.legs.map((p) => (odds.has(p.key) ? { ...p, odds: odds.get(p.key)! } : p)) } : null,
+        })),
     }),
     { name: 'bet62-slip', partialize: (s) => ({ picks: s.picks, builder: s.builder, mode: s.mode, stake: s.stake }) },
   ),

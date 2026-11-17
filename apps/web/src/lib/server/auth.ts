@@ -28,7 +28,7 @@ export async function verifyPassword(password: string, stored: string) {
   return got.length === expected.length && timingSafeEqual(got, expected);
 }
 
-const sha = (t: string) => createHash('sha256').update(t).digest('hex');
+export const sha = (t: string) => createHash('sha256').update(t).digest('hex');
 
 export interface UserRow {
   id: string;
@@ -45,6 +45,9 @@ export interface UserRow {
   balance_cents: string;
   excluded_until: string | Date | null;
   created_at: string | Date;
+  prefs: Record<string, boolean> | null;
+  iban: string | null;
+  iban_name: string | null;
 }
 
 const isoDay = (d: string | Date) => {
@@ -71,6 +74,10 @@ export function publicUser(u: UserRow) {
     balance: Number(u.balance_cents) / 100,
     excludedUntil: u.excluded_until ? new Date(u.excluded_until).toISOString() : null,
     createdAt: new Date(u.created_at).toISOString(),
+    memberId: `BET62-${String(u.id).padStart(6, '0')}`,
+    prefs: u.prefs ?? {},
+    iban: u.iban,
+    ibanName: u.iban_name,
     twoFactorEnabled: false,
   };
 }
@@ -111,6 +118,12 @@ export async function currentUser(): Promise<UserRow | null> {
     `SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = $1 AND s.expires_at > now()`,
     [sha(token)],
   );
+}
+
+/** Hash do token da sessão atual (para marcar "este dispositivo"). */
+export function currentSessionHash() {
+  const token = cookies().get(SESSION_COOKIE)?.value;
+  return token ? sha(token) : null;
 }
 
 export async function endSession() {

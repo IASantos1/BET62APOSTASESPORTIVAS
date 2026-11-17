@@ -1,6 +1,6 @@
 import type { PoolClient } from 'pg';
 
-export type TxType = 'deposit' | 'withdrawal' | 'withdrawal_refund' | 'bet' | 'payout' | 'refund' | 'admin_credit' | 'admin_debit';
+export type TxType = 'deposit' | 'withdrawal' | 'withdrawal_refund' | 'bet' | 'payout' | 'refund' | 'admin_credit' | 'admin_debit' | 'cashout';
 
 export class InsufficientFunds extends Error {
   constructor() {

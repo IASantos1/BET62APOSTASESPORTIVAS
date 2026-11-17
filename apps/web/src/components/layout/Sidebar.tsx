@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   Activity,
-  Calendar,
   Dices,
   Gift,
   HelpCircle,
@@ -16,7 +15,6 @@ import { Badge } from '../ui/Badge';
 
 const QUICK_LINKS = [
   { label: 'Ao Vivo', icon: Activity, href: '/live', hint: 'Futebol em tempo real' },
-  { label: 'Próximos', icon: Calendar, href: '/events', hint: 'Agenda de partidas' },
   { label: 'Cassino', icon: Dices, href: '/casino', hint: 'Jogos e provedores' },
   { label: 'Promoções', icon: Gift, href: '/promocoes', hint: 'Campanhas ativas', badge: '5' },
   { label: 'Carteira', icon: Wallet, href: '/carteira', hint: 'Depósitos e levantamentos' },

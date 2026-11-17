@@ -19,6 +19,8 @@ import { fillTemplate, useSiteConfig } from '../../../../lib/site-config';
 import { trackerFor } from '../../../../lib/tracker';
 import { TrackerFrame } from '../../../../components/sports/TrackerFrame';
 import { closeDecidedMarkets } from '../../../../lib/lifecycle';
+import { useMarketTooltips } from '../../../../lib/tooltips';
+import { LiveClockText } from '../../../../lib/clock';
 import { useSportsTracker } from '../../../../components/sports/SportsTrackerContext';
 import { BETBY_CONFIG, type BetbyMarkets } from '../../../../lib/betby';
 
@@ -221,13 +223,28 @@ const colsClass = (n: number) => (n <= 1 ? 'grid-cols-1' : n === 2 ? 'grid-cols-
  * com linhas (total 2.5, handicap -1…), uma fila por linha: a linha à esquerda e as odds ao lado,
  * com os nomes das seleções (Mais / Menos, equipas) no cabeçalho.
  */
-function MarketBlock({ title, rows }: { title: string; rows: { variant: string; label: string; cells: Cell[] }[] }) {
+function MarketBlock({ title, rows, tip }: { title: string; rows: { variant: string; label: string; cells: Cell[] }[]; tip?: string }) {
+  const [showTip, setShowTip] = React.useState(false);
   const lined = rows.some((r) => r.label);
   const head = rows[0]?.cells.map((c) => c.label) ?? [];
   const sameHead = lined && rows.every((r) => r.cells.length === head.length && r.cells.every((c, i) => c.label === head[i])) && head.length <= 3;
   return (
     <div className="rounded-xl border border-bet62-border bg-bet62-surface/50 p-3">
-      <p className="mb-2.5 text-xs font-extrabold uppercase tracking-wide text-white/60">{title}</p>
+      <div className="mb-2.5 flex items-start justify-between gap-2">
+        <p className="text-xs font-extrabold uppercase tracking-wide text-white/60">{title}</p>
+        {tip && (
+          <button
+            type="button"
+            onClick={() => setShowTip((v) => !v)}
+            aria-label={`Como funciona: ${title}`}
+            aria-expanded={showTip}
+            className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[11px] font-black', showTip ? 'border-bet62-primary text-bet62-primary' : 'border-bet62-border text-white/55')}
+          >
+            i
+          </button>
+        )}
+      </div>
+      {tip && showTip && <p className="mb-2.5 rounded-lg bg-white/5 p-2 text-xs text-white/70">{tip}</p>}
       {sameHead ? (
         <div className="space-y-1.5">
           <div className="grid grid-cols-[5.5rem_1fr] gap-2 md:grid-cols-[7rem_1fr]">
@@ -502,6 +519,7 @@ function Inner({ id }: { id: string }) {
   const picks = useSlip((s) => s.picks);
   const toggle = useSlip((s) => s.toggle);
   const cfg = useSiteConfig();
+  const tips = useMarketTooltips();
   const { setTracker } = useSportsTracker();
   const live = e?.status === 'live';
   const feed = live ? 'live' : 'prematch';
@@ -692,7 +710,7 @@ function Inner({ id }: { id: string }) {
               {live ? (
                 <>
                   <p className="font-mono text-2xl font-black md:text-3xl">{e.score ? `${e.score.home} - ${e.score.away}` : '0 - 0'}</p>
-                  <p className="mt-0.5 text-xs font-semibold text-bet62-primary">● {e.clock || 'Ao vivo'}</p>
+                  <p className="mt-0.5 text-xs font-semibold text-bet62-primary">● <LiveClockText e={e} /></p>
                 </>
               ) : (
                 <>
@@ -833,6 +851,7 @@ function Inner({ id }: { id: string }) {
                     <MarketBlock
                       key={m}
                       title={marketName(m)}
+                      tip={tips[`${e.betbySport ?? ''}-${m}`]}
                       rows={Object.entries(variants).map(([variant, outcomes]) => ({
                         variant,
                         label: variantLabel(variant),

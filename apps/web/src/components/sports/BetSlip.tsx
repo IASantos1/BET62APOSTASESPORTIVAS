@@ -1,8 +1,11 @@
 'use client';
 
 // Boletim do lado direito (como no outro projeto): Simples / Múltipla, ou um criador de apostas.
-// Ainda só no navegador: o botão de apostar avisa que o registo de apostas não está ligado.
+// "Apostar" grava os bilhetes no servidor (/api/bets), com as odds atuais da BETBY.
 import * as React from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '../../stores/auth.store';
 import { TrackerFrame } from './TrackerFrame';
 import { Ticket, X, Trash2 } from 'lucide-react';
 import { useBoard } from '../../lib/board';
@@ -11,9 +14,13 @@ import { cn } from '../../lib/utils';
 import { fmtOdds } from './links';
 
 function SlipBody() {
-  const { picks, builder, mode, stake, setMode, setStake, remove, clear, setOpen } = useSlip();
+  const { picks, builder, mode, stake, setMode, setStake, remove, clear, setOpen, setOdds } = useSlip();
   const { events, loading } = useBoard();
-  const [notice, setNotice] = React.useState<string | null>(null);
+  const router = useRouter();
+  const user = useAuthStore((st) => st.user);
+  const refreshUser = useAuthStore((st) => st.refresh);
+  const [notice, setNotice] = React.useState<{ ok: boolean; text: string; link?: boolean } | null>(null);
+  const [placing, setPlacing] = React.useState(false);
   const unavailable = React.useMemo(() => {
     const result = new Map<string, string>();
     const legs = builder?.legs ?? picks;
@@ -32,6 +39,71 @@ function SlipBody() {
   const total = builder ? builder.odds : mode === 'multiple' ? picks.reduce((p, x) => p * x.odds, 1) : 0;
   const totalStake = builder || mode === 'multiple' ? stake : stake * picks.length;
   const ret = builder || mode === 'multiple' ? stake * total : picks.reduce((s, p) => s + stake * p.odds, 0);
+
+  const place = async () => {
+    setNotice(null);
+    if (!user) {
+      router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    const legs = builder?.legs ?? picks;
+    if (!legs.length) return;
+    // Odds atuais da BETBY: se mudaram, o jogador confirma de novo.
+    const changed = new Map<string, number>();
+    for (const p of legs) {
+      const k = Number(events.find((e) => e.id === p.eventId)?.markets[p.marketId]?.[p.variant]?.[p.outcomeId]?.k);
+      if (k > 1 && Math.abs(k - p.odds) > 1e-9) changed.set(p.key, k);
+    }
+    if (changed.size) {
+      setOdds(changed);
+      setNotice({ ok: false, text: 'As odds mudaram. Confirme as novas odds e aposte de novo.' });
+      return;
+    }
+    setPlacing(true);
+    try {
+      const res = await fetch('/api/bets', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          kind: builder ? 'builder' : mode === 'multiple' && legs.length > 1 ? 'multiple' : 'single',
+          stake,
+          legs: legs.map((p) => ({
+            eventId: p.eventId,
+            eventName: p.match,
+            sport: p.sport,
+            sportId: events.find((e) => e.id === p.eventId)?.betbySport ?? null,
+            startTime: p.startTime,
+            marketId: p.marketId,
+            variant: p.variant,
+            outcomeId: p.outcomeId,
+            marketName: p.marketName,
+            outcomeName: p.label,
+            odds: p.odds,
+          })),
+        }),
+      });
+      const j = (await res.json().catch(() => ({}))) as { ids?: string[]; review?: boolean; error?: string };
+      if (!res.ok) {
+        if (res.status === 401) router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+        setNotice({ ok: false, text: j.error || 'Não foi possível registar a aposta.' });
+        return;
+      }
+      clear();
+      void refreshUser();
+      window.dispatchEvent(new Event('bet62:bets-changed'));
+      setNotice({
+        ok: true,
+        link: true,
+        text: j.review
+          ? `Aposta registada (${(j.ids ?? []).map((i) => `#${i}`).join(', ')}) e em análise: acima do limite automático.`
+          : `Aposta registada: ${(j.ids ?? []).map((i) => `#${i}`).join(', ')}.`,
+      });
+    } catch {
+      setNotice({ ok: false, text: 'Sem ligação. Tente novamente.' });
+    } finally {
+      setPlacing(false);
+    }
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -82,6 +154,12 @@ function SlipBody() {
           <div className="py-10 text-center text-sm text-white/45">
             <Ticket className="mx-auto mb-2 text-white/25" />
             Escolha uma odd para começar.
+            {notice?.ok && (
+              <p className="mt-4 rounded-xl border border-emerald-400/40 bg-emerald-400/10 p-3 text-xs text-emerald-300" role="status">
+                {notice.text}{' '}
+                {notice.link && <Link href="/conta/apostas" onClick={() => setOpen(false)} className="font-bold underline">Ver as minhas apostas</Link>}
+              </p>
+            )}
           </div>
         ) : (
           picks.map((p) => (
@@ -137,8 +215,8 @@ function SlipBody() {
             <b className="font-mono text-emerald-400">{ret.toFixed(2)} €</b>
           </div>
           <button
-            disabled={unavailable.size > 0}
-            onClick={() => setNotice('O registo de apostas ainda não está ligado.')}
+            disabled={unavailable.size > 0 || placing}
+            onClick={() => void place()}
             className={cn(
               'w-full rounded-xl bg-bet62-primary py-2.5 font-bold text-onbrand hover:bg-bet62-primary-600',
               unavailable.size > 0 && 'cursor-not-allowed opacity-50',
@@ -147,7 +225,12 @@ function SlipBody() {
             Apostar
           </button>
           {unavailable.size > 0 && <p className="text-xs text-amber-300">Remova ou aguarde a reabertura das seleções indisponíveis.</p>}
-          {notice && <p className="text-xs text-amber-300">{notice}</p>}
+          {notice && (
+            <p className={cn('text-xs', notice.ok ? 'text-emerald-400' : 'text-amber-300')} role="status">
+              {notice.text}{' '}
+              {notice.link && <Link href="/conta/apostas" onClick={() => setOpen(false)} className="font-bold underline">Ver as minhas apostas</Link>}
+            </p>
+          )}
         </div>
       )}
     </div>

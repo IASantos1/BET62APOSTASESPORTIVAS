@@ -5,7 +5,7 @@
 import Link from 'next/link';
 import * as React from 'react';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, ChevronRight, Calendar, Dices, Gift, ShieldCheck, Activity } from 'lucide-react';
+import { ChevronDown, ChevronRight, Dices, Gift, ShieldCheck, Activity } from 'lucide-react';
 import { useBoard } from '../../lib/board';
 import { Flag } from './Flag';
 import { SPORTS, countryLabel, type SportKey } from '../../lib/sports/catalog';
@@ -97,7 +97,6 @@ export function SportsSidebar({ className }: { className?: string }) {
         <p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-white/45">Explorar</p>
         {[
           { href: '/live', label: 'Ao Vivo', icon: Activity, badge: liveCount || undefined },
-          { href: '/events', label: 'Próximos', icon: Calendar },
           { href: '/casino', label: 'Cassino', icon: Dices },
           { href: '/promocoes', label: 'Promoções', icon: Gift },
           { href: '/jogo-responsavel', label: 'Jogo responsável', icon: ShieldCheck },
