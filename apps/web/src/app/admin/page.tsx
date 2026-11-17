@@ -23,6 +23,7 @@ import {
   Menu,
   Plug,
   Radar,
+  Server,
   RefreshCw,
   Search,
   Settings,
@@ -38,10 +39,11 @@ import { BetbyExplorer, IntegrationsCard } from './Explorer';
 import { TrackerSizeCard } from './TrackerSizeCard';
 import { PlayersCard } from './PlayersCard';
 import { SettlementCard } from './SettlementCard';
+import { WinHouseCard } from './WinHouseCard';
 import { BETBY_CONFIG, eventTitle, feedUrl, useBetbyFeed, type BetbyFeed } from '../../lib/betby';
 import { cn, formatCurrencyEUR as eur } from '../../lib/utils';
 
-type TabId = 'dashboard' | 'users' | 'bets' | 'settlement' | 'integrations' | 'tracker' | 'betby';
+type TabId = 'dashboard' | 'users' | 'bets' | 'settlement' | 'integrations' | 'winhouse' | 'tracker' | 'betby';
 
 const ADMIN_VERSION = 'v2.1';
 const panel = 'rounded-xl border border-bet62-border bg-bet62-surface';
@@ -331,6 +333,7 @@ export default function AdminPage() {
     { id: 'bets', icon: <ListChecks size={18} />, label: 'Apostas', title: 'Apostas', section: 'core' },
     { id: 'settlement', icon: <Gavel size={18} />, label: 'Liquidação', title: 'Liquidação', badge: stats?.bets?.review || null, section: 'core' },
     { id: 'integrations', icon: <Plug size={18} />, label: 'Integrações', title: 'Integrações do servidor', section: 'pro' },
+    { id: 'winhouse', icon: <Server size={18} />, label: 'WinHouse', title: 'WinHouse (dados do servidor)', section: 'pro' },
     { id: 'tracker', icon: <Settings size={18} />, label: 'Minicampo', title: 'Minicampo', section: 'pro' },
     { id: 'betby', icon: <Radar size={18} />, label: 'BETBY', title: 'Explorador BETBY', section: 'pro' },
   ];
@@ -422,7 +425,7 @@ export default function AdminPage() {
           </button>
         </div>
 
-        <div className="space-y-6 p-3 sm:p-6">
+        <div className="flex flex-col gap-6 p-3 sm:p-6">
           {tab === 'dashboard' && <Dashboard stats={stats} onGo={go} />}
           {tab === 'users' && <PlayersCard key={reloadKey} />}
           {tab === 'bets' && <BetsTab reloadKey={reloadKey} />}
@@ -439,6 +442,7 @@ export default function AdminPage() {
               <IntegrationsCard key={reloadKey} />
             </>
           )}
+          {tab === 'winhouse' && <WinHouseCard key={reloadKey} />}
           {tab === 'tracker' && <TrackerSizeCard key={reloadKey} />}
           {tab === 'betby' && (
             <>
