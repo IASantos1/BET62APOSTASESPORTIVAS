@@ -34,6 +34,7 @@ export interface BetForOffer {
   stake_cents: string;
   potential_cents: string;
   created_at: Date | string;
+  odds_check?: string;
 }
 export interface LegForOffer {
   bet_id: string;
@@ -66,6 +67,8 @@ const minuteOf = (clock: string | null) => {
 export function computeOffer(bet: BetForOffer, legs: LegForOffer[], prices: Map<string, Price>, results: Map<string, Result>, now = Date.now()): Offer {
   if (bet.status !== 'open') return { status: 'unavailable', reason: 'Aposta resolvida' };
   if (bet.kind === 'builder') return { status: 'unavailable', reason: 'Indisponível no criador de apostas' };
+  // A odd do bilhete ainda não foi confirmada com a BETBY: sem cash out até lá.
+  if (bet.odds_check !== undefined && bet.odds_check !== 'ok') return { status: 'suspended', reason: 'Odds por confirmar' };
   if (!legs.length || legs.some((l) => l.status === 'lost' || l.status === 'half_lost')) return { status: 'unavailable', reason: 'Seleção perdida' };
   const age = (now - new Date(bet.created_at).getTime()) / 1000;
   if (age < CASHOUT.minAgeSeconds) return { status: 'suspended', reason: `Disponível ${Math.ceil(CASHOUT.minAgeSeconds - age)} s depois de apostar` };

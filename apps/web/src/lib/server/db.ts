@@ -165,6 +165,11 @@ CREATE TABLE IF NOT EXISTS cashouts (
 -- Movimento de cash out na carteira (bases criadas antes desta versão).
 ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_type_check;
 ALTER TABLE transactions ADD CONSTRAINT transactions_type_check CHECK (type IN ('deposit', 'withdrawal', 'withdrawal_refund', 'bet', 'payout', 'refund', 'admin_credit', 'admin_debit', 'cashout'));
+
+-- Confirmação das odds de cada bilhete (o navegador envia a odd; a página Liquidação do admin
+-- compara-a com a BETBY). Sem confirmação, um bilhete ganho não é pago sozinho: vai a análise.
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS odds_check TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS odds_check_note TEXT;
 `;
 
 const g = globalThis as unknown as { __bet62Pool?: Pool; __bet62Schema?: Promise<void> };

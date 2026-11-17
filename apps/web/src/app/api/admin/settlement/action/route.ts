@@ -3,7 +3,7 @@ import { isAdminAuthorized } from '../../../../../lib/admin-auth';
 import { fail, json, route } from '../../../../../lib/server/auth';
 import { tx } from '../../../../../lib/server/db';
 import { moveBalance } from '../../../../../lib/server/wallet';
-import { finalizeBet, ingestResult, setLeg, type LegRow, type LegStatus } from '../../../../../lib/server/settlement';
+import { ResultConflict, finalizeBet, ingestResult, setLeg, type LegRow, type LegStatus } from '../../../../../lib/server/settlement';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +17,15 @@ const LEG: LegStatus[] = ['won', 'lost', 'void', 'half_won', 'half_lost'];
  *  { type: 'cancel', eventId }                    — jogo cancelado: anula as seleções
  */
 export const POST = route(async (req: Request) => {
+  try {
+    return await act(req);
+  } catch (e) {
+    if (e instanceof ResultConflict) return fail(e.message, 409);
+    throw e;
+  }
+});
+
+async function act(req: Request) {
   if (!isAdminAuthorized()) return NextResponse.json({ error: 'Sem sessão de admin.' }, { status: 401 });
   const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   if (b.type === 'leg') {
@@ -34,7 +43,8 @@ export const POST = route(async (req: Request) => {
       const bet = (await c.query<{ id: string; user_id: string; stake_cents: string }>("SELECT id, user_id, stake_cents FROM bets WHERE id = $1 AND status = 'review' FOR UPDATE", [String(b.betId)])).rows[0];
       if (!bet) return false;
       if (approve) {
-        await c.query("UPDATE bets SET status = 'open', note = 'Aprovada pelo operador' WHERE id = $1", [bet.id]);
+        // Aprovar confirma também as odds (decisão do operador).
+        await c.query("UPDATE bets SET status = 'open', odds_check = 'ok', note = 'Aprovada pelo operador' WHERE id = $1", [bet.id]);
         await finalizeBet(c, bet.id, 'admin'); // as seleções podem já estar decididas
       } else {
         await c.query("UPDATE bets SET status = 'rejected', settled_at = now(), note = 'Recusada pelo operador' WHERE id = $1", [bet.id]);
@@ -64,4 +74,4 @@ export const POST = route(async (req: Request) => {
     return json({ ok: true, decided: n });
   }
   return fail('Ação desconhecida.');
-});
+}

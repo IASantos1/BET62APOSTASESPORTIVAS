@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { isAdminAuthorized } from '../../../../lib/admin-auth';
 import { euros, fail, json, route } from '../../../../lib/server/auth';
 import { hasDatabase, query } from '../../../../lib/server/db';
-import { ingestResult, voidStale, type Period } from '../../../../lib/server/settlement';
+import { ResultConflict, ingestResult, voidStale, type Period } from '../../../../lib/server/settlement';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,11 +26,11 @@ export const GET = route(async () => {
       ORDER BY MIN(l.start_time) NULLS LAST LIMIT 300`,
   );
   const review = await query<Record<string, unknown>>(
-    `SELECT b.id, b.kind, b.stake_cents, b.odds, b.potential_cents, b.created_at, u.email,
+    `SELECT b.id, b.kind, b.stake_cents, b.odds, b.potential_cents, b.created_at, b.note, b.odds_check, u.email,
             json_agg(json_build_object('eventId', l.event_id, 'event', l.event_name, 'marketId', l.market_id, 'variant', l.variant,
               'outcomeId', l.outcome_id, 'market', l.market_name, 'outcome', l.outcome_name, 'odds', l.odds) ORDER BY l.id) AS legs
        FROM bets b JOIN users u ON u.id = b.user_id JOIN bet_legs l ON l.bet_id = b.id
-      WHERE b.status = 'review' GROUP BY b.id, u.email ORDER BY b.id LIMIT 100`,
+      WHERE b.status = 'review' GROUP BY b.id, u.email, b.note, b.odds_check ORDER BY b.id LIMIT 100`,
   );
   const manual = await query<Record<string, unknown>>(
     `SELECT l.id, l.bet_id, l.event_id, l.event_name, l.market_name, l.outcome_name, l.odds, r.home_score, r.away_score, r.status AS r_status
@@ -43,8 +43,16 @@ export const GET = route(async () => {
     `SELECT DISTINCT l.event_id, l.market_id, l.variant, l.outcome_id FROM bet_legs l JOIN bets b ON b.id = l.bet_id
       WHERE l.status = 'open' AND b.status = 'open' LIMIT 2000`,
   );
+  // Bilhetes recentes com as odds por confirmar: o navegador do admin compara-as com a BETBY.
+  const checks = await query<{ id: string; legs: { eventId: string; marketId: string; variant: string; outcomeId: string; odds: string }[] }>(
+    `SELECT b.id, json_agg(json_build_object('eventId', l.event_id, 'marketId', l.market_id, 'variant', l.variant, 'outcomeId', l.outcome_id, 'odds', l.odds)) AS legs
+       FROM bets b JOIN bet_legs l ON l.bet_id = b.id
+      WHERE b.odds_check = 'pending' AND b.status IN ('open', 'review') AND b.created_at > now() - interval '15 minutes'
+      GROUP BY b.id LIMIT 200`,
+  );
   return json({
     accounts: true,
+    checks: checks.map((c) => ({ id: String(c.id), legs: c.legs })),
     voided,
     events: events.map((e) => ({
       eventId: e.event_id,
@@ -67,6 +75,8 @@ export const GET = route(async () => {
       odds: Number(b.odds),
       potential: euros(b.potential_cents as string),
       createdAt: b.created_at,
+      note: b.note,
+      oddsCheck: b.odds_check,
       legs: b.legs,
     })),
     manual: manual.map((l) => ({
@@ -89,7 +99,19 @@ const int = (v: unknown) => (v === null || v === undefined || v === '' ? null : 
 /** Resultados lidos da BETBY pelo navegador do admin: { results: [{ eventId, status, matchStatus, home, away, periods, clock, sport }] }. */
 export const POST = route(async (req: Request) => {
   if (!isAdminAuthorized()) return denied();
-  const b = (await req.json().catch(() => ({}))) as { results?: Record<string, unknown>[]; prices?: Record<string, unknown>[] };
+  const b = (await req.json().catch(() => ({}))) as { results?: Record<string, unknown>[]; prices?: Record<string, unknown>[]; checks?: Record<string, unknown>[] };
+  // Confirmação das odds dos bilhetes novos: ok, ou não coincide (o bilhete vai a análise).
+  for (const ch of Array.isArray(b.checks) ? b.checks.slice(0, 200) : []) {
+    const id = String(ch.betId ?? '').replace(/\D/g, '');
+    if (!id) continue;
+    const ok = ch.ok === true;
+    const note = String(ch.detail ?? '').slice(0, 300) || null;
+    await query("UPDATE bets SET odds_check = $2, odds_check_note = $3 WHERE id = $1 AND odds_check = 'pending'", [id, ok ? 'ok' : 'mismatch', note]);
+    if (!ok) {
+      await query("UPDATE bets SET status = 'review', note = 'Odd acima da BETBY ao apostar' WHERE id = $1 AND status = 'open'", [id]);
+      await query('INSERT INTO settlements (bet_id, action, detail, source) VALUES ($1, $2, $3, $4)', [id, 'odds_mismatch', note, 'betby-admin']);
+    }
+  }
   // Odds atuais da BETBY das seleções em aberto (para o cash out).
   const prices = (Array.isArray(b.prices) ? b.prices.slice(0, 2000) : []).filter(
     (p) => /^\d{3,30}$/.test(String(p.eventId)) && /^\d{1,10}$/.test(String(p.marketId)) && typeof p.outcomeId === 'string',
@@ -119,7 +141,8 @@ export const POST = route(async (req: Request) => {
       .map((p) => p as Record<string, unknown>)
       .map((p) => ({ number: Number(p.number), home: Number(p.home), away: Number(p.away) }))
       .filter((p) => [p.number, p.home, p.away].every(Number.isInteger));
-    decided += await ingestResult(
+    try {
+      decided += await ingestResult(
       {
         eventId,
         sport: r.sport ? String(r.sport).slice(0, 30) : null,
@@ -131,7 +154,10 @@ export const POST = route(async (req: Request) => {
         clock: r.clock ? String(r.clock).slice(0, 20) : null,
       },
       'betby-admin',
-    );
+      );
+    } catch (e) {
+      if (!(e instanceof ResultConflict)) throw e; // fica no registo; o operador decide
+    }
   }
   return json({ ok: true, decided });
 });
