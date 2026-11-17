@@ -290,9 +290,12 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
   if (!sport) return null;
   const category = d.category ? dict.categories[d.category]?.name ?? '' : '';
   const tournament = d.tournament ? dict.tournaments[d.tournament]?.name ?? '' : '';
-  const league = classifyLeague(sport, category, tournament);
+  // No live mostramos todas as ligas de futebol reais; as exclusões de juvenis/femininas/virtual
+  // continuam aplicadas antes deste fallback. No pré-jogo mantemos a seleção curada de ligas.
+  const league = classifyLeague(sport, category, tournament, status === 'live' && sport === 'futebol');
   if (!league) return null;
-  if (!Object.keys(raw.markets).length) return null;
+  // Jogos ao vivo sem mercados continuam visíveis no quadro; os cartões indicam odds suspensas.
+  if (!Object.keys(raw.markets).length && status !== 'live') return null;
   if (raw.id === '2733659201518837788') console.info('[BET62 MARKET AUDIT]', { stage: 'board-toBoardEvent', eventId: raw.id, marketCount: Object.keys(raw.markets).length, marketIds: Object.keys(raw.markets) });
   const score = raw.score && raw.score.home_score !== undefined ? { home: String(raw.score.home_score), away: String(raw.score.away_score ?? 0) } : undefined;
   const hasTennisPoints = sport === 'tenis'

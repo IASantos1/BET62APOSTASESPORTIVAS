@@ -65,7 +65,12 @@ export interface LeagueInfo {
  * Se a liga entra no site e com que prioridade. `category` é o país/região da BETBY ("England",
  * "International"), `tournament` o nome da liga.
  */
-export function classifyLeague(sport: SportKey, category: string, tournament: string): LeagueInfo | null {
+export function classifyLeague(
+  sport: SportKey,
+  category: string,
+  tournament: string,
+  includeUnlistedFootball = false,
+): LeagueInfo | null {
   const country = String(category || '').trim();
   const name = String(tournament || '').trim();
   if (!name) return null;
@@ -77,7 +82,13 @@ export function classifyLeague(sport: SportKey, category: string, tournament: st
   const base = { fullName, country: country || 'World', label: name, tier };
   switch (sport) {
     case 'futebol':
-      if (divisionOf(fullName) || tier <= 2 || FOOTBALL_LISTED.has(leagueKey(fullName)) || FOOTBALL_LISTED.has(leagueKey(name))) return base;
+      if (
+        divisionOf(fullName)
+        || tier <= 2
+        || FOOTBALL_LISTED.has(leagueKey(fullName))
+        || FOOTBALL_LISTED.has(leagueKey(name))
+        || includeUnlistedFootball
+      ) return base;
       return null;
     case 'tenis': {
       const tour = tourOf(fullName) || tourOf(name);

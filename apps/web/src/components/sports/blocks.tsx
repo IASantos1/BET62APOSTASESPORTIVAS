@@ -36,7 +36,7 @@ export function OddArrow({ moveKey }: { moveKey: string }) {
   );
 }
 
-export function OddButton({ event, outcomeId, marketId, label, compact = false }: { event: BoardEvent; outcomeId: string; marketId: string; label: string; compact?: boolean }) {
+export function OddButton({ event, outcomeId, marketId, label, compact = false, seamless = false }: { event: BoardEvent; outcomeId: string; marketId: string; label: string; compact?: boolean; seamless?: boolean }) {
   const toggle = useSlip((s) => s.toggle);
   const selected = useSlip((s) => s.picks.some((p) => p.key === `${event.id}|${marketId}||${outcomeId}`));
   const o = event.markets[marketId]?.['']?.[outcomeId];
@@ -53,7 +53,8 @@ export function OddButton({ event, outcomeId, marketId, label, compact = false }
         if (p) toggle(p);
       }}
       className={cn(
-        'flex w-full flex-col items-center justify-center gap-1 rounded-lg border px-2 text-sm transition',
+        'flex w-full flex-col items-center justify-center gap-1 border px-2 text-sm transition',
+        seamless ? 'rounded-none' : 'rounded-lg',
         compact ? 'h-11' : 'h-12',
         selected
           ? 'border-bet62-primary bg-bet62-primary text-onbrand'
@@ -112,7 +113,13 @@ function TennisScoreTable({ e, home, away }: { e: BoardEvent; home: React.ReactN
  */
 function MainOdds({ e, compact }: { e: BoardEvent; compact?: boolean }) {
   const odds = mainOddsOf(e);
-  const grid = cn('grid gap-1.5', compact ? 'grid-cols-[repeat(3,4.25rem)]' : 'w-full grid-cols-3');
+  const two = odds.length === 2;
+  const grid = two
+    ? cn(
+        'grid grid-cols-2 gap-0 overflow-hidden rounded-lg border border-bet62-border divide-x divide-bet62-border',
+        compact ? 'w-fit' : 'w-full',
+      )
+    : cn('grid gap-1.5', compact ? 'grid-cols-[repeat(3,4.25rem)]' : 'w-full grid-cols-3');
   if (shouldShowBetNow(e)) {
     return (
       <Link
@@ -145,12 +152,11 @@ function MainOdds({ e, compact }: { e: BoardEvent; compact?: boolean }) {
       </div>
     );
   }
-  const two = odds.length === 2;
   return (
     <div className={grid}>
-      {odds.map((o, i) => (
-        <div key={o.outcomeId} className={two && i === 1 ? 'col-start-3' : undefined}>
-          <OddButton event={e} outcomeId={o.outcomeId} marketId={o.marketId} label={o.label} compact={compact} />
+      {odds.map((o) => (
+        <div key={o.outcomeId} className={compact && two ? 'w-[4.25rem]' : undefined}>
+          <OddButton event={e} outcomeId={o.outcomeId} marketId={o.marketId} label={o.label} compact={compact} seamless={two} />
         </div>
       ))}
     </div>
