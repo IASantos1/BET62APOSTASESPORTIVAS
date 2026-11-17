@@ -6,7 +6,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Activity,
-  Calendar,
   Trophy,
   LayoutGrid,
   Dices,
@@ -22,7 +21,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { Button } from '../ui/Button';
-import { ThemeToggle } from './ThemeToggle';
+import { MyBetsButton } from './MyBets';
 import { Badge } from '../ui/Badge';
 import { Avatar, AvatarFallback } from '../ui/Avatar';
 import { PaymentMethodLogo } from '../ui/PaymentMethodLogo';
@@ -40,7 +39,6 @@ const NAV = [
   { href: '/', label: 'Início', icon: Trophy },
   { href: '/desporto', label: 'Desporto', icon: LayoutGrid },
   { href: '/live', label: 'Ao Vivo', icon: Activity },
-  { href: '/events', label: 'Próximos', icon: Calendar },
   { href: '/casino', label: 'Cassino', icon: Dices },
   { href: '/promocoes', label: 'Promoções', icon: Gift, badge: '5' },
 ];
@@ -126,7 +124,7 @@ export function Header() {
           </div>
 
           <div className="flex items-center gap-2 lg:gap-3">
-            <ThemeToggle />
+            <MyBetsButton />
             {!isAuthenticated || !user ? (
               <>
                 <Link

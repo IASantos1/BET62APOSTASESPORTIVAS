@@ -90,6 +90,7 @@ function SlipBody() {
       }
       clear();
       void refreshUser();
+      window.dispatchEvent(new Event('bet62:bets-changed'));
       setNotice({
         ok: true,
         link: true,

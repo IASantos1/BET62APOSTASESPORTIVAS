@@ -10,7 +10,7 @@ import { cn } from '../../lib/utils';
 
 const ITEMS = [
   { href: '/', label: 'Início', icon: Home, match: (p: string) => p === '/' },
-  { href: '/desporto', label: 'Desporto', icon: LayoutGrid, match: (p: string) => p.startsWith('/desporto') || p.startsWith('/events') },
+  { href: '/desporto', label: 'Desporto', icon: LayoutGrid, match: (p: string) => p.startsWith('/desporto') },
   { href: '/live', label: 'Ao Vivo', icon: Activity, match: (p: string) => p.startsWith('/live') },
   { href: '/casino', label: 'Casino', icon: Dices, match: (p: string) => p.startsWith('/casino') },
   { href: '/promocoes', label: 'Promoções', icon: Gift, match: (p: string) => p.startsWith('/promocoes') },

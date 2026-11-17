@@ -5,6 +5,14 @@ const BUILD_ID = (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.SOURCE_COMMI
 const nextConfig = {
   env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
   generateBuildId: async () => BUILD_ID,
+  // Páginas retiradas ou mudadas para o perfil (redirecionamento permanente).
+  async redirects() {
+    return [
+      { source: '/events', destination: '/desporto', permanent: true },
+      { source: '/carteira', destination: '/conta/carteira', permanent: true },
+      { source: '/apostas', destination: '/conta/apostas', permanent: true },
+    ];
+  },
   async headers() {
     // O service worker tem de ser sempre lido de novo, para as atualizações chegarem.
     return [{ source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }] }];

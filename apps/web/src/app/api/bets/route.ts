@@ -4,13 +4,23 @@ import { query } from '../../../lib/server/db';
 
 export const dynamic = 'force-dynamic';
 
-/** Bilhetes do jogador: ?status=open (em aberto) ou settled (liquidados). */
+// Separadores: em aberto (inclui em análise), resolvidas (ganhas/perdidas), cash out, anuladas
+// (anuladas e recusadas).
+const STATUS_SQL: Record<string, string> = {
+  open: "IN ('open', 'review')",
+  settled: "IN ('won', 'lost')",
+  cashout: "IN ('cashout')",
+  void: "IN ('void', 'rejected')",
+};
+
+/** Bilhetes do jogador: ?status=open | settled | cashout | void. */
 export const GET = route(async (req: Request) => {
   const u = await requireUser();
   if (u instanceof Response) return u;
-  const which = new URL(req.url).searchParams.get('status') === 'settled' ? 'settled' : 'open';
+  const which = new URL(req.url).searchParams.get('status') ?? 'open';
+  const cond = STATUS_SQL[which] ?? STATUS_SQL.open;
   const bets = await query<{ id: string; kind: string; stake_cents: string; odds: string; potential_cents: string; status: string; payout_cents: string; created_at: Date; settled_at: Date | null }>(
-    `SELECT * FROM bets WHERE user_id = $1 AND status ${which === 'open' ? "IN ('open', 'review')" : "NOT IN ('open', 'review')"}
+    `SELECT * FROM bets WHERE user_id = $1 AND status ${cond}
      ORDER BY id DESC LIMIT 100`,
     [u.id],
   );

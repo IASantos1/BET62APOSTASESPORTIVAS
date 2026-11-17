@@ -83,8 +83,17 @@ function BetCard({ b }: { b: Bet }) {
   );
 }
 
-export function BetsSection() {
-  const [tab, setTab] = React.useState<'open' | 'settled'>('open');
+const TABS = [
+  ['open', 'Em aberto', 'Sem apostas em aberto'],
+  ['settled', 'Resolvidas', 'Sem apostas resolvidas'],
+  ['cashout', 'Cash out', 'Sem apostas com cash out'],
+  ['void', 'Anuladas', 'Sem apostas anuladas'],
+] as const;
+type Tab = (typeof TABS)[number][0];
+
+/** Minhas apostas: Em aberto · Resolvidas · Cash out · Anuladas. `compact`: uma coluna (painel do cabeçalho). */
+export function BetsSection({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
+  const [tab, setTab] = React.useState<Tab>('open');
   const [bets, setBets] = React.useState<Bet[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
@@ -94,32 +103,34 @@ export function BetsSection() {
       .then((r) => setBets(r.bets))
       .catch((e) => setError(e instanceof Error ? e.message : 'Erro ao carregar.'));
   }, [tab]);
+  const empty = TABS.find(([t]) => t === tab)![2];
   return (
     <div className="space-y-4">
-          <div className="flex gap-2">
-            {(['open', 'settled'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setTab(t)}
-                className={cn('rounded-full border px-4 py-1.5 text-sm font-bold', tab === t ? 'border-bet62-primary bg-bet62-primary text-onbrand' : 'border-bet62-border')}
-              >
-                {t === 'open' ? 'Em aberto' : 'Liquidadas'}
-              </button>
-            ))}
-          </div>
-          {error ? (
-            <p className="text-sm text-rose-400">{error}</p>
-          ) : bets === null ? (
-            <div className="grid place-items-center py-16 text-white/60"><Loader2 className="animate-spin" /></div>
-          ) : bets.length === 0 ? (
-            <Panel title={tab === 'open' ? 'Sem apostas em aberto' : 'Sem apostas liquidadas'}>
-              <p className="flex items-center gap-2 text-sm text-white/60">
-                <Ticket size={16} /> Os seus bilhetes aparecem aqui. <Link href="/desporto" className="font-semibold text-bet62-primary hover:underline">Ver jogos</Link>
-              </p>
-            </Panel>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2">{bets.map((b) => <BetCard key={b.id} b={b} />)}</div>
-          )}
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {TABS.map(([t, label]) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={cn('shrink-0 rounded-full border px-4 py-1.5 text-sm font-bold', tab === t ? 'border-bet62-primary bg-bet62-primary text-onbrand' : 'border-bet62-border')}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {error ? (
+        <p className="text-sm text-rose-400">{error}</p>
+      ) : bets === null ? (
+        <div className="grid place-items-center py-16 text-white/60"><Loader2 className="animate-spin" /></div>
+      ) : bets.length === 0 ? (
+        <Panel title={empty}>
+          <p className="flex flex-wrap items-center gap-2 text-sm text-white/60">
+            <Ticket size={16} /> Os seus bilhetes aparecem aqui.{' '}
+            <Link href="/desporto" onClick={onNavigate} className="font-semibold text-bet62-primary hover:underline">Ver jogos</Link>
+          </p>
+        </Panel>
+      ) : (
+        <div className={cn('grid gap-3', !compact && 'md:grid-cols-2')}>{bets.map((b) => <BetCard key={b.id} b={b} />)}</div>
+      )}
     </div>
   );
 }
