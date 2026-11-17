@@ -1,4 +1,5 @@
-import { euros, json, requireUser, route } from '../../../lib/server/auth';
+import { euros, fail, json, requireUser, route } from '../../../lib/server/auth';
+import { BetError, cleanLeg, placeBets } from '../../../lib/server/betting';
 import { query } from '../../../lib/server/db';
 
 export const dynamic = 'force-dynamic';
@@ -45,4 +46,20 @@ export const GET = route(async (req: Request) => {
         })),
     })),
   });
+});
+
+/** Fazer apostas: { kind: single|multiple|builder, stake (€ por bilhete), legs: [...] }. */
+export const POST = route(async (req: Request) => {
+  const u = await requireUser();
+  if (u instanceof Response) return u;
+  const b = (await req.json().catch(() => ({}))) as { kind?: string; stake?: number; legs?: Record<string, unknown>[] };
+  const kind = b.kind === 'multiple' || b.kind === 'builder' ? b.kind : 'single';
+  try {
+    const legs = (Array.isArray(b.legs) ? b.legs : []).map(cleanLeg);
+    const r = await placeBets(u, kind, Number(b.stake), legs);
+    return json(r, 201);
+  } catch (e) {
+    if (e instanceof BetError) return fail(e.message);
+    throw e;
+  }
 });

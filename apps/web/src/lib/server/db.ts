@@ -98,6 +98,40 @@ CREATE TABLE IF NOT EXISTS bet_legs (
 );
 CREATE INDEX IF NOT EXISTS bet_legs_bet ON bet_legs(bet_id);
 CREATE INDEX IF NOT EXISTS bet_legs_open_event ON bet_legs(event_id) WHERE status = 'open';
+
+-- Fase 2: criador de apostas (várias seleções do mesmo jogo) e dados para a liquidação.
+ALTER TABLE bets DROP CONSTRAINT IF EXISTS bets_kind_check;
+ALTER TABLE bets ADD CONSTRAINT bets_kind_check CHECK (kind IN ('single', 'multiple', 'builder'));
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS note TEXT;
+ALTER TABLE bet_legs ADD COLUMN IF NOT EXISTS sport_id TEXT;
+ALTER TABLE bet_legs ADD COLUMN IF NOT EXISTS result_note TEXT;
+
+-- Resultados da BETBY, enviados pela página Liquidação do admin (lidos no navegador do admin).
+CREATE TABLE IF NOT EXISTS event_results (
+  event_id      TEXT        PRIMARY KEY,
+  sport         TEXT,
+  status        TEXT        NOT NULL CHECK (status IN ('live', 'finished', 'cancelled')),
+  match_status  INTEGER,
+  home_score    INTEGER,
+  away_score    INTEGER,
+  periods       JSONB       NOT NULL DEFAULT '[]'::jsonb,
+  clock         TEXT,
+  score_at      TIMESTAMPTZ,
+  source        TEXT        NOT NULL DEFAULT 'betby-admin',
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Registo de cada decisão de liquidação (quem, quando, porquê).
+CREATE TABLE IF NOT EXISTS settlements (
+  id          BIGSERIAL PRIMARY KEY,
+  bet_id      BIGINT REFERENCES bets(id),
+  leg_id      BIGINT REFERENCES bet_legs(id),
+  event_id    TEXT,
+  action      TEXT        NOT NULL,
+  detail      TEXT,
+  source      TEXT        NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;
 
 const g = globalThis as unknown as { __bet62Pool?: Pool; __bet62Schema?: Promise<void> };
