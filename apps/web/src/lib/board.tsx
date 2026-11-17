@@ -381,8 +381,9 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       if (e && (!e.startTime || e.startTime > now - 5 * 60_000)) byId.set(e.id, e);
     }
     for (const raw of live.events) {
-      // status=1 marca o evento ativo; match_status=100 é o sinal BETBY para ENDED.
-      if (isBetbyEventEnded(raw) || (raw.state?.status !== undefined && raw.state.status !== 1)) {
+      // Não remover apenas porque status deixou de ser 1: a BETBY pode usar estados
+      // intermédios (por exemplo HT/intervalo). Só match_status=100 confirma ENDED.
+      if (isBetbyEventEnded(raw)) {
         byId.delete(raw.id);
         continue;
       }
