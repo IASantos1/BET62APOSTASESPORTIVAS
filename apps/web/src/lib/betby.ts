@@ -18,6 +18,9 @@ export const BETBY_CONFIG = {
   baseUrl: (process.env.NEXT_PUBLIC_BETBY_BASE_URL || 'https://demoapi.betby.com').replace(/\/$/, ''),
   brandId: process.env.NEXT_PUBLIC_BETBY_BRAND_ID || '1653815133341880320',
   locale: process.env.NEXT_PUBLIC_BETBY_LOCALE || 'en-GB',
+  // Idioma do catálogo de mercados (nomes de mercados e seleções). Separado do locale do feed,
+  // porque o catálogo é servido em qualquer idioma (ex.: pt) independentemente do feed (en-GB).
+  marketLocale: process.env.NEXT_PUBLIC_BETBY_MARKET_LOCALE || 'pt',
 };
 
 export interface BetbyOutcome {
@@ -132,6 +135,67 @@ export async function fetchDescriptions(eventId: string): Promise<BetbyDescripti
 export async function fetchBetDistribution(eventId: string): Promise<BetbyDistribution> {
   const { baseUrl, brandId } = BETBY_CONFIG;
   return getJson(`${baseUrl}/api/v1/betdistribution/brand/${brandId}/event/${eventId}`) as Promise<BetbyDistribution>;
+}
+
+// ---------- catálogo oficial de mercados ----------
+// A BETBY serve o catálogo completo da marca num único pedido:
+//   GET {base}/api/v3/descriptions/brand/{brand}/markets/{locale}  -> { idMercado: entrada }
+// Cada entrada traz o nome oficial (com marcadores como {$competitor1} ou {total}), o tipo de
+// mercado e os nomes das seleções. É a fonte para nomear TODOS os mercados e seleções, em vez de
+// mostrar "Mercado 12345" / "Seleção 678". O catálogo é grande (~650 kB) e muda pouco, por isso
+// fica em cache no navegador durante 24 h.
+export interface BetbyCatalogOutcome {
+  id: string;
+  name: string;
+}
+export interface BetbyMarketCatalogEntry {
+  id: string;
+  name: string;
+  market_type?: string | null;
+  order?: Record<string, number>;
+  main_order?: Record<string, number>;
+  variants?: Record<string, { outcomes: BetbyCatalogOutcome[] }[]>;
+  specifiers?: string[] | null;
+}
+export type BetbyMarketCatalog = Record<string, BetbyMarketCatalogEntry>;
+
+const CATALOG_TTL = 24 * 60 * 60_000;
+const catalogKey = () => `bet62-market-catalog-${BETBY_CONFIG.brandId}-${BETBY_CONFIG.marketLocale}`;
+let catalogMemo: BetbyMarketCatalog | null = null;
+let catalogPending: Promise<BetbyMarketCatalog> | null = null;
+
+/** Catálogo de mercados da marca (nomes oficiais). Em cache na memória e no navegador. */
+export function fetchMarketCatalog(): Promise<BetbyMarketCatalog> {
+  if (catalogMemo) return Promise.resolve(catalogMemo);
+  if (catalogPending) return catalogPending;
+  catalogPending = (async () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(catalogKey()) || 'null') as
+        | { at: number; data: BetbyMarketCatalog }
+        | null;
+      if (saved?.data && Date.now() - saved.at < CATALOG_TTL) {
+        catalogMemo = saved.data;
+        return catalogMemo;
+      }
+    } catch {
+      // sem cache utilizável: segue para a rede
+    }
+    const { baseUrl, brandId, marketLocale } = BETBY_CONFIG;
+    const data = (await getJson(
+      `${baseUrl}/api/v3/descriptions/brand/${brandId}/markets/${marketLocale}`,
+    )) as BetbyMarketCatalog;
+    catalogMemo = data;
+    try {
+      localStorage.setItem(catalogKey(), JSON.stringify({ at: Date.now(), data }));
+    } catch {
+      // Sem espaço ou bloqueado: o catálogo recarrega na próxima visita.
+    }
+    return data;
+  })();
+  catalogPending.catch(() => {
+    catalogPending = null;
+  });
+  return catalogPending;
 }
 
 async function getJson(url: string, signal?: AbortSignal) {
