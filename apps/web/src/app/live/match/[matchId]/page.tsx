@@ -579,7 +579,7 @@ function Inner({ id }: { id: string }) {
 
         {/* Minicampo / transmissão logo abaixo do cabeçalho (juntos). */}
         {view === 'tracker' && !desktopTracker && (
-          <div className="fixed bottom-4 right-3 z-[60] w-[min(92vw,420px)] overflow-hidden rounded-2xl border border-bet62-border bg-bet62-surface/95 shadow-2xl backdrop-blur-sm xl:hidden">
+          <div className="fixed top-[calc(4rem+env(safe-area-inset-top))] left-1/2 z-[60] w-[min(92vw,420px)] -translate-x-1/2 overflow-hidden rounded-b-2xl border border-t-0 border-bet62-border bg-bet62-surface/95 shadow-2xl backdrop-blur-sm xl:hidden">
             {tracker ? (
               <iframe
                 src={tracker}
