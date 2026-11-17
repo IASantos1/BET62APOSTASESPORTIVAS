@@ -287,19 +287,27 @@ function writeSnapshot(feed: BetbyFeed, s: Snapshot) {
   }
 }
 
-/** Lê várias versões em paralelo (no máximo `n` de cada vez), devolvidas pela ordem pedida. */
+/** Lê versões em paralelo, isolando falhas e mantendo a ordem original do índice.
+ * Uma versão com erro fica por aplicar e será tentada novamente no próximo ciclo.
+ */
 async function fetchVersions(feed: BetbyFeed, versions: string[], signal: AbortSignal, n = 6) {
   const out: (Record<string, unknown> | null)[] = new Array(versions.length).fill(null);
+  const failures: string[] = [];
   let next = 0;
   await Promise.all(
     Array.from({ length: Math.min(n, versions.length) }, async () => {
       while (next < versions.length) {
         const i = next++;
-        out[i] = await getJson(feedUrl(feed, versions[i]), signal);
+        try {
+          out[i] = await getJson(feedUrl(feed, versions[i]), signal);
+        } catch (err) {
+          const reason = err instanceof Error ? err.message : String(err);
+          failures.push(`${versions[i]}: ${reason}`);
+        }
       }
     }),
   );
-  return out;
+  return { payloads: out, failures };
 }
 
 /**
@@ -356,8 +364,11 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
       applyDeltas(store, index, lastEventUpdatesRef.current);
       const versions = versionsOf(index);
       const fresh = versions.filter((v) => !appliedRef.current.has(v));
-      const payloads = await fetchVersions(feed, fresh, controller.signal);
+      const { payloads, failures } = await fetchVersions(feed, fresh, controller.signal);
       payloads.forEach((payload, i) => {
+        // Só marcar como aplicada depois de receber e processar uma resposta válida.
+        // Versões falhadas permanecem fora do set e serão novamente tentadas no próximo ciclo.
+        if (!payload) return;
         applyDictionaries(dict, payload);
         applyDeltas(store, payload, lastEventUpdatesRef.current);
         appliedRef.current.add(fresh[i]);
@@ -370,7 +381,11 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
       publish();
       setLastEventUpdates(new Map(lastEventUpdatesRef.current));
       setUpdatedAt(new Date());
-      setError(null);
+      setError(
+        failures.length
+          ? `Algumas versões BETBY falharam e serão novamente tentadas: ${failures.join('; ').slice(0, 500)}`
+          : null,
+      );
       writeSnapshot(feed, {
         at: Date.now(),
         events: [...store.entries()],
