@@ -13,6 +13,9 @@ import { moveBalance } from './wallet';
 //  - Mercados que o resultado não decide (cartões, cantos, marcadores…): ficam para o operador.
 //  - Sem resultado 72 h depois do início: anulada.
 
+/** Resultado novo que contradiz bilhetes já liquidados. */
+export class ResultConflict extends Error {}
+
 export type LegStatus = 'won' | 'lost' | 'void' | 'half_won' | 'half_lost';
 export interface Period { number: number; home: number; away: number }
 export interface EventResult {
@@ -216,7 +219,7 @@ async function log(c: PoolClient, row: { betId?: string | null; legId?: string |
 
 /** Fecha o bilhete quando já se sabe o resultado (todas as seleções decididas, ou uma perdida). */
 export async function finalizeBet(c: PoolClient, betId: string, source: string) {
-  const bet = (await c.query<{ id: string; user_id: string; status: string; stake_cents: string }>('SELECT id, user_id, status, stake_cents FROM bets WHERE id = $1 FOR UPDATE', [betId])).rows[0];
+  const bet = (await c.query<{ id: string; user_id: string; status: string; stake_cents: string; odds_check: string }>('SELECT id, user_id, status, stake_cents, odds_check FROM bets WHERE id = $1 FOR UPDATE', [betId])).rows[0];
   if (!bet || bet.status !== 'open') return false;
   const legs = (await c.query<{ status: string; odds: string }>('SELECT status, odds FROM bet_legs WHERE bet_id = $1', [betId])).rows;
   const anyLost = legs.some((l) => l.status === 'lost');
@@ -226,6 +229,13 @@ export async function finalizeBet(c: PoolClient, betId: string, source: string) 
   const stake = Number(bet.stake_cents);
   const payout = anyLost ? 0 : Math.floor(stake * factor);
   const status = anyLost || payout === 0 ? 'lost' : legs.every((l) => l.status === 'void') ? 'void' : 'won';
+  // A odd veio do navegador: um bilhete ganho cujas odds não foram confirmadas com a BETBY não é
+  // pago sozinho — fica Em análise para o operador (Liquidação → aprovar paga, recusar devolve).
+  if (status === 'won' && bet.odds_check !== 'ok') {
+    await c.query("UPDATE bets SET status = 'review', note = $2 WHERE id = $1", [betId, bet.odds_check === 'mismatch' ? 'Ganha, mas a odd não coincide com a BETBY' : 'Ganha, com as odds por confirmar']);
+    await log(c, { betId, action: 'bet_review', detail: `ganha por confirmar odds (${bet.odds_check})`, source });
+    return true;
+  }
   await c.query('UPDATE bets SET status = $2, payout_cents = $3, settled_at = now() WHERE id = $1', [betId, status, payout]);
   if (payout > 0) await moveBalance(c, bet.user_id, status === 'void' ? 'refund' : 'payout', payout, { reference: `#${betId}` });
   await log(c, { betId, action: `bet_${status}`, detail: `pago ${(payout / 100).toFixed(2)} €`, source });
@@ -291,6 +301,24 @@ export async function ingestResult(input: Omit<EventResult, 'scoreAt'> & { clock
   // Um jogo terminado não volta a "ao vivo" (só o operador corrige).
   if (prev?.status === 'finished' && input.status !== 'finished') return 0;
   const changed = !prev || prev.home_score !== input.home || prev.away_score !== input.away;
+  // Resultado que muda depois de já haver seleções liquidadas com ele (final corrigido, golo
+  // anulado): não se aplica sozinho — fica registado para o operador corrigir os bilhetes à mão.
+  if (prev && changed) {
+    const lowered = (input.home ?? 0) < (prev.home_score ?? 0) || (input.away ?? 0) < (prev.away_score ?? 0);
+    const finalChanged = prev.status === 'finished';
+    if (lowered || finalChanged) {
+      const settled = await query("SELECT 1 FROM bet_legs WHERE event_id = $1 AND status <> 'open' LIMIT 1", [input.eventId]);
+      if (settled.length) {
+        await query('INSERT INTO settlements (event_id, action, detail, source) VALUES ($1, $2, $3, $4)', [
+          input.eventId,
+          'result_conflict',
+          `${prev.home_score ?? '?'}-${prev.away_score ?? '?'} → ${input.home ?? '?'}-${input.away ?? '?'} (já liquidado; não aplicado)`,
+          source,
+        ]);
+        throw new ResultConflict(`O resultado deste jogo já liquidou bilhetes (${prev.home_score}-${prev.away_score}). Uma correção tem de ser feita bilhete a bilhete.`);
+      }
+    }
+  }
   await query(
     `INSERT INTO event_results (event_id, sport, status, match_status, home_score, away_score, periods, clock, score_at, source, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, now())

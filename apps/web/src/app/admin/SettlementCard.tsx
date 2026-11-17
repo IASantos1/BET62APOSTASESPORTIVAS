@@ -28,7 +28,7 @@ interface OpenEvent {
   result: Result | null;
 }
 interface ReviewLeg { eventId: string; event: string; marketId: string; variant: string; outcomeId: string; market: string; outcome: string; odds: string | number }
-interface ReviewBet { id: string; kind: string; email: string; stake: number; odds: number; potential: number; createdAt: string; legs: ReviewLeg[] }
+interface ReviewBet { id: string; kind: string; email: string; stake: number; odds: number; potential: number; createdAt: string; note: string | null; oddsCheck: string; legs: ReviewLeg[] }
 interface ManualLeg { id: string; betId: string; eventId: string; event: string; market: string; outcome: string; odds: number; score: string }
 interface Data {
   accounts: boolean;
@@ -38,7 +38,11 @@ interface Data {
   manual?: ManualLeg[];
   log?: { bet_id: string | null; action: string; detail: string | null; source: string; created_at: string }[];
   legs?: { eventId: string; marketId: string; variant: string; outcomeId: string }[];
+  checks?: { id: string; legs: { eventId: string; marketId: string; variant: string; outcomeId: string; odds: string | number }[] }[];
 }
+
+/** Tolerância: a odd do bilhete pode estar até 2% acima da atual (a odd mexeu entre o clique e a leitura). */
+const ODDS_TOLERANCE = 1.02;
 
 const box = 'space-y-3 rounded-2xl border border-bet62-border bg-bet62-surface/50 p-5 text-sm';
 const btn = 'rounded-lg border border-bet62-border px-2.5 py-1 text-xs font-bold hover:bg-white/5 disabled:opacity-50';
@@ -141,14 +145,26 @@ export function SettlementCard() {
       const o = ev.markets[l.marketId]?.[l.variant]?.[l.outcomeId];
       return [{ ...l, odds: o ? Number(o.k) : null, active: !!o && o.b !== 1 && Number(o.k) > 1 }];
     });
-    if (!results.length && !prices.length) return;
+    // Odds dos bilhetes novos (últimos 15 min): confirmadas se nenhuma estiver acima da BETBY.
+    const checks = (data?.checks ?? []).flatMap((ch) => {
+      const now: { k: number; taken: number; label: string }[] = [];
+      for (const l of ch.legs) {
+        const ev = live.events.find((e) => e.id === l.eventId) ?? pre.events.find((e) => e.id === l.eventId);
+        const k = Number(ev?.markets[l.marketId]?.[l.variant]?.[l.outcomeId]?.k);
+        if (!(k > 1)) return []; // sem preço agora: fica por confirmar (se ganhar, vai a análise)
+        now.push({ k, taken: Number(l.odds), label: `${l.marketId}/${l.outcomeId}` });
+      }
+      const bad = now.filter((x) => x.taken > x.k * ODDS_TOLERANCE + 0.005);
+      return [{ betId: ch.id, ok: !bad.length, detail: bad.map((x) => `${x.label}: apostada ${x.taken.toFixed(2)}, BETBY ${x.k.toFixed(2)}`).join('; ') }];
+    });
+    if (!results.length && !prices.length && !checks.length) return;
     let stop = false;
     void (async () => {
-      const r = await fetch('/api/admin/settlement', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ results, prices }) });
+      const r = await fetch('/api/admin/settlement', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ results, prices, checks }) });
       const j = await r.json().catch(() => ({}));
       if (stop) return;
       setSync({ at: new Date(), sent: results.length, decided: Number(j.decided ?? 0), prices: prices.length });
-      if (Number(j.decided ?? 0) > 0) void load();
+      if (Number(j.decided ?? 0) > 0 || checks.length) void load();
     })();
     return () => {
       stop = true;
@@ -234,6 +250,7 @@ export function SettlementCard() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span>
                   <b>#{b.id}</b> · {b.email} · {formatCurrencyEUR(b.stake)} × {b.odds.toFixed(2)} = <b>{formatCurrencyEUR(b.potential)}</b>
+                  {b.note && <span className={cn('block text-xs', b.oddsCheck === 'mismatch' ? 'text-rose-300' : 'text-amber-300')}>{b.note}</span>}
                 </span>
                 <span className="flex gap-2">
                   <button className={cn(btn, 'text-emerald-300')} onClick={() => void act({ type: 'bet', betId: b.id, action: 'approve' })}>Aprovar</button>
