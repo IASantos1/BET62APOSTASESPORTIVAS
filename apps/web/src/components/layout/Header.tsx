@@ -178,7 +178,7 @@ export function Header() {
                             { label: 'Perfil', icon: User, href: '/conta' },
                             { label: 'Depósito', icon: ArrowRightLeft, href: '/carteira/deposito' },
                             { label: 'Levantamento', icon: Wallet, href: '/carteira/levantamento' },
-                            { label: 'Minhas Apostas', icon: History, href: '/apostas' },
+                            { label: 'Minhas Apostas', icon: History, href: '/conta/apostas' },
                           ].map((m) => (
                             <button
                               key={m.label}
@@ -248,7 +248,7 @@ export function Header() {
                             { label: 'Perfil', icon: User, href: '/conta' },
                             { label: 'Depósito', icon: ArrowRightLeft, href: '/carteira/deposito' },
                             { label: 'Levantamento', icon: Wallet, href: '/carteira/levantamento' },
-                            { label: 'Minhas Apostas', icon: History, href: '/apostas' },
+                            { label: 'Minhas Apostas', icon: History, href: '/conta/apostas' },
                           ].map((m) => (
                             <button
                               key={m.label}

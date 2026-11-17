@@ -200,9 +200,6 @@ export default function LoginPage() {
                           onChange={(e) => setEmail(e.target.value)}
                           autoComplete="email"
                         />
-                        <p className="text-[11px] text-white/40 pl-1">
-                          Dica: escreve <span className="text-bet62-accent font-mono">2fa@bet62</span> para testar passo 2FA.
-                        </p>
                       </div>
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">

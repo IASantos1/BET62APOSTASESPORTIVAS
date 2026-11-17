@@ -26,11 +26,11 @@ function getClientIP(request: NextRequest): string {
   return request.ip || 'unknown';
 }
 
-function isRateLimitedRoute(pathname: string): boolean {
-  if (pathname === '/login' || pathname === '/registro') return true;
-  if (pathname.startsWith('/api/auth/') || pathname === '/api/auth') return true;
-  if (pathname === '/api/admin/login') return true;
-  return false;
+// Só as tentativas de entrar ou criar conta (POST). Abrir páginas e confirmar a sessão
+// (/api/auth/me, chamado em cada página) não contam: antes, 20 páginas num minuto bloqueavam o jogador.
+function isRateLimitedRoute(pathname: string, method: string): boolean {
+  if (method !== 'POST') return false;
+  return pathname === '/api/auth/login' || pathname === '/api/auth/register' || pathname === '/api/admin/login';
 }
 
 function checkRateLimit(ip: string): { limited: boolean; remaining: number; resetAt: number } {
@@ -54,7 +54,7 @@ function checkRateLimit(ip: string): { limited: boolean; remaining: number; rese
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  if (isRateLimitedRoute(pathname)) {
+  if (isRateLimitedRoute(pathname, request.method)) {
     const ip = getClientIP(request);
     const { limited, remaining, resetAt } = checkRateLimit(ip);
 
@@ -105,7 +105,7 @@ export function middleware(request: NextRequest) {
   response.headers.set('Strict-Transport-Security', 'max-age=63072000');
   response.headers.set('X-Nonce', nonce);
 
-  if (isRateLimitedRoute(pathname)) {
+  if (isRateLimitedRoute(pathname, request.method)) {
     response.headers.set('X-RateLimit-Limit', MAX_REQUESTS.toString());
   }
 

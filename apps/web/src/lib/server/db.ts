@@ -26,6 +26,11 @@ CREATE TABLE IF NOT EXISTS users (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Colunas acrescentadas depois da primeira versão (perfil).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS prefs     JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS iban      TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS iban_name TEXT;
+
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash  TEXT        PRIMARY KEY,
   user_id     BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,

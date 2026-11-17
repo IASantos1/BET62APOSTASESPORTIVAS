@@ -19,6 +19,10 @@ export interface AuthUser {
   balance?: number;
   excludedUntil?: string | null;
   createdAt?: string;
+  memberId?: string;
+  prefs?: Record<string, boolean>;
+  iban?: string | null;
+  ibanName?: string | null;
   twoFactorEnabled: boolean;
 }
 
