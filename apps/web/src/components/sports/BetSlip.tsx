@@ -3,6 +3,7 @@
 // Boletim do lado direito (como no outro projeto): Simples / Múltipla, ou um criador de apostas.
 // Ainda só no navegador: o botão de apostar avisa que o registo de apostas não está ligado.
 import * as React from 'react';
+import { TrackerFrame } from './TrackerFrame';
 import { Ticket, X, Trash2 } from 'lucide-react';
 import { useBoard } from '../../lib/board';
 import { useSlip } from '../../stores/slip.store';
@@ -190,11 +191,13 @@ export function BetSlip({
   trackerActive,
   trackerWidthPx,
   trackerHeightPx,
+  trackerScalePct,
 }: {
   trackerUrl?: string | null;
   trackerActive?: boolean;
   trackerWidthPx?: number | null;
   trackerHeightPx?: number | null;
+  trackerScalePct?: number | null;
 }) {
   const { open, setOpen, picks, builder } = useSlip();
   const count = builder ? builder.legs.length : picks.length;
@@ -212,14 +215,7 @@ export function BetSlip({
           {ready && trackerActive && (
             <div className="shrink-0 border-b border-bet62-border bg-bet62-bg">
               {trackerUrl ? (
-                <iframe
-                  src={trackerUrl}
-                  title="Minicampo do jogo"
-                  scrolling="no"
-                  className={`block w-full ${trackerHeightPx ? '' : 'aspect-[114/100] max-h-[48vh]'}`}
-                  style={trackerHeightPx ? { height: `${trackerHeightPx}px` } : undefined}
-                  allow="fullscreen"
-                />
+                <TrackerFrame src={trackerUrl} title="Minicampo do jogo" mode="desktop" heightPx={trackerHeightPx} scalePct={trackerScalePct} />
               ) : (
                 <p className="p-3 text-xs text-white/60">Minicampo não disponível para este jogo.</p>
               )}

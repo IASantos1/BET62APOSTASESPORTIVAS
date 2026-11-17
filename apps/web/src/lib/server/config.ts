@@ -16,6 +16,9 @@ export interface SiteConfig {
   trackerMobileHeightPx?: number | null;
   trackerDesktopWidthPx?: number | null;
   trackerDesktopHeightPx?: number | null;
+  /** Tamanho (zoom) do conteúdo do tracker, em %: 100 = normal. */
+  trackerMobileScalePct?: number | null;
+  trackerDesktopScalePct?: number | null;
 }
 
 const FILE = path.join(process.env.DATA_DIR || process.env.RAILWAY_VOLUME_MOUNT_PATH || '/tmp/bet62-data', 'site-config.json');
@@ -37,6 +40,8 @@ export function readConfig(): SiteConfig {
     trackerMobileHeightPx: saved.trackerMobileHeightPx ?? null,
     trackerDesktopWidthPx: saved.trackerDesktopWidthPx ?? null,
     trackerDesktopHeightPx: saved.trackerDesktopHeightPx ?? null,
+    trackerMobileScalePct: saved.trackerMobileScalePct ?? null,
+    trackerDesktopScalePct: saved.trackerDesktopScalePct ?? null,
   };
 }
 

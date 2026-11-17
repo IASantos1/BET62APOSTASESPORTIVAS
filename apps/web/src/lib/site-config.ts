@@ -12,6 +12,8 @@ export interface SiteConfig {
   trackerMobileHeightPx?: number | null;
   trackerDesktopWidthPx?: number | null;
   trackerDesktopHeightPx?: number | null;
+  trackerMobileScalePct?: number | null;
+  trackerDesktopScalePct?: number | null;
 }
 
 let cached: Promise<SiteConfig> | null = null;
