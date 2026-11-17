@@ -26,6 +26,25 @@ export interface BetbyOutcome {
 }
 export type BetbyMarkets = Record<string, Record<string, Record<string, BetbyOutcome>>>;
 
+// Diagnóstico temporário e restrito ao evento em investigação. Só escreve no console do browser.
+const MARKET_AUDIT_EVENT_ID = '2733659201518837788';
+function auditMarketStage(stage: string, eventId: string, markets: unknown, extra: Record<string, unknown> = {}) {
+  if (eventId !== MARKET_AUDIT_EVENT_ID) return;
+  const value = markets && typeof markets === 'object' ? markets as Record<string, unknown> : {};
+  const marketIds = Object.keys(value);
+  let variants = 0;
+  let outcomes = 0;
+  for (const market of Object.values(value)) {
+    if (!market || typeof market !== 'object') continue;
+    const variantMap = market as Record<string, unknown>;
+    variants += Object.keys(variantMap).length;
+    for (const selection of Object.values(variantMap)) {
+      if (selection && typeof selection === 'object') outcomes += Object.keys(selection).length;
+    }
+  }
+  console.info('[BET62 MARKET AUDIT]', { stage, eventId, marketCount: marketIds.length, marketIds, variantCount: variants, outcomeCount: outcomes, ...extra });
+}
+
 export interface BetbyDesc {
   scheduled?: number;
   type?: string;
@@ -195,6 +214,7 @@ export function applyDeltas(
         current.markets[marketId] = merged;
       }
     }
+    auditMarketStage('feed-delta-store', id, current.markets, { deltaMarketIds: raw.markets ? Object.keys(raw.markets) : [] });
     store.set(id, current);
   }
 }
@@ -381,6 +401,8 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
       for (const v of appliedRef.current) if (!current.has(v)) appliedRef.current.delete(v);
       // Só expira após uma leitura bem-sucedida: uma falha temporária da BETBY não limpa o quadro.
       if (feed === 'live') pruneStaleLiveEvents(store, lastEventUpdatesRef.current);
+      const auditedEvent = store.get(MARKET_AUDIT_EVENT_ID);
+      if (auditedEvent) auditMarketStage('feed-cycle-final', MARKET_AUDIT_EVENT_ID, auditedEvent.markets, { feed, versionCount: versions.length, freshVersionCount: fresh.length, failedVersionCount: failures.length });
       publish();
       setLastEventUpdates(new Map(lastEventUpdatesRef.current));
       setUpdatedAt(new Date());
