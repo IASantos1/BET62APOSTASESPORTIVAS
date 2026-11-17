@@ -11,7 +11,9 @@ import { LeagueLogo, TeamLogo, leagueApiId } from '../../../../components/sports
 import { OddArrow } from '../../../../components/sports/blocks';
 import { fmtWhen } from '../../../../components/sports/links';
 import { fetchBetDistribution, fetchDescriptions, fetchMarketCatalog, type BetbyDescriptions, type BetbyDistribution, type BetbyMarketCatalog, type BetbyMarketCatalogEntry } from '../../../../lib/betby';
-import { pickOf, useBoard, type BoardEvent } from '../../../../lib/board';
+import { betbyIdOf, pickOf, useBoard, type BoardEvent } from '../../../../lib/board';
+import { isWhId, useWinHouseEvent } from '../../../../lib/winhouse-board';
+import { SourceBadge } from '../../../../components/sports/SourceBadge';
 import { SPORT_BY_KEY, countryLabel } from '../../../../lib/sports/catalog';
 import { useSlip } from '../../../../stores/slip.store';
 import { cn } from '../../../../lib/utils';
@@ -223,7 +225,7 @@ const colsClass = (n: number) => (n <= 1 ? 'grid-cols-1' : n === 2 ? 'grid-cols-
  * com linhas (total 2.5, handicap -1…), uma fila por linha: a linha à esquerda e as odds ao lado,
  * com os nomes das seleções (Mais / Menos, equipas) no cabeçalho.
  */
-function MarketBlock({ title, rows, tip }: { title: string; rows: { variant: string; label: string; cells: Cell[] }[]; tip?: string }) {
+function MarketBlock({ title, rows, tip, badge }: { title: string; rows: { variant: string; label: string; cells: Cell[] }[]; tip?: string; badge?: React.ReactNode }) {
   const [showTip, setShowTip] = React.useState(false);
   const lined = rows.some((r) => r.label);
   const head = rows[0]?.cells.map((c) => c.label) ?? [];
@@ -231,7 +233,7 @@ function MarketBlock({ title, rows, tip }: { title: string; rows: { variant: str
   return (
     <div className="rounded-xl border border-bet62-border bg-bet62-surface/50 p-3">
       <div className="mb-2.5 flex items-start justify-between gap-2">
-        <p className="text-xs font-extrabold uppercase tracking-wide text-white/60">{title}</p>
+        <p className="flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-white/60">{badge}{title}</p>
         {tip && (
           <button
             type="button"
@@ -514,8 +516,13 @@ function StatBars({ rows }: { rows: { key: string; home: number; away: number }[
 type View = 'mercados' | 'tracker' | 'live' | 'estatisticas';
 
 function Inner({ id }: { id: string }) {
-  const { events, loading, widgets, broadcasts } = useBoard();
+  const { events, loading, widgets, broadcasts, mode } = useBoard();
   const e = events.find((x) => x.id === id);
+  // Id BETBY (minicampo, estatísticas, descrições): o do jogo, ou o do jogo BETBY ligado a um do WinHouse.
+  const bbId = e ? betbyIdOf(e) : isWhId(id) ? null : id;
+  const isWh = e?.source === 'winhouse';
+  // Mercados extra da BETBY num jogo WinHouse só no modo "ambos".
+  const bbMarkets = !isWh || mode === 'both';
   const picks = useSlip((s) => s.picks);
   const toggle = useSlip((s) => s.toggle);
   const cfg = useSiteConfig();
@@ -530,11 +537,12 @@ function Inner({ id }: { id: string }) {
   const [view, setView] = React.useState<View>('mercados');
   // PC largo (com a coluna do boletim): o minicampo vai para o topo dessa coluna.
   const [desktopTracker, setDesktopTracker] = React.useState(false);
-  const endpoint = useEventEndpoint(id, feed, cfg?.eventEndpoint, cfg !== null && !!e, e ? Object.keys(e.markets).length : 0);
-  const fullMarketState = useFullMarkets(id, feed, endpoint);
+  const whEvent = useWinHouseEvent(isWh ? id : null, live);
+  const endpoint = useEventEndpoint(bbId ?? '', feed, bbId ? cfg?.eventEndpoint : null, cfg !== null && !!e && !!bbId && bbMarkets, e ? Object.keys(e.markets).length : 0);
+  const fullMarketState = useFullMarkets(bbId ?? '', feed, bbId && bbMarkets ? endpoint : null);
   const fullMarkets = fullMarketState.markets;
-  const betbyStats = useBetbyStats(id, feed, cfg?.statsEndpoint, view === 'estatisticas');
-  const sideWidgets = widgets.get(id);
+  const betbyStats = useBetbyStats(bbId ?? '', feed, bbId ? cfg?.statsEndpoint : null, view === 'estatisticas');
+  const sideWidgets = bbId ? widgets.get(bbId) : undefined;
   const tracker = live && e ? trackerFor(e.raw, e.betbySport, cfg?.trackerField, sideWidgets, true) : null;
   React.useEffect(() => {
     const media = window.matchMedia('(min-width: 1280px)');
@@ -558,9 +566,14 @@ function Inner({ id }: { id: string }) {
     }
   }, [live]);
   React.useEffect(() => {
-    fetchDescriptions(id).then(setDescriptions).catch(() => setDescriptions({}));
-    fetchBetDistribution(id).then(setDistribution).catch(() => setDistribution({}));
-  }, [id]);
+    if (!bbId) {
+      setDescriptions({});
+      setDistribution({});
+      return;
+    }
+    fetchDescriptions(bbId).then(setDescriptions).catch(() => setDescriptions({}));
+    fetchBetDistribution(bbId).then(setDistribution).catch(() => setDistribution({}));
+  }, [bbId]);
   // Catálogo oficial de mercados da marca (nomes em português). É o mesmo para todos os jogos.
   React.useEffect(() => {
     fetchMarketCatalog().then(setCatalog).catch(() => setCatalog({}));
@@ -609,7 +622,10 @@ function Inner({ id }: { id: string }) {
     if (!variants) return undefined;
     return (variants[variant] ?? Object.values(variants)[0])?.[0]?.outcomes;
   };
+  const whNames = whEvent?.names ?? e.marketNames ?? {};
+  const whOutcomes = whEvent?.outcomes ?? e.outcomeNames ?? {};
   const marketName = (m: string, variant = '') => {
+    if (whNames[m]) return whNames[m];
     const curated = MARKET_NAMES[m];
     if (curated) return curated;
     const template = marketEntry(m)?.name?.trim();
@@ -617,6 +633,8 @@ function Inner({ id }: { id: string }) {
     return fromCatalog || marketDescription(m)?.name?.trim() || `Mercado ${m}`;
   };
   const outcomeName = (m: string, variant: string, o: string) => {
+    const wh = whOutcomes[`${m}|${variant}|${o}`];
+    if (wh) return wh;
     const described = variantDescription(m, variant)?.outcomes.find((x) => String(x.id) === String(o))?.name;
     if (described?.trim()) return described.trim();
     const known = OUTCOME_NAMES[o];
@@ -634,16 +652,35 @@ function Inner({ id }: { id: string }) {
   const share = (m: string, o: string) =>
     distribution.markets?.find((x) => String(x.market_id) === m)?.outcomes.find((x) => String(x.outcome_id) === o)?.percentage;
   // A rota de detalhe pode ainda trazer linhas já decididas: o mesmo filtro do quadro.
-  const merged = mergeMarkets(e.markets, fullMarkets);
-  const allMarkets: BetbyMarkets = live && e.sport === 'futebol' ? closeDecidedMarkets(merged, e.raw?.score) : merged;
-  const ev = { ...e, markets: allMarkets };
+  // Jogo WinHouse: todos os mercados do WinHouse (página do jogo) e, no modo "ambos", os da BETBY
+  // que o WinHouse não tem. Jogo BETBY: o feed + os mercados completos, como antes.
+  const source: Record<string, 'wh' | 'bb'> = {};
+  let merged: BetbyMarkets;
+  if (isWh) {
+    const whMarkets: BetbyMarkets = whEvent?.markets ?? Object.fromEntries(Object.entries(e.markets).filter(([m]) => e.marketSource?.[m] !== 'bb'));
+    merged = { ...whMarkets };
+    for (const m of Object.keys(merged)) source[m] = 'wh';
+    if (bbMarkets) {
+      const extra = mergeMarkets(Object.fromEntries(Object.entries(e.markets).filter(([m]) => e.marketSource?.[m] === 'bb')), fullMarkets);
+      for (const [m, v] of Object.entries(extra)) {
+        if (merged[m]) continue;
+        merged[m] = v;
+        source[m] = 'bb';
+      }
+    }
+  } else {
+    merged = mergeMarkets(e.markets, fullMarkets);
+  }
+  const liveScore = isWh && e.score ? ({ home_score: Number(e.score.home), away_score: Number(e.score.away) } as NonNullable<typeof e.raw>['score']) : e.raw?.score;
+  const allMarkets: BetbyMarkets = live && e.sport === 'futebol' ? closeDecidedMarkets(merged, liveScore) : merged;
+  const ev = { ...e, markets: allMarkets, marketSource: isWh ? source : e.marketSource };
   const markets = Object.entries(allMarkets).sort((a, b) => marketRank(a[0]) - marketRank(b[0]));
   const stats = statRows(e.statistics);
   const counts = new Map<string, number>();
   for (const [m] of markets) counts.set(marketCategory(m), (counts.get(marketCategory(m)) ?? 0) + 1);
   const activeCat = cat !== 'todos' && counts.has(cat) ? cat : 'todos';
   const shown = activeCat === 'todos' ? markets : markets.filter(([m]) => marketCategory(m) === activeCat);
-  const broadcast = broadcasts.get(id)?.find((b) => b.url)?.url;
+  const broadcast = bbId ? broadcasts.get(bbId)?.find((b) => b.url)?.url : undefined;
   // Estatísticas: o widget do side feed que traz um endereço próprio (Oddin/Betgenius), senão a
   // página de estatísticas da BETBY (ui.invisiblesport.com/stats.html), que só existe para jogos
   // com fornecedor de estatísticas associado (os que têm widgets no side feed).
@@ -651,7 +688,7 @@ function Inner({ id }: { id: string }) {
   const statsFrame =
     statsWidget ??
     (sideWidgets?.length
-      ? `https://ui.invisiblesport.com/stats.html?brandId=${encodeURIComponent(BETBY_CONFIG.brandId)}&eventId=${encodeURIComponent(id)}&lang=${encodeURIComponent(BETBY_CONFIG.locale)}`
+      ? `https://ui.invisiblesport.com/stats.html?brandId=${encodeURIComponent(BETBY_CONFIG.brandId)}&eventId=${encodeURIComponent(bbId ?? '')}&lang=${encodeURIComponent(BETBY_CONFIG.locale)}`
       : null);
   const league = leagueApiId(e.sport, e.league, e.country);
   const extraStats = pairsOf(betbyStats.data);
@@ -700,6 +737,7 @@ function Inner({ id }: { id: string }) {
           <p className="flex items-center justify-center gap-2 text-center text-[11px] font-semibold uppercase tracking-widest text-white/50">
             <LeagueLogo sport={e.sport} league={e.league} country={e.country} />
             {countryLabel(e.country)} · {e.league}
+            <SourceBadge source={e.source ?? 'betby'} linked={!!e.betbyId} />
           </p>
           <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 md:gap-3">
             <div className="flex flex-col items-center gap-1.5 text-center">
@@ -851,6 +889,7 @@ function Inner({ id }: { id: string }) {
                     <MarketBlock
                       key={m}
                       title={marketName(m)}
+                      badge={<SourceBadge source={isWh ? source[m] : 'bb'} />}
                       tip={tips[`${e.betbySport ?? ''}-${m}`]}
                       rows={Object.entries(variants).map(([variant, outcomes]) => ({
                         variant,

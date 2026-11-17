@@ -5,6 +5,7 @@ import { hasDatabase, one, query } from '../../../../lib/server/db';
 import { createWinHouseClient, envOptions } from '../../../../lib/server/winhouse/client';
 import { feedSettings, runningFeed } from '../../../../lib/server/winhouse/feed';
 import { detailOdds, eventsOf, groupMarkets } from '../../../../lib/server/winhouse/parse';
+import { MODES, getMode, setMode, type OddsMode } from '../../../../lib/server/winhouse/mode';
 import { eventView, type WhRow } from '../../../../lib/server/winhouse/view';
 
 export const dynamic = 'force-dynamic';
@@ -29,6 +30,7 @@ export const GET = route(async () => {
     thisProcess: runningFeed() ? { running: true, leader: runningFeed()!.status.leader } : { running: false },
   };
   if (!hasDatabase()) return json(base);
+  const mode = await getMode();
   const state = await one<{ value: Record<string, unknown>; updated_at: Date }>(`SELECT value, updated_at FROM wh_state WHERE key = 'status'`);
   const lease = await one<{ owner: string; until: Date }>(`SELECT owner, until FROM wh_state WHERE key = 'lease'`);
   const counts = await query<{ status: string; sport: string; n: string; pages: string }>(
@@ -41,6 +43,7 @@ export const GET = route(async () => {
   );
   return json({
     ...base,
+    mode,
     collector: state ? { ...state.value, savedAt: new Date(state.updated_at).toISOString() } : null,
     lease: lease ? { owner: lease.owner, until: new Date(lease.until).toISOString(), active: new Date(lease.until).getTime() > Date.now() } : null,
     counts: counts.map((c) => ({ status: c.status, sport: c.sport, events: Number(c.n), withPage: Number(c.pages) })),
@@ -61,6 +64,12 @@ export const GET = route(async () => {
 export const POST = route(async (req: Request) => {
   if (!isAdminAuthorized()) return unauthorized();
   const b = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  if (b.action === 'mode') {
+    if (!MODES.includes(b.mode as OddsMode)) return fail('Modo inválido.');
+    if (!hasDatabase()) return fail('Sem base de dados.');
+    await setMode(b.mode as OddsMode);
+    return json({ ok: true, mode: b.mode });
+  }
   const client = createWinHouseClient(envOptions());
   if (!client.enabled) return fail('WinHouse desligado: defina WINHOUSE_BASE_URL (https://…) nas variáveis do serviço.');
   const gameId = typeof b.gameId === 'string' && /^\d{1,20}$/.test(b.gameId.trim()) ? b.gameId.trim() : null;

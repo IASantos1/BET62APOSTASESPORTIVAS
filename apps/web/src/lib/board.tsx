@@ -7,6 +7,7 @@ import * as React from 'react';
 import { closeDecidedMarkets, isEventFinished } from './lifecycle';
 import { useBetbyFeed, useBetbySide, type BetbyDictionaries, type BetbyEvent, type BetbyMarkets, type BetbySideItem } from './betby';
 import { SPORT_BY_KEY, classifyLeague, isBigTeam, sportKeyOf, sportRank, type SportKey } from './sports/catalog';
+import { linkEvents, mergeLinked, useWinHouseFeed, whToBoard, type OddsMode } from './winhouse-board';
 
 export interface BoardEvent {
   id: string;
@@ -41,7 +42,25 @@ export interface BoardEvent {
   betbySport?: string;
   /** O evento tal como a BETBY o envia (explorador do admin, tracker). */
   raw?: BetbyEvent;
+  /** De onde vem o jogo: WinHouse (recolhido pelo servidor) ou BETBY (lido no navegador). */
+  source?: 'winhouse' | 'betby';
+  /** Jogo WinHouse: o id no WinHouse (o id do site é "wh" + este). */
+  whId?: string;
+  /** Jogo WinHouse ligado ao mesmo jogo da BETBY (minicampo, estatísticas, mercados extra). */
+  betbyId?: string;
+  /** De onde vem cada mercado (wh = WinHouse, bb = BETBY). */
+  marketSource?: Record<string, 'wh' | 'bb'>;
+  /** Nomes dos mercados/seleções do WinHouse sem equivalente BETBY ("wh…"). */
+  marketNames?: Record<string, string>;
+  outcomeNames?: Record<string, string>;
+  /** Total de mercados do jogo (o quadro só traz os principais). */
+  marketCount?: number;
+  /** A liga passou nas regras do catálogo (senão só entra ligada a um jogo BETBY). */
+  leagueKnown?: boolean;
 }
+
+/** Id BETBY de um jogo (para minicampo, side feed, descrições): o próprio, ou o ligado. */
+export const betbyIdOf = (e: Pick<BoardEvent, 'id' | 'source' | 'betbyId'>) => (e.source === 'winhouse' ? e.betbyId ?? null : e.id);
 
 export interface LeagueNode {
   sport: SportKey;
@@ -55,6 +74,8 @@ export interface LeagueNode {
 export interface BetPick {
   key: string;
   eventId: string;
+  /** Fonte da odd (e de quem liquida): WinHouse ou BETBY. */
+  source?: 'winhouse' | 'betby';
   marketId: string;
   variant: string;
   outcomeId: string;
@@ -92,6 +113,10 @@ interface BoardState {
   widgets: Map<string, BetbySideItem[]>;
   /** Transmissões por jogo, por id de evento. */
   broadcasts: Map<string, BetbySideItem[]>;
+  /** Fonte em uso agora (o modo do admin, ou "betby" se o WinHouse falhar). */
+  mode: OddsMode;
+  /** O modo escolhido no admin (pode diferir de `mode` quando o WinHouse está em baixo). */
+  chosenMode: OddsMode;
   reload: () => void;
 }
 
@@ -208,9 +233,12 @@ export function pickOf(e: BoardEvent, marketId: string, variant: string, outcome
   const o = e.markets[marketId]?.[variant]?.[outcomeId];
   const odds = Number(o?.k);
   if (!o || o.b === 1 || !odds || odds <= 1) return null;
+  // Mercado BETBY num jogo WinHouse: a aposta é no jogo BETBY (liquidado pelos resultados da BETBY).
+  const fromBetby = e.source === 'winhouse' && e.marketSource?.[marketId] === 'bb' && !!e.betbyId;
   return {
     key: `${e.id}|${marketId}|${variant}|${outcomeId}`,
-    eventId: e.id,
+    eventId: fromBetby ? e.betbyId! : e.id,
+    source: e.source === 'winhouse' && !fromBetby ? 'winhouse' : 'betby',
     marketId,
     variant,
     outcomeId,
@@ -344,6 +372,7 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
     markets: status === 'live' && sport === 'futebol' ? closeDecidedMarkets(raw.markets, raw.score) : raw.markets,
     betbySport: d.sport,
     raw,
+    source: 'betby',
   };
 }
 
@@ -383,6 +412,7 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
   const live = useBetbyFeed('live', 15000);
   const pre = useBetbyFeed('prematch', 30000);
   const side = useBetbySide(20000);
+  const wh = useWinHouseFeed(10000);
 
   const value = React.useMemo<BoardState>(() => {
     const byId = new Map<string, BoardEvent>();
@@ -418,7 +448,25 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
       const e = toBoardEvent(raw, 'live', live.dictionaries);
       if (e) byId.set(e.id, e);
     }
-    const events = [...byId.values()].sort((a, b) => sportRank(a.sport) - sportRank(b.sport) || byPriority(a, b));
+    // WinHouse (modo do admin): os jogos dele mandam; a BETBY liga-se a eles e completa. Sem
+    // WinHouse (desligado, coletor parado ou lista vazia) o site fica só com a BETBY.
+    const mode: OddsMode = wh.enabled && wh.healthy && wh.events.length ? wh.mode : 'betby';
+    // Até o WinHouse responder pela 1.ª vez (máx. 4 s) o quadro espera: sem isto via-se a BETBY
+    // e logo a seguir os mesmos jogos trocados pelos do WinHouse.
+    let list = wh.ready ? [...byId.values()] : [];
+    if (mode !== 'betby') {
+      const whEvents = wh.events.map(whToBoard).filter((e): e is BoardEvent => !!e);
+      const links = linkEvents(whEvents, list);
+      const linked = new Set(links.values());
+      const merged: BoardEvent[] = [];
+      for (const w of whEvents) {
+        const b = links.has(w.id) ? byId.get(links.get(w.id)!) : undefined;
+        const e = b ? mergeLinked(w, b, mode === 'both') : w;
+        if (e.leagueKnown) merged.push(e);
+      }
+      list = mode === 'both' ? [...merged, ...list.filter((b) => !linked.has(b.id))] : merged;
+    }
+    const events = list.sort((a, b) => sportRank(a.sport) - sportRank(b.sport) || byPriority(a, b));
     const leagueMap = new Map<string, LeagueNode>();
     for (const e of events) {
       const k = `${e.sport}|${e.competition}`;
@@ -430,17 +478,19 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     return {
       events,
       leagues: [...leagueMap.values()],
-      loading: live.loading && pre.loading,
+      loading: !wh.ready || (live.loading && pre.loading && !(mode !== 'betby' && list.length)),
       error: live.error && pre.error ? live.error : null,
       updatedAt: live.updatedAt ?? pre.updatedAt,
       widgets: side.widgets,
       broadcasts: side.broadcasts,
+      mode,
+      chosenMode: wh.enabled ? wh.mode : 'betby',
       reload: () => {
         void live.reload();
         void pre.reload();
       },
     };
-  }, [live.events, live.lastEventUpdates, live.dictionaries, live.loading, live.error, live.updatedAt, pre.events, pre.dictionaries, pre.loading, pre.error, pre.updatedAt, side.widgets, side.broadcasts]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [live.events, live.lastEventUpdates, live.dictionaries, live.loading, live.error, live.updatedAt, pre.events, pre.dictionaries, pre.loading, pre.error, pre.updatedAt, side.widgets, side.broadcasts, wh.events, wh.mode, wh.enabled, wh.healthy, wh.ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const moves = useOddMoves(value.events);
   return (

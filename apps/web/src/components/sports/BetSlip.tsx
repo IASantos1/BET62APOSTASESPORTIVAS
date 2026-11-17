@@ -8,10 +8,17 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '../../stores/auth.store';
 import { TrackerFrame } from './TrackerFrame';
 import { Ticket, X, Trash2 } from 'lucide-react';
-import { useBoard } from '../../lib/board';
+import { useBoard, type BetPick, type BoardEvent } from '../../lib/board';
+import { SourceBadge } from './SourceBadge';
 import { useSlip } from '../../stores/slip.store';
 import { cn } from '../../lib/utils';
 import { fmtOdds } from './links';
+
+/** O jogo do quadro de uma seleção (pelo id do site na chave; um mercado BETBY num jogo WinHouse tem outro eventId). */
+const gameOf = (events: BoardEvent[], p: BetPick) => {
+  const id = p.key.split('|')[0];
+  return events.find((e) => e.id === id);
+};
 
 function SlipBody() {
   const { picks, builder, mode, stake, setMode, setStake, remove, clear, setOpen, setOdds } = useSlip();
@@ -25,11 +32,13 @@ function SlipBody() {
     const result = new Map<string, string>();
     const legs = builder?.legs ?? picks;
     for (const pick of legs) {
-      const event = events.find((item) => item.id === pick.eventId);
+      const event = gameOf(events, pick);
       const outcome = event?.markets[pick.marketId]?.[pick.variant]?.[pick.outcomeId];
+      // Mercado WinHouse que o quadro não traz (só a página do jogo): o servidor confirma a odd ao apostar.
+      const serverChecked = pick.source === 'winhouse' && !event?.markets[pick.marketId];
       // Jogo que saiu do quadro (terminado) ou linha já decidida/fechada: não se pode apostar.
       if (!loading && !event) result.set(pick.key, 'Jogo terminado');
-      else if (event && !outcome) result.set(pick.key, 'Mercado fechado');
+      else if (event && !outcome && !serverChecked) result.set(pick.key, 'Mercado fechado');
       else if (outcome?.b === 1) result.set(pick.key, 'Suspenso');
       else if (outcome && Number(outcome.k) <= 1) result.set(pick.key, 'Indisponível');
     }
@@ -51,7 +60,7 @@ function SlipBody() {
     // Odds atuais da BETBY: se mudaram, o jogador confirma de novo.
     const changed = new Map<string, number>();
     for (const p of legs) {
-      const k = Number(events.find((e) => e.id === p.eventId)?.markets[p.marketId]?.[p.variant]?.[p.outcomeId]?.k);
+      const k = Number(gameOf(events, p)?.markets[p.marketId]?.[p.variant]?.[p.outcomeId]?.k);
       if (k > 1 && Math.abs(k - p.odds) > 1e-9) changed.set(p.key, k);
     }
     if (changed.size) {
@@ -71,7 +80,9 @@ function SlipBody() {
             eventId: p.eventId,
             eventName: p.match,
             sport: p.sport,
-            sportId: events.find((e) => e.id === p.eventId)?.betbySport ?? null,
+            sportId: gameOf(events, p)?.betbySport ?? null,
+            // O jogo no site (um jogo WinHouse com mercados BETBY tem dois ids de fornecedor).
+            gameId: p.key.split('|')[0],
             startTime: p.startTime,
             marketId: p.marketId,
             variant: p.variant,
@@ -82,7 +93,13 @@ function SlipBody() {
           })),
         }),
       });
-      const j = (await res.json().catch(() => ({}))) as { ids?: string[]; review?: boolean; error?: string };
+      const j = (await res.json().catch(() => ({}))) as { ids?: string[]; review?: boolean; error?: string; changed?: { index: number; odds: number }[] };
+      // O servidor confirmou as odds do WinHouse e alguma mudou: o jogador vê a nova e confirma.
+      if (res.status === 409 && Array.isArray(j.changed) && j.changed.length) {
+        setOdds(new Map(j.changed.filter((c) => legs[c.index]).map((c) => [legs[c.index].key, c.odds])));
+        setNotice({ ok: false, text: j.error || 'As odds mudaram. Confirme as novas odds e aposte de novo.' });
+        return;
+      }
       if (!res.ok) {
         if (res.status === 401) router.push(`/login?next=${encodeURIComponent(window.location.pathname)}`);
         setNotice({ ok: false, text: j.error || 'Não foi possível registar a aposta.' });
@@ -167,7 +184,7 @@ function SlipBody() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-semibold truncate">{p.label}</p>
-                  <p className="text-xs text-white/50 truncate">{p.marketName}</p>
+                  <p className="flex items-center gap-1 text-xs text-white/50"><SourceBadge source={p.source ?? 'betby'} /><span className="truncate">{p.marketName}</span></p>
                   <p className="text-xs text-white/40 truncate">{p.match}</p>
                   {unavailable.has(p.key) && <p className="mt-1 text-xs font-semibold text-amber-300">{unavailable.get(p.key)} no feed atual</p>}
                 </div>

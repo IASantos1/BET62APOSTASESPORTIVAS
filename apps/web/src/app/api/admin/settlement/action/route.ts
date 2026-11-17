@@ -57,7 +57,7 @@ async function act(req: Request) {
   }
   if (b.type === 'final' || b.type === 'cancel') {
     const eventId = String(b.eventId ?? '');
-    if (!/^\d{3,30}$/.test(eventId)) return fail('Jogo inválido.');
+    if (!/^(wh)?\d{3,30}$/.test(eventId)) return fail('Jogo inválido.');
     if (b.type === 'cancel') {
       const n = await ingestResult({ eventId, sport: null, status: 'cancelled', matchStatus: null, home: null, away: null, periods: [] }, 'admin');
       return json({ ok: true, decided: n });

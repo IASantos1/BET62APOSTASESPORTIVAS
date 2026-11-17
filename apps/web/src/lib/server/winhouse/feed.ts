@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { hasDatabase, one, query } from '../db';
 import { createWinHouseClient, envOptions, type WhResponse, type WinHouseClient } from './client';
+import { settleWinHouse } from './settle';
 import { detailOdds, estimateOffset, eventsOf, finishVerdict, listedButOver, normalizeItem, sameGame, type WhItem } from './parse';
 
 // WinHouse — coletor. Corre no servidor (arranca em instrumentation.ts quando WINHOUSE_BASE_URL
@@ -63,6 +64,8 @@ interface FeedStatus {
   cycles: { live: number; prematch: number; pages: number };
   lastError: { at: string; message: string } | null;
   livePageRoute: 'live' | 'pre' | null;
+  /** última leitura boa da lista ao vivo (o site usa a BETBY se for antiga) */
+  lastLiveOkAt: string | null;
   counts?: Record<string, number>;
 }
 
@@ -98,6 +101,7 @@ export function createWinHouseFeed({ client, settings, now = () => Date.now(), l
     cycles: { live: 0, prematch: 0, pages: 0 },
     lastError: null,
     livePageRoute: null,
+    lastLiveOkAt: null,
   };
   const offset = () => status.offset ?? 0;
   let emptyLiveStreak = 0;
@@ -214,6 +218,7 @@ export function createWinHouseFeed({ client, settings, now = () => Date.now(), l
     const res = await read('live', () => client.live());
     status.liveRing = [...status.liveRing.slice(-199), !!res];
     if (!res) return { ok: false };
+    status.lastLiveOkAt = new Date(now()).toISOString();
     if (settings.tzOffsetMinutes === null) {
       const est = estimateOffset(res.events, now());
       if (est !== null && est !== status.offset) {
@@ -363,8 +368,8 @@ export function createWinHouseFeed({ client, settings, now = () => Date.now(), l
 
   async function lease() {
     const r = await one<{ owner: string }>(
-      `INSERT INTO wh_state (key, owner, until) VALUES ('lease', $1, now() + interval '60 seconds')
-       ON CONFLICT (key) DO UPDATE SET owner = $1, until = now() + interval '60 seconds', updated_at = now()
+      `INSERT INTO wh_state (key, owner, until) VALUES ('lease', $1, now() + interval '35 seconds')
+       ON CONFLICT (key) DO UPDATE SET owner = $1, until = now() + interval '35 seconds', updated_at = now()
          WHERE wh_state.owner = $1 OR wh_state.until IS NULL OR wh_state.until < now()
        RETURNING owner`,
       [owner],
@@ -402,6 +407,10 @@ export function createWinHouseFeed({ client, settings, now = () => Date.now(), l
     if (!(await lease())) return;
     const t = now();
     await syncLive();
+    // Bilhetes em jogos WinHouse: placar/fim → liquidação; odds → cash out.
+    await settleWinHouse(log).catch((e) => {
+      status.lastError = { at: new Date(now()).toISOString(), message: `liquidação: ${(e as Error).message}` };
+    });
     await syncPages(true);
     if (t - lastPrematch >= settings.prematchSeconds * 1000) {
       lastPrematch = t;
@@ -438,6 +447,12 @@ export function createWinHouseFeed({ client, settings, now = () => Date.now(), l
     async start() {
       await loadOffset();
       schedule(2000);
+      // Deploy (o Railway envia SIGTERM): larga o contrato já, para a nova instância recolher logo.
+      process.once('SIGTERM', () => {
+        stopped = true;
+        if (timer) clearTimeout(timer);
+        void query(`UPDATE wh_state SET until = now() WHERE key = 'lease' AND owner = $1`, [owner]).catch(() => undefined);
+      });
       log(`WinHouse: coletor ligado (${client.origin}, ao vivo a cada ${settings.liveSeconds} s)`);
     },
     stop() {

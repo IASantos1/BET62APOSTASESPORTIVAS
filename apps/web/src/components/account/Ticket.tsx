@@ -86,7 +86,8 @@ export function TicketCard({ b, onChanged, shared = false }: { b: TicketData; on
   const n = b.legs.length;
   const first = b.legs[0];
   const done = b.legs.filter((l) => l.status !== 'open').length;
-  const evOf = (id: string) => events.find((e) => e.id === id);
+  // Um mercado BETBY num jogo WinHouse guarda o id BETBY: o jogo do quadro é o que o tem ligado.
+  const evOf = (id: string) => events.find((e) => e.id === id) ?? events.find((e) => e.betbyId === id);
   const ret: [string, number, string] = open
     ? ['Retorno potencial', b.potential, '']
     : b.status === 'lost'

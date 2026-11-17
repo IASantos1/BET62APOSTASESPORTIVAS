@@ -1,6 +1,7 @@
 import { tx } from './db';
 import { InsufficientFunds, moveBalance } from './wallet';
 import type { UserRow } from './auth';
+import { currentPrice } from './winhouse/view';
 
 // Colocação de apostas. A odd vem do navegador (o servidor não consegue ler a BETBY), por isso:
 // limites de valor e de ganho, e bilhetes acima dos limites de revisão ficam "Em análise" até o
@@ -28,9 +29,22 @@ export interface LegInput {
   marketName: string;
   outcomeName: string;
   odds: number;
+  /** O jogo no site (um jogo WinHouse com mercados BETBY tem dois ids de fornecedor). */
+  gameId?: string;
 }
 
 export class BetError extends Error {}
+
+/** Odds do WinHouse que mudaram (o servidor confirma-as ao apostar): o boletim mostra as novas. */
+export class OddsChanged extends BetError {
+  changed: { index: number; odds: number }[];
+  constructor(changed: { index: number; odds: number }[]) {
+    super('As odds mudaram. Confirme as novas odds e aposte de novo.');
+    this.changed = changed;
+  }
+}
+
+export const isWhEvent = (id: string) => id.startsWith('wh');
 
 const BUILDER_FACTOR = 0.9;
 
@@ -49,8 +63,11 @@ export function cleanLeg(raw: Record<string, unknown>): LegInput {
     marketName: str(raw.marketName, 200),
     outcomeName: str(raw.outcomeName ?? raw.label, 200),
     odds: Math.round(Number(raw.odds) * 1000) / 1000,
+    gameId: raw.gameId == null ? undefined : str(raw.gameId, 40),
   };
-  if (!/^\d{3,30}$/.test(leg.eventId) || !/^\d{1,10}$/.test(leg.marketId) || !leg.outcomeId) throw new BetError('Seleção inválida.');
+  // Jogos BETBY: id numérico; jogos WinHouse: "wh" + id (mercados sem equivalente BETBY: "wh" + id).
+  if (!/^(wh)?\d{3,30}$/.test(leg.eventId) || !/^(wh)?\d{1,10}$/.test(leg.marketId) || !leg.outcomeId) throw new BetError('Seleção inválida.');
+  if (leg.gameId !== undefined && !/^(wh)?\d{3,30}$/.test(leg.gameId)) leg.gameId = undefined;
   if (!leg.eventName || !leg.marketName || !leg.outcomeName) throw new BetError('Seleção incompleta.');
   if (!(leg.odds > 1) || leg.odds > 1000) throw new BetError(`Odd inválida em ${leg.eventName}.`);
   return leg;
@@ -78,10 +95,28 @@ export async function placeBets(user: UserRow, kind: 'single' | 'multiple' | 'bu
   for (const l of legs) {
     if (l.startTime && l.startTime > now + 60 * 86400_000) throw new BetError('Data do jogo inválida.');
   }
+  // Seleções do WinHouse: o servidor lê a odd atual (não confia na do navegador). Odd mais baixa
+  // agora → o boletim mostra a nova; mais alta → fica a que o jogador viu. Mercado fechado → recusa.
+  const changed: { index: number; odds: number }[] = [];
+  for (const [index, l] of legs.entries()) {
+    if (!isWhEvent(l.eventId)) continue;
+    const { row, price } = await currentPrice(l.eventId.slice(2), l.marketId, l.variant, l.outcomeId);
+    if (!row || (row.status !== 'live' && row.status !== 'scheduled')) throw new BetError(`${l.eventName}: jogo terminado ou indisponível.`);
+    if (row.status === 'scheduled' && new Date(row.start_time).getTime() < now - 2 * 60_000) throw new BetError(`${l.eventName}: o jogo está a começar. Aposte no ao vivo.`);
+    if (price === null) throw new BetError(`${l.eventName}: ${l.outcomeName} está suspenso ou fechado.`);
+    if (price < l.odds - 1e-9) changed.push({ index, odds: price });
+    // Dados do jogo vindos do servidor (o jogo pode ter mudado de id ao passar a ao vivo).
+    l.eventId = `wh${row.id}`;
+    l.eventName = `${row.home} - ${row.away}`.slice(0, 200);
+    l.sport = row.sport;
+    l.startTime = new Date(row.start_time).getTime();
+  }
+  if (changed.length) throw new OddsChanged(changed);
   const keys = new Set(legs.map((l) => `${l.eventId}|${l.marketId}|${l.variant}|${l.outcomeId}`));
   if (keys.size !== legs.length) throw new BetError('Seleção repetida no boletim.');
-  if (kind === 'multiple' && new Set(legs.map((l) => l.eventId)).size !== legs.length) throw new BetError('Numa múltipla só pode haver uma seleção por jogo.');
-  if (kind === 'builder' && new Set(legs.map((l) => l.eventId)).size !== 1) throw new BetError('O criador de apostas usa seleções de um só jogo.');
+  const game = (l: LegInput) => l.gameId ?? l.eventId;
+  if (kind === 'multiple' && new Set(legs.map(game)).size !== legs.length) throw new BetError('Numa múltipla só pode haver uma seleção por jogo.');
+  if (kind === 'builder' && new Set(legs.map(game)).size !== 1) throw new BetError('O criador de apostas usa seleções de um só jogo.');
   if (kind !== 'single' && legs.length < 2) kind = 'single';
 
   const tickets: LegInput[][] = kind === 'single' ? legs.map((l) => [l]) : [legs];
@@ -110,8 +145,13 @@ export async function placeBets(user: UserRow, kind: 'single' | 'multiple' | 'bu
       review ||= needsReview;
       const bet = (
         await c.query<{ id: string }>(
-          `INSERT INTO bets (user_id, kind, stake_cents, odds, potential_cents, status, note) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-          [user.id, t.length > 1 ? kind : 'single', stakeCents, odds, potential, needsReview ? 'review' : 'open', needsReview ? 'Acima do limite de revisão' : null],
+          `INSERT INTO bets (user_id, kind, stake_cents, odds, potential_cents, status, note, odds_check, odds_check_note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+          [
+            user.id, t.length > 1 ? kind : 'single', stakeCents, odds, potential, needsReview ? 'review' : 'open', needsReview ? 'Acima do limite de revisão' : null,
+            // Só seleções WinHouse: odds já confirmadas pelo servidor. Com BETBY: o admin confirma.
+            t.every((l) => isWhEvent(l.eventId)) ? 'ok' : 'pending',
+            t.every((l) => isWhEvent(l.eventId)) ? 'Confirmadas pelo servidor (WinHouse)' : null,
+          ],
         )
       ).rows[0];
       for (const l of t) {

@@ -212,12 +212,15 @@ export function SettlementCard() {
             const inFeed = live.events.some((x) => x.id === e.eventId);
             const started = e.startTime && new Date(e.startTime).getTime() < now;
             const r = e.result;
-            const stale = started && !inFeed && (!r || r.status === 'live');
+            const stale = started && !inFeed && !e.eventId.startsWith('wh') && (!r || r.status === 'live');
             return (
               <div key={e.eventId} className="p-3">
                 <button className="flex w-full flex-wrap items-center justify-between gap-2 text-left" onClick={() => setOpen(open === e.eventId ? null : e.eventId)}>
                   <span className="min-w-0">
-                    <b className="block truncate">{e.event}</b>
+                    <b className="block truncate">
+                      {e.eventId.startsWith('wh') && <span className="mr-1.5 rounded bg-sky-500/20 px-1 py-px font-mono text-[10px] text-sky-400" title="Liquidado pelo servidor com o placar do WinHouse">WH</span>}
+                      {e.event}
+                    </b>
                     <small className="text-white/55">
                       {e.startTime ? new Date(e.startTime).toLocaleString('pt-PT') : '—'} · {e.bets} bilhetes · {e.legs} seleções · {formatCurrencyEUR(e.stake)}
                     </small>

@@ -1,6 +1,6 @@
 import { fail, json, requireUser, route } from '../../../lib/server/auth';
 import { ticketsView } from '../../../lib/server/tickets';
-import { BetError, cleanLeg, placeBets } from '../../../lib/server/betting';
+import { BetError, OddsChanged, cleanLeg, placeBets } from '../../../lib/server/betting';
 import { query } from '../../../lib/server/db';
 
 export const dynamic = 'force-dynamic';
@@ -36,6 +36,7 @@ export const POST = route(async (req: Request) => {
     const r = await placeBets(u, kind, Number(b.stake), legs);
     return json(r, 201);
   } catch (e) {
+    if (e instanceof OddsChanged) return json({ error: e.message, changed: e.changed }, 409);
     if (e instanceof BetError) return fail(e.message);
     throw e;
   }

@@ -1,6 +1,7 @@
 import { query } from '../db';
 import { feedSettings } from './feed';
-import { SPORT_LABEL, clockText, groupMarkets, mergeOdds, type WhMarket, type WhOdd } from './parse';
+import { toBoardMarkets } from '../../winhouse-markets';
+import { SPORT_LABEL, clockText, mergeOdds, type WhOdd } from './parse';
 
 // WinHouse — o que o site lê: jogos (cartões) e todos os mercados de um jogo. Só dados públicos
 // (equipas, hora, placar, cotações); nada de chaves nem endereços do WinHouse.
@@ -34,6 +35,11 @@ export interface WhRow {
 }
 
 const ms = (d: Date | null) => (d ? new Date(d).getTime() : 0);
+const COUNT_UP = new Set(['futebol', 'futsal', 'andebol', 'raguebi']);
+const mmss = (minutes: number) => {
+  const t = Math.max(0, Math.round(minutes * 60));
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+};
 
 /**
  * As cotações que valem agora: ao vivo, a lista tem de ter sido lida há pouco e ter preços abertos
@@ -54,19 +60,11 @@ export function currentOdds(r: WhRow, now = Date.now()) {
   return { odds: [] as WhOdd[], suspended: true };
 }
 
-/** O mercado principal de um cartão: resultado (1x2) ou vencedor; senão o primeiro da lista. */
-const MAIN_IDS = [1001, 1022, 1016, 1044, 1045];
-function mainMarket(markets: WhMarket[]) {
-  for (const id of MAIN_IDS) {
-    const m = markets.find((x) => x.id === id && x.selections.length >= 2 && x.selections.length <= 3);
-    if (m) return m;
-  }
-  return markets.find((m) => m.selections.length >= 2 && m.selections.length <= 3 && !m.selections.some((s) => s.line)) ?? null;
-}
-
 export function eventView(r: WhRow, { full = false, now = Date.now() } = {}) {
   const { odds, suspended } = currentOdds(r, now);
-  const markets = groupMarkets(odds, r.home, r.away);
+  const conv = toBoardMarkets(odds, r.sport, r.home, r.away, suspended);
+  // Lista (cartões): só os mercados principais; o jogo aberto traz todos.
+  const markets = full ? conv.markets : Object.fromEntries(Object.entries(conv.markets).filter(([m]) => !m.startsWith('wh')));
   const minutes = r.minutes === null ? null : Number(r.minutes);
   return {
     id: r.id,
@@ -84,14 +82,19 @@ export function eventView(r: WhRow, { full = false, now = Date.now() } = {}) {
     live: r.status === 'live',
     score: r.status === 'scheduled' ? null : { home: r.home_score, away: r.away_score },
     clock: r.status === 'live' ? clockText(r.sport, minutes, r.clock_raw, r.competition) : null,
+    // Desportos com relógio a contar para a frente: "mm:ss" (o site fá-lo andar ao segundo).
+    clockMmss: r.status === 'live' && minutes !== null && COUNT_UP.has(r.sport) ? mmss(minutes) : null,
+    // Relógio sem mexer há mais de 1 min (intervalo, paragem).
+    clockStopped: r.status === 'live' && !!r.clock_since && now - ms(r.clock_since) > 60_000,
     minutes,
     // Quando o relógio foi lido (o site faz o relógio andar a partir daqui).
     clockAt: r.status === 'live' && r.list_at ? new Date(r.list_at).toISOString() : null,
     suspended,
     betbyId: r.betby_id,
-    marketCount: markets.length,
-    main: mainMarket(markets),
-    markets: full ? markets : undefined,
+    marketCount: Object.keys(conv.markets).length,
+    markets,
+    names: full ? conv.names : undefined,
+    outcomes: full ? conv.outcomes : undefined,
     ...(full && r.status === 'ended' ? { verdict: r.verdict, endReason: r.end_reason } : {}),
   };
 }
@@ -120,4 +123,19 @@ export async function eventDetail(id: string) {
     [id],
   );
   return rows[0] ? eventView(rows[0], { full: true }) : null;
+}
+
+/**
+ * A odd atual de uma seleção de um jogo WinHouse (para validar a aposta no servidor): o preço, ou
+ * null se o jogo/seleção já não existe ou está suspenso. eventId sem o prefixo "wh".
+ */
+export async function currentPrice(eventId: string, marketId: string, variant: string, outcomeId: string) {
+  const r = (await query<WhRow>(
+    `SELECT * FROM wh_events WHERE id = (SELECT COALESCE(CASE WHEN status = 'merged' THEN merged_into END, id) FROM wh_events WHERE id = $1)`,
+    [eventId],
+  ))[0];
+  if (!r || (r.status !== 'live' && r.status !== 'scheduled')) return { row: r ?? null, price: null as number | null };
+  const { odds, suspended } = currentOdds(r);
+  const o = toBoardMarkets(odds, r.sport, r.home, r.away, suspended).markets[marketId]?.[variant]?.[outcomeId];
+  return { row: r, price: o && o.b !== 1 && Number(o.k) > 1 ? Number(o.k) : null };
 }
