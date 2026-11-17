@@ -205,11 +205,11 @@ export function BetSlip({
       <aside
         id="bet-slip"
         className="hidden w-80 shrink-0 border-l border-bet62-border bg-bet62-bg/60 xl:block"
-        style={trackerActive && trackerWidthPx ? { width: `${trackerWidthPx}px`, maxWidth: '60vw' } : undefined}
+        style={undefined}
       >
         <div className="sticky top-16 flex h-[calc(100vh-4rem)] flex-col">
           {trackerActive && (
-            <div className="shrink-0 border-b border-bet62-border p-2">
+            <div className="fixed right-4 top-20 z-[60] w-80 max-w-[60vw] rounded-xl border border-bet62-border bg-bet62-bg/95 p-2 shadow-2xl backdrop-blur-sm">
               <p className="mb-2 px-1 text-xs font-bold text-white/70">Minicampo</p>
               {trackerUrl ? (
                 <div className="overflow-hidden rounded-xl border border-bet62-border bg-black/40">
