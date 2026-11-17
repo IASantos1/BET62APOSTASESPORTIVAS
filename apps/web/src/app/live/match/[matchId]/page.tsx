@@ -644,12 +644,12 @@ function Inner({ id }: { id: string }) {
 
   return (
     <>
-      {/* Telemóvel/tablet: menu superior → minicampo → Tracker/Live → mercados. O minicampo cola-se
-          ao menu, a toda a largura e com fundo opaco, e fica fixo enquanto os mercados rolam por baixo
+      {/* Telemóvel/tablet: menu superior → minicampo → Tracker/Live → mercados. O minicampo fica logo
+          abaixo do menu, de uma borda à outra do ecrã, e sobe com a página ao rolar (não tapa os mercados)
           (o placar do jogo sai: o próprio minicampo mostra o resultado e o tempo).
           PC largo: fica no topo da coluna do boletim (BetSlip), entre o menu superior e o boletim. */}
       {view === 'tracker' && live && !desktopTracker && (
-        <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-[35] -mx-3 -mt-5 border-b border-bet62-border bg-bet62-bg shadow-[0_8px_18px_rgba(0,0,0,0.25)] sm:-mx-4 lg:static lg:mx-0 lg:overflow-hidden lg:rounded-2xl lg:border lg:shadow-none">
+        <div className="-mx-3 -mt-5 border-b border-bet62-border bg-bet62-bg sm:-mx-4 lg:mx-0 lg:mt-0 lg:overflow-hidden lg:rounded-2xl lg:border">
           {tracker ? (
             <iframe
               src={tracker}

@@ -269,16 +269,14 @@ html.light .page-red-fade {
   background: linear-gradient(180deg, rgb(200 16 46 / 0.9) 0%, rgb(200 16 46 / 0.45) 16%, rgb(200 16 46 / 0.16) 45%, transparent 100%);
 }
 
-/* Minicampo (Statscore) no telemóvel/tablet. O placar (~62px) e a barra de ícones (~48px) do widget
-   têm altura fixa; só o campo cresce com a largura (~0.7 × largura). Por isso a altura é
-   0.7 × largura + 112px — com uma proporção fixa a barra de ícones ficava cortada.
-   A largura também é limitada pela altura do ecrã, para sobrar espaço para os mercados. */
+/* Minicampo (Statscore) no telemóvel/tablet: de uma borda à outra do ecrã. O placar (~62px) e a
+   barra de ícones (~48px) do widget têm altura fixa; só o campo cresce com a largura (~0.7 × largura).
+   Por isso a altura é 0.7 × largura + 112px — com uma proporção fixa a barra de ícones ficava cortada. */
 .trk-frame {
-  --trk-w: min(100vw, 420px, calc((46dvh - 112px) / 0.7));
-  width: var(--trk-w);
-  max-width: 100%;
+  --trk-w: 100vw;
+  width: 100%;
   height: calc(var(--trk-w) * 0.7 + 112px);
 }
-@media (min-width: 1024px) {
-  .trk-frame { --trk-w: min(480px, calc((60vh - 112px) / 0.7)); }
+@media (min-width: 640px) {
+  .trk-frame { --trk-w: 560px; width: var(--trk-w); max-width: 100%; }
 }
