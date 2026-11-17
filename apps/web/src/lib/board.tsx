@@ -293,6 +293,7 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
   const league = classifyLeague(sport, category, tournament);
   if (!league) return null;
   if (!Object.keys(raw.markets).length) return null;
+  if (raw.id === '2733659201518837788') console.info('[BET62 MARKET AUDIT]', { stage: 'board-toBoardEvent', eventId: raw.id, marketCount: Object.keys(raw.markets).length, marketIds: Object.keys(raw.markets) });
   const score = raw.score && raw.score.home_score !== undefined ? { home: String(raw.score.home_score), away: String(raw.score.away_score ?? 0) } : undefined;
   const hasTennisPoints = sport === 'tenis'
     && raw.score
