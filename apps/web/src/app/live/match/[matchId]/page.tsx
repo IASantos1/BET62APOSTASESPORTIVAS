@@ -259,6 +259,8 @@ function mergeMarkets(base: BetbyMarkets, extra: BetbyMarkets | null): BetbyMark
 // página testa-os uma vez (no navegador, a BETBY bloqueia servidores) e guarda o que trouxer mais
 // mercados do que a lista; nenhum serve → volta a tentar daqui a 6 h.
 const EVENT_CANDIDATES = [
+  // Rota de detalhe observada na API BETBY: feed/brand/{brand}/event/{locale}/{id}.
+  '{base}/api/v4/{feed}/brand/{brand}/event/{locale}/{id}',
   '{base}/api/v4/{feed}/brand/{brand}/{locale}/event/{id}',
   '{base}/api/v4/{feed}/brand/{brand}/{locale}/events/{id}',
   '{base}/api/v4/{feed}/brand/{brand}/{locale}/match/{id}',
@@ -267,7 +269,7 @@ const EVENT_CANDIDATES = [
   '{base}/api/v2/{feed}/brand/{brand}/{locale}/event/{id}',
   '{base}/api/v1/events/brand/{brand}/event/{id}/{locale}',
 ];
-const DISCOVERY_KEY = 'bet62-event-endpoint';
+const DISCOVERY_KEY = 'bet62-event-endpoint-v2';
 
 function useEventEndpoint(id: string, feed: 'live' | 'prematch', configured: string | null | undefined, ready: boolean, baseCount: number) {
   const [tpl, setTpl] = React.useState<string | null>(null);
