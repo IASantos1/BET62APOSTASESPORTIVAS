@@ -3,7 +3,6 @@
 // Boletim do lado direito (como no outro projeto): Simples / Múltipla, ou um criador de apostas.
 // Ainda só no navegador: o botão de apostar avisa que o registo de apostas não está ligado.
 import * as React from 'react';
-import { createPortal } from 'react-dom';
 import { Ticket, X, Trash2 } from 'lucide-react';
 import { useBoard } from '../../lib/board';
 import { useSlip } from '../../stores/slip.store';
@@ -206,43 +205,29 @@ export function BetSlip({
       <aside
         id="bet-slip"
         className="hidden w-80 shrink-0 border-l border-bet62-border bg-bet62-bg/60 xl:block"
-        style={trackerActive && trackerWidthPx ? { width: `${trackerWidthPx}px`, maxWidth: '60vw' } : undefined}
+        style={trackerActive ? { width: `${trackerWidthPx ?? 360}px`, maxWidth: '60vw' } : undefined}
       >
         <div className="sticky top-16 flex h-[calc(100vh-4rem)] flex-col">
+          {/* PC: o minicampo fica no topo da coluna, entre o menu superior e o boletim. */}
+          {ready && trackerActive && (
+            <div className="shrink-0 border-b border-bet62-border bg-bet62-bg">
+              {trackerUrl ? (
+                <iframe
+                  src={trackerUrl}
+                  title="Minicampo do jogo"
+                  scrolling="no"
+                  className={`block w-full ${trackerHeightPx ? '' : 'aspect-[114/100] max-h-[48vh]'}`}
+                  style={trackerHeightPx ? { height: `${trackerHeightPx}px` } : undefined}
+                  allow="fullscreen"
+                />
+              ) : (
+                <p className="p-3 text-xs text-white/60">Minicampo não disponível para este jogo.</p>
+              )}
+            </div>
+          )}
           <div className="min-h-0 flex-1">{ready && <SlipBody />}</div>
         </div>
       </aside>
-      {ready && trackerActive && typeof document !== 'undefined' && createPortal(
-        <div
-          className="fixed right-4 top-[calc(5rem+env(safe-area-inset-top))] z-[55] shrink-0 overflow-y-auto rounded-xl border border-bet62-border bg-bet62-bg/95 p-2 shadow-2xl backdrop-blur-sm"
-          style={{
-            width: trackerWidthPx ? `${trackerWidthPx}px` : 'min(28vw, 420px)',
-            maxWidth: '60vw',
-            maxHeight: 'calc(100dvh - 6rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
-          }}
-        >
-          <p className="mb-2 px-1 text-xs font-bold text-white/70">Minicampo</p>
-          {trackerUrl ? (
-            <div className="overflow-hidden rounded-xl border border-bet62-border bg-black/40">
-              <iframe
-                src={trackerUrl}
-                title="Minicampo do jogo"
-                className={`block w-full ${trackerHeightPx ? '' : 'h-[min(36dvh,420px)] min-h-[260px] max-h-[420px]'}`}
-                style={{
-                  ...(trackerHeightPx ? { height: `${trackerHeightPx}px` } : {}),
-                  maxHeight: 'calc(100dvh - 8rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
-                }}
-                allow="fullscreen"
-              />
-            </div>
-          ) : (
-            <p className="rounded-xl border border-bet62-border bg-black/40 p-3 text-xs text-white/60">
-              Minicampo não disponível para este jogo.
-            </p>
-          )}
-        </div>,
-        document.body,
-      )}
       {/* Telemóvel / tablet: botão flutuante e gaveta */}
       {ready && count > 0 && !open && (
         <button

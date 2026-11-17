@@ -330,50 +330,54 @@ const DISCOVERY_KEY = 'bet62-event-endpoint-v3';
 
 function useEventEndpoint(id: string, feed: 'live' | 'prematch', configured: string | null | undefined, ready: boolean, baseCount: number) {
   const [tpl, setTpl] = React.useState<string | null>(null);
+  // O número de mercados do feed muda a cada atualização; a procura só o lê, não recomeça por ele.
+  const baseRef = React.useRef(baseCount);
+  baseRef.current = baseCount;
   React.useEffect(() => {
     if (configured) {
       setTpl(configured);
       return;
     }
+    setTpl(null);
     if (!ready) return;
     const discoveryKey = `${DISCOVERY_KEY}:${feed}:${id}`;
-    let saved: { tpl: string; at: number } | null = null;
+    let saved: { tpl: string | null; at: number } | null = null;
     try {
       saved = JSON.parse(localStorage.getItem(discoveryKey) || 'null');
     } catch {}
-    if (saved?.tpl && Date.now() - saved.at < 24 * 3600_000) {
-      setTpl(saved.tpl);
+    // Sucesso vale 24 h; falha vale 3 h (evita repetir ~8 pedidos falhados a cada visita).
+    if (saved && Date.now() - saved.at < (saved.tpl ? 24 : 3) * 3600_000) {
+      if (saved.tpl) setTpl(saved.tpl);
       return;
     }
+    const remember = (value: string | null) => {
+      try {
+        localStorage.setItem(discoveryKey, JSON.stringify({ tpl: value, at: Date.now() }));
+      } catch {}
+    };
     let stop = false;
     void (async () => {
       for (const c of EVENT_CANDIDATES) {
+        if (stop) return;
         try {
           const r = await fetch(fillTemplate(c, id, feed), { cache: 'no-store' });
-          if (!r.ok) {
-            if (id === '2734060900641296402') console.info('[BET62 MARKET AUDIT]', { stage: 'event-endpoint-candidate-http-error', candidate: c, httpStatus: r.status });
-            continue;
-          }
+          if (!r.ok) continue;
           const found = extractMarkets(await r.json(), id);
-          if (id === '2734060900641296402') console.info('[BET62 MARKET AUDIT]', { stage: 'event-endpoint-candidate', candidate: c, httpStatus: r.status, marketCount: found ? Object.keys(found).length : 0, marketIds: found ? Object.keys(found) : [] });
-          if (found && Object.keys(found).length > baseCount) {
-            try {
-              localStorage.setItem(discoveryKey, JSON.stringify({ tpl: c, at: Date.now() }));
-            } catch {}
+          if (found && Object.keys(found).length > baseRef.current) {
+            remember(c);
             if (!stop) setTpl(c);
             return;
           }
-        } catch (error) {
-          if (id === '2734060900641296402') console.info('[BET62 MARKET AUDIT]', { stage: 'event-endpoint-candidate-error', candidate: c, error: error instanceof Error ? error.message : String(error) });
+        } catch {
           // bloqueado, 404 ou não JSON: o seguinte
         }
       }
-      // Não guardar falhas: outro evento/feed pode ter uma rota válida e a BETBY pode ficar disponível mais tarde.
+      if (!stop) remember(null);
     })();
     return () => {
       stop = true;
     };
-  }, [id, feed, configured, ready, baseCount]);
+  }, [id, feed, configured, ready]);
   return tpl;
 }
 
@@ -390,7 +394,6 @@ function useFullMarkets(id: string, feed: 'live' | 'prematch', tpl: string | nul
         const j = await r.json();
         const found = extractMarkets(j, id);
         if (!found || !Object.keys(found).length) throw new Error('Resposta sem mercados reconhecidos (verifique o formato do endpoint BETBY).');
-        if (id === '2734060900641296402') console.info('[BET62 MARKET AUDIT]', { stage: 'full-markets-loaded', marketCount: Object.keys(found).length, marketIds: Object.keys(found) });
         if (!stop) { setMarkets(found); setError(null); }
       } catch (e) {
         if (!stop) setError(e instanceof Error ? e.message : String(e));
@@ -601,7 +604,6 @@ function Inner({ id }: { id: string }) {
   const share = (m: string, o: string) =>
     distribution.markets?.find((x) => String(x.market_id) === m)?.outcomes.find((x) => String(x.outcome_id) === o)?.percentage;
   const allMarkets: BetbyMarkets = mergeMarkets(e.markets, fullMarkets);
-  if (id === '2734060900641296402') console.info('[BET62 MARKET AUDIT]', { stage: 'match-page-final', feedMarketCount: Object.keys(e.markets).length, feedMarketIds: Object.keys(e.markets), additionalMarketCount: fullMarkets ? Object.keys(fullMarkets).length : 0, mergedMarketCount: Object.keys(allMarkets).length, mergedMarketIds: Object.keys(allMarkets) });
   const ev = { ...e, markets: allMarkets };
   const markets = Object.entries(allMarkets).sort((a, b) => marketRank(a[0]) - marketRank(b[0]));
   const stats = statRows(e.statistics);
@@ -609,7 +611,6 @@ function Inner({ id }: { id: string }) {
   for (const [m] of markets) counts.set(marketCategory(m), (counts.get(marketCategory(m)) ?? 0) + 1);
   const activeCat = cat !== 'todos' && counts.has(cat) ? cat : 'todos';
   const shown = activeCat === 'todos' ? markets : markets.filter(([m]) => marketCategory(m) === activeCat);
-  if (id === '2734060900641296402') console.info('[BET62 MARKET AUDIT]', { stage: 'match-page-visible', activeCategory: activeCat, visibleMarketCount: shown.length, visibleMarketIds: shown.map(([marketId]) => marketId) });
   const broadcast = broadcasts.get(id)?.find((b) => b.url)?.url;
   // Estatísticas: o widget do side feed que traz um endereço próprio (Oddin/Betgenius), senão a
   // página de estatísticas da BETBY (ui.invisiblesport.com/stats.html), que só existe para jogos
@@ -687,26 +688,24 @@ function Inner({ id }: { id: string }) {
         )}
       </div>
 
-      {/* O tracker permanece no fluxo da página e fixa-se abaixo do cabeçalho ao rolar. */}
+      {/* Telemóvel/tablet: o minicampo cola-se ao cabeçalho, a toda a largura e com fundo opaco,
+          e fica fixo enquanto os mercados rolam por baixo. */}
       {view === 'tracker' && !desktopTracker && (
-        <div
-          className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-[35] mx-auto w-[min(92vw,420px)] overflow-y-auto overflow-x-hidden rounded-2xl border border-bet62-border bg-bet62-surface/95 shadow-2xl backdrop-blur-sm xl:hidden"
-          style={{ maxHeight: 'calc(100dvh - 5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))' }}
-        >
+        <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-[35] -mx-3 border-b border-bet62-border bg-bet62-bg shadow-[0_8px_18px_rgba(0,0,0,0.25)] sm:-mx-4 lg:-mx-6 xl:hidden">
           {tracker ? (
             <iframe
               src={tracker}
               title="Tracker do jogo"
-              className={`mx-auto block ${cfg?.trackerMobileWidthPx ? '' : 'w-full'} ${cfg?.trackerMobileHeightPx ? '' : 'h-[min(48dvh,368px)] min-h-[260px] sm:h-[min(53dvh,468px)] sm:min-h-[340px]'}`}
+              scrolling="no"
+              className={`mx-auto block ${cfg?.trackerMobileWidthPx ? '' : 'w-full max-w-[min(100%,calc(40dvh*1.14),360px)]'} ${cfg?.trackerMobileHeightPx ? '' : 'aspect-[114/100]'}`}
               style={{
                 ...(cfg?.trackerMobileWidthPx ? { width: `${cfg.trackerMobileWidthPx}px`, maxWidth: '100%' } : {}),
                 ...(cfg?.trackerMobileHeightPx ? { height: `${cfg.trackerMobileHeightPx}px` } : {}),
-                maxHeight: 'calc(100dvh - 6rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))',
               }}
               allow="fullscreen"
             />
           ) : (
-            <p className="p-6 text-sm text-white/60">
+            <p className="p-4 text-center text-sm text-white/60">
               Minicampo não disponível: a BETBY não associou a este jogo um widget de tracking (Statscore/Oddin/Betgenius) no side feed.
             </p>
           )}
