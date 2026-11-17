@@ -6,6 +6,7 @@
 import * as React from 'react';
 import { Activity, CheckCircle2, Database, Loader2, Play, Radio, RefreshCw, Server, XCircle } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { setDiagnostics, useDiagnostics } from '../../lib/winhouse-board';
 
 const panel = 'rounded-xl border border-bet62-border bg-bet62-surface';
 const btn = 'inline-flex items-center gap-2 rounded-lg border border-bet62-border bg-bet62-surface-2 px-3 py-2 text-xs font-semibold transition-colors hover:border-bet62-primary/50 disabled:opacity-50';
@@ -39,6 +40,65 @@ async function post(body: Json) {
   const r = await fetch('/api/admin/winhouse', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
   return r.ok ? j : { error: j.error ?? `HTTP ${r.status}` };
+}
+
+const MODES: { id: 'both' | 'winhouse' | 'betby'; label: string; note: string }[] = [
+  { id: 'both', label: 'Ambos', note: 'Jogos do WinHouse (com os mercados que só a BETBY tem, ex.: marcadores) + jogos e desportos que só a BETBY tem.' },
+  { id: 'winhouse', label: 'Só WinHouse', note: 'Só jogos e mercados do WinHouse. A BETBY fica só para o minicampo e as estatísticas.' },
+  { id: 'betby', label: 'Só BETBY', note: 'Como antes: tudo da BETBY. O WinHouse continua a ser recolhido, mas não aparece.' },
+];
+
+/** Fonte do site e modo diagnóstico (selos WH/BB nos jogos, mercados e boletim, só neste navegador). */
+function SourceControls({ mode, configured, onChange }: { mode: string | undefined; configured: boolean; onChange: () => void }) {
+  const diag = useDiagnostics();
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+  const choose = async (m: string) => {
+    setBusy(true);
+    setErr(null);
+    const r = await post({ action: 'mode', mode: m });
+    if (r.error) setErr(r.error);
+    setBusy(false);
+    onChange();
+  };
+  return (
+    <div className={cn(panel, 'p-5')}>
+      <div className="mb-3 font-bold">Fonte dos jogos no site</div>
+      <div className="grid gap-2 sm:grid-cols-3">
+        {MODES.map((m) => (
+          <button
+            key={m.id}
+            disabled={busy || !configured}
+            onClick={() => void choose(m.id)}
+            className={cn(
+              'rounded-lg border p-3 text-left transition-colors disabled:opacity-50',
+              mode === m.id ? 'border-bet62-primary bg-bet62-primary/15' : 'border-bet62-border bg-bet62-surface-2 hover:border-bet62-primary/50',
+            )}
+          >
+            <div className="flex items-center gap-2 text-sm font-bold">
+              <span className={cn('h-3 w-3 rounded-full border-2', mode === m.id ? 'border-bet62-primary bg-bet62-primary' : 'border-white/40')} />
+              {m.label}
+            </div>
+            <p className="mt-1 text-xs text-white/55">{m.note}</p>
+          </button>
+        ))}
+      </div>
+      <p className="mt-2 text-xs text-white/45">Se o WinHouse falhar (coletor parado há mais de 2 min), o site passa sozinho para a BETBY e volta quando o WinHouse responder.</p>
+      {err && <p className="mt-2 text-xs text-bet62-primary">{err}</p>}
+      <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-bet62-border bg-bet62-surface-2 p-3">
+        <input type="checkbox" checked={diag} onChange={(e) => setDiagnostics(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--bet62-primary,#e11d48)]" />
+        <span className="text-sm">
+          <b>Modo diagnóstico</b> (só neste navegador)
+          <span className="mt-0.5 block text-xs text-white/55">
+            Mostra no site um selo em cada jogo, mercado e seleção do boletim:
+            <span className="mx-1 rounded bg-sky-500/20 px-1 font-mono text-[10px] text-sky-400">WH</span> WinHouse,
+            <span className="mx-1 rounded bg-sky-500/20 px-1 font-mono text-[10px] text-sky-400">WH+BB</span> WinHouse ligado à BETBY (minicampo),
+            <span className="mx-1 rounded bg-amber-500/20 px-1 font-mono text-[10px] text-amber-400">BB</span> BETBY. Os jogadores não veem.
+          </span>
+        </span>
+      </label>
+    </div>
+  );
 }
 
 export function WinHouseCard() {
@@ -81,6 +141,7 @@ export function WinHouseCard() {
 
   return (
     <div className="space-y-4">
+      <SourceControls mode={s.mode} configured={!!s.configured && !!s.database} onChange={() => void load()} />
       {/* Configuração */}
       <div className={cn(panel, 'p-5')}>
         <div className="mb-3 flex items-center gap-2 font-bold"><Server size={16} className="text-bet62-primary" /> Ligação</div>

@@ -5,6 +5,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { BetPick, Builder } from '../lib/board';
 
+/** O jogo de uma seleção no site (a chave começa pelo id do jogo no site, igual para WinHouse e BETBY). */
+const gameKey = (p: BetPick) => p.key.split('|')[0];
+
 interface SlipState {
   picks: BetPick[];
   /** Criador de apostas: várias seleções no mesmo jogo, uma só aposta. */
@@ -36,13 +39,13 @@ export const useSlip = create<SlipState>()(
       toggle: (pick) =>
         set((s) => {
           if (s.picks.some((p) => p.key === pick.key)) return { picks: s.picks.filter((p) => p.key !== pick.key) };
-          const picks = [...s.picks.filter((p) => p.eventId !== pick.eventId), pick];
+          const picks = [...s.picks.filter((p) => gameKey(p) !== gameKey(pick)), pick];
           return { picks, builder: null, mode: picks.length > 1 ? 'multiple' : s.mode };
         }),
       addMany: (list) =>
         set((s) => {
-          const events = new Set(list.map((p) => p.eventId));
-          return { picks: [...s.picks.filter((p) => !events.has(p.eventId)), ...list], builder: null, mode: 'multiple', open: true };
+          const events = new Set(list.map(gameKey));
+          return { picks: [...s.picks.filter((p) => !events.has(gameKey(p))), ...list], builder: null, mode: 'multiple', open: true };
         }),
       setBuilder: (builder) => set({ builder, picks: [], open: true }),
       remove: (key) => set((s) => ({ picks: s.picks.filter((p) => p.key !== key) })),

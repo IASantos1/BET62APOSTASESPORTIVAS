@@ -156,6 +156,8 @@ export function decideLeg(leg: LegRow, r: EventResult, now = Date.now()): LegSta
   // Daqui para baixo só com o jogo terminado.
   if (m === '1') {
     if (!football && s.overtime) return null; // 1X2 de tempo regulamentar noutros desportos: operador
+    // WinHouse só dá o placar final (sem partes): noutros desportos pode incluir prolongamento → operador.
+    if (!football && leg.event_id.startsWith('wh')) return null;
     return s.regular ? winner3(s.regular, o) : null;
   }
   if (football && m === '10' && s.regular) {

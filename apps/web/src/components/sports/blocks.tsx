@@ -2,6 +2,7 @@
 
 // Blocos das páginas de desporto (no estilo do outro projeto, com o visual deste): linha compacta de
 // jogo, grupos por liga, carrossel, cartões de jogo, ligas, desportos e apostas prontas.
+import { SourceBadge } from './SourceBadge';
 import Link from 'next/link';
 import * as React from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -172,6 +173,7 @@ export function EventRow({ e }: { e: BoardEvent }) {
       <Link href={matchHref(e.id, live)} className="contents">
         <div className="text-xs leading-[1.4] text-white/70">
           {live ? <LiveClock e={e} /> : <span className="whitespace-pre-line">{fmtWhen(e.startTime).replace(', ', '\n')}</span>}
+          <SourceBadge source={e.source ?? 'betby'} linked={!!e.betbyId} className="mt-1" />
         </div>
         {tennis ? (
           <TennisScoreTable
@@ -265,7 +267,7 @@ export function MatchCard({ e }: { e: BoardEvent }) {
         <Link href={matchHref(e.id, true)} className="block">
           <div className="flex items-center justify-between gap-2 text-[11.5px] text-white/55">
             <LiveClock e={e} />
-            <span className="truncate">{e.league}</span>
+            <span className="flex min-w-0 items-center gap-1"><SourceBadge source={e.source ?? 'betby'} linked={!!e.betbyId} /><span className="truncate">{e.league}</span></span>
           </div>
           {tennis ? (
             <div className="mt-2.5">
@@ -301,7 +303,7 @@ export function MatchCard({ e }: { e: BoardEvent }) {
         <div className="flex justify-between gap-2 text-[11.5px] text-white/55">
           <span className="flex min-w-0 items-center gap-1.5">
             <LeagueLogo sport={e.sport} league={e.league} country={e.country} className="h-4 w-4" />
-            <span className="truncate">{e.league}</span>
+            <span className="flex min-w-0 items-center gap-1"><SourceBadge source={e.source ?? 'betby'} linked={!!e.betbyId} /><span className="truncate">{e.league}</span></span>
           </span>
           <span className="shrink-0">{fmtWhen(e.startTime)}</span>
         </div>
