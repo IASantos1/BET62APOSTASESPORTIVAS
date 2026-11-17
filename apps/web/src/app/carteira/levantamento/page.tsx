@@ -20,6 +20,7 @@ import { Card, CardContent } from '../../../components/ui/Card';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { cn, formatCurrencyEUR } from '../../../lib/utils';
+import { useAuthStore } from '../../../stores/auth.store';
 
 type WithdrawMethod = 'bank' | 'mbway';
 
@@ -34,7 +35,8 @@ export default function CarteiraLevantamentoPage() {
   const [method, setMethod] = React.useState<WithdrawMethod>('bank');
   const [iban, setIban] = React.useState('');
   const [loading, setLoading] = React.useState(false);
-  const availableBalance = 133.28;
+  // Saldo verdadeiro da conta (servidor); os pedidos de levantamento chegam na próxima fase.
+  const availableBalance = useAuthStore((st) => st.user?.balance ?? 0);
 
   const handleSubmit = async () => {
     if (amount < 20 || amount > availableBalance) return;

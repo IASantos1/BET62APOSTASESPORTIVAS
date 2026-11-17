@@ -71,7 +71,7 @@ export function Header() {
   const [depositLoading, setDepositLoading] = React.useState(false);
   const [depositError, setDepositError] = React.useState<string | null>(null);
   const { user, isAuthenticated, logout, isLoading } = useAuthStore();
-  const balance = 0;
+  const balance = user?.balance ?? 0;
 
   const handleDeposit = async () => {
     if (depositAmount < 10) return;

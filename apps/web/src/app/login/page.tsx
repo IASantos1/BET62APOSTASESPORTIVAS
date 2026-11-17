@@ -37,7 +37,6 @@ type Step = 'credentials' | 'twofa';
 export default function LoginPage() {
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
-  const setCredentials = useAuthStore((s) => s.setCredentials);
   const isLoading = useAuthStore((s) => s.isLoading);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
@@ -63,64 +62,21 @@ export default function LoginPage() {
       setError('Preenche e-mail e senha.');
       return;
     }
+    setSuccess(true);
     try {
-      setSuccess(true);
-      if (email.includes('2fa') || email.includes('admin')) {
-        await new Promise((r) => setTimeout(r, 350));
-        setStep('twofa');
-        setSuccess(false);
-        return;
-      }
-      try {
-        await login(email, password);
-      } catch {
-        const localUser = {
-          id: 'demo-' + Date.now().toString(36),
-          email: email.trim().toLowerCase(),
-          roles: ['USER'],
-          firstName: email.split('@')[0]?.split(/[._-]/)[0] ?? 'Utilizador',
-          lastName: 'BET62',
-          twoFactorEnabled: false,
-        };
-        const fakeToken = 'demo.' + btoa(JSON.stringify({ sub: localUser.id, iat: Date.now() }));
-        setCredentials({ user: localUser, accessToken: fakeToken, refreshToken: fakeToken });
-      }
-      router.push('/');
+      await login(email, password);
+      const next = new URLSearchParams(window.location.search).get('next');
+      router.push(next && next.startsWith('/') ? next : '/');
     } catch (err) {
-      setError('Credenciais inválidas.');
+      setError(err instanceof Error ? err.message : 'Credenciais inválidas.');
       setSuccess(false);
     }
   };
 
+  // A verificação em dois passos (2FA) ainda não está ativa no servidor.
   const submit2FA = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    const code = code2fa.join('');
-    if (code.length !== 6) {
-      setError('Insere os 6 dígitos do autenticador.');
-      return;
-    }
-    try {
-      setSuccess(true);
-      try {
-        await (login as any)(email, password, code);
-      } catch {
-        const localUser = {
-          id: 'demo-' + Date.now().toString(36),
-          email: email.trim().toLowerCase(),
-          roles: [email.includes('admin') ? 'SUPER_ADMIN' : 'USER'],
-          firstName: email.split('@')[0]?.split(/[._-]/)[0] ?? 'Utilizador',
-          lastName: 'BET62',
-          twoFactorEnabled: true,
-        };
-        const fakeToken = 'demo.' + btoa(JSON.stringify({ sub: localUser.id, iat: Date.now() }));
-        setCredentials({ user: localUser, accessToken: fakeToken, refreshToken: fakeToken });
-      }
-      router.push('/');
-    } catch {
-      setError('Código 2FA inválido ou expirado.');
-      setSuccess(false);
-    }
+    setError('Verificação em dois passos ainda não disponível.');
   };
 
   const pasteCode = (val: string) => {

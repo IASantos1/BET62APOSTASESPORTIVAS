@@ -3,90 +3,118 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+// Sessão do jogador. A sessão verdadeira é um cookie httpOnly do servidor (/api/auth/*);
+// aqui só guardamos uma cópia dos dados para o cabeçalho aparecer logo, e confirmamos com
+// /api/auth/me ao abrir o site.
 export interface AuthUser {
   id: string;
   email: string;
   roles: string[];
   firstName?: string;
   lastName?: string;
+  birthdate?: string;
+  phone?: string | null;
+  nif?: string | null;
+  country?: string;
+  balance?: number;
+  excludedUntil?: string | null;
+  createdAt?: string;
   twoFactorEnabled: boolean;
+}
+
+export interface RegisterPayload {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  birthdate: string;
+  nif?: string;
+  phone?: string;
+  country?: string;
 }
 
 interface AuthState {
   user: AuthUser | null;
-  accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /** false quando o servidor não tem base de dados (contas indisponíveis). */
+  accountsAvailable: boolean;
 
-  setCredentials: (payload: {
-    user: AuthUser;
-    accessToken: string;
-    refreshToken?: string | null;
-  }) => void;
-  clearCredentials: () => void;
-  hydrate: () => void;
+  setUser: (user: AuthUser | null) => void;
+  refresh: () => Promise<AuthUser | null>;
   login: (email: string, password: string) => Promise<void>;
-  register: (payload: Record<string, unknown>) => Promise<void>;
+  register: (payload: RegisterPayload) => Promise<void>;
   logout: () => Promise<void>;
+}
+
+async function call<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    ...init,
+    credentials: 'same-origin',
+    headers: { 'content-type': 'application/json', ...(init?.headers ?? {}) },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((data as { error?: string }).error || `Erro ${res.status}`);
+  return data as T;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       user: null,
-      accessToken: null,
-      refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
+      accountsAvailable: true,
 
-      setCredentials: ({ user, accessToken, refreshToken }) => {
-        set({
-          user,
-          accessToken,
-          refreshToken: refreshToken ?? null,
-          isAuthenticated: true,
-        });
-      },
-      clearCredentials: () => {
-        set({
-          user: null,
-          accessToken: null,
-          refreshToken: null,
-          isAuthenticated: false,
-        });
-      },
-      hydrate: () => {
-        const t = get().accessToken;
-        if (t && get().user) {
-          set({ isAuthenticated: true });
+      setUser: (user) => set({ user, isAuthenticated: !!user }),
+
+      refresh: async () => {
+        try {
+          const r = await call<{ user: AuthUser | null; accounts?: boolean }>('/api/auth/me', { cache: 'no-store' });
+          set({ user: r.user, isAuthenticated: !!r.user, accountsAvailable: r.accounts !== false });
+          return r.user;
+        } catch {
+          return null;
         }
       },
 
-      // Autenticação ainda sem backend: os métodos mantêm a interface usada pelas páginas.
-      login: async (_email: string, _password: string) => {
-        throw new Error('Autenticação ainda não configurada.');
+      login: async (email, password) => {
+        set({ isLoading: true });
+        try {
+          const r = await call<{ user: AuthUser }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+          set({ user: r.user, isAuthenticated: true });
+        } finally {
+          set({ isLoading: false });
+        }
       },
 
-      register: async (_payload) => {
-        throw new Error('Registo ainda não configurado.');
+      register: async (payload) => {
+        set({ isLoading: true });
+        try {
+          const r = await call<{ user: AuthUser }>('/api/auth/register', { method: 'POST', body: JSON.stringify(payload) });
+          set({ user: r.user, isAuthenticated: true });
+        } finally {
+          set({ isLoading: false });
+        }
       },
 
       logout: async () => {
-        get().clearCredentials();
+        await call('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+        set({ user: null, isAuthenticated: false });
       },
     }),
     {
       name: 'bet62-auth',
-      partialize: (s) => ({
-        user: s.user,
-        accessToken: s.accessToken,
-        refreshToken: s.refreshToken,
-        isAuthenticated: s.isAuthenticated,
-      }),
+      version: 2,
+      // Sessões falsas antigas (versão 0, sem servidor) são descartadas.
+      migrate: () => ({ user: null, isAuthenticated: false }),
+      partialize: (s) => ({ user: s.user, isAuthenticated: s.isAuthenticated }),
       onRehydrateStorage: () => (state) => {
-        state?.hydrate();
+        void state?.refresh();
       },
     },
   ),
 );
+
+/** Pedido JSON autenticado (cookie de sessão) para as páginas da conta. */
+export const api = call;

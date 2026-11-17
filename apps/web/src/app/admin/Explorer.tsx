@@ -112,6 +112,21 @@ export function IntegrationsCard() {
         <p className="text-white/55">A ler…</p>
       ) : (
         <>
+          {(() => {
+            const db = data.database as { configured?: boolean; test?: { ok: boolean; error?: string; users?: number; bets?: number } } | undefined;
+            return (
+              <div className="flex flex-wrap items-center gap-2">
+                {db?.configured && db.test?.ok ? <CheckCircle2 size={16} className="text-emerald-400" /> : <AlertTriangle size={16} className="text-bet62-danger" />}
+                <b>Base de dados (contas e carteira)</b>
+                <span className="text-white/55">{db?.configured ? 'DATABASE_URL definida' : 'DATABASE_URL em falta'}</span>
+                {db?.test && (
+                  <span className={cn('font-mono text-xs', db.test.ok ? 'text-emerald-400' : 'text-bet62-danger')}>
+                    {db.test.ok ? `ligada · ${db.test.users} jogadores · ${db.test.bets} bilhetes` : `erro: ${db.test.error}`}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
           <Row name="API-Football (emblemas)" conf={!!af?.configured} test={af?.test as never} />
           <p className="text-xs text-white/50">
             Pedidos hoje: {String(af?.usedToday ?? 0)}/{String(af?.dailyLimit ?? '')}
