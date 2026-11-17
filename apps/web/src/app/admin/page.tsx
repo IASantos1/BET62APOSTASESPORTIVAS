@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { BetbyExplorer, IntegrationsCard } from './Explorer';
 import { TrackerSizeCard } from './TrackerSizeCard';
+import { PlayersCard } from './PlayersCard';
 import { BETBY_CONFIG, eventTitle, feedUrl, useBetbyFeed, type BetbyFeed } from '../../lib/betby';
 
 // Diagnóstico das URLs da BETBY, lidas no navegador de quem abre esta página.
@@ -139,6 +140,7 @@ export default function AdminPage() {
               </CardContent>
             </Card>
             <IntegrationsCard />
+            <PlayersCard />
             <TrackerSizeCard />
             <BetbyExplorer />
             <FeedCard feed="live" />

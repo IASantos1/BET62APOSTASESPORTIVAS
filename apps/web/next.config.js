@@ -10,6 +10,8 @@ const nextConfig = {
     return [{ source: '/sw.js', headers: [{ key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' }] }];
   },
   output: 'standalone',
+  // O driver do PostgreSQL corre só no servidor e não deve ser empacotado pelo webpack.
+  experimental: { serverComponentsExternalPackages: ['pg'] },
   compress: true,
   reactStrictMode: true,
   eslint: {

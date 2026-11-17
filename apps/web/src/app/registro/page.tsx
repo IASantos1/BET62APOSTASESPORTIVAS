@@ -73,10 +73,24 @@ const RECOVERY_CODES = [
   'B62-VL43-8QPB',
 ];
 
+/** Idade a partir de "AAAA-MM-DD". */
+function isAdult(birth: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birth)) return false;
+  const b = new Date(`${birth}T00:00:00`);
+  const now = new Date();
+  let age = now.getFullYear() - b.getFullYear();
+  if (now.getMonth() < b.getMonth() || (now.getMonth() === b.getMonth() && now.getDate() < b.getDate())) age -= 1;
+  return age >= 18 && age <= 120;
+}
+const maxBirthdate = () => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 18);
+  return d.toISOString().slice(0, 10);
+};
+
 export default function RegistroPage() {
   const router = useRouter();
   const register = useAuthStore((s) => s.register);
-  const setCredentials = useAuthStore((s) => s.setCredentials);
   const isLoading = useAuthStore((s) => s.isLoading);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
@@ -84,6 +98,7 @@ export default function RegistroPage() {
   const [firstName, setFirstName] = React.useState('');
   const [lastName, setLastName] = React.useState('');
   const [email, setEmail] = React.useState('');
+  const [birthdate, setBirthdate] = React.useState('');
   const [nif, setNif] = React.useState('');
   const [phone, setPhone] = React.useState('');
   const [country, setCountry] = React.useState('PT');
@@ -94,7 +109,7 @@ export default function RegistroPage() {
   const [terms, setTerms] = React.useState(false);
   const [promo, setPromo] = React.useState(true);
   const [bonus, setBonus] = React.useState(true);
-  const [enable2FA, setEnable2FA] = React.useState(true);
+  const [enable2FA, setEnable2FA] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
   const [ok, setOk] = React.useState(false);
 
@@ -117,6 +132,7 @@ export default function RegistroPage() {
     firstName.trim().length >= 2 &&
     lastName.trim().length >= 2 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) &&
+    isAdult(birthdate) &&
     /^\d{9}$/.test(nif.replace(/\D/g, ''));
 
   const step2Ok =
@@ -125,7 +141,7 @@ export default function RegistroPage() {
   const next = () => {
     setErr(null);
     if (step === 1 && !step1Ok) {
-      setErr('Confirma os campos: Nome completo, e-mail válido e NIF (9 dígitos).');
+      setErr(birthdate && !isAdult(birthdate) ? 'Tens de ter 18 anos ou mais para criar conta.' : 'Confirma os campos: nome completo, e-mail válido, data de nascimento e NIF (9 dígitos).');
       return;
     }
     if (step === 2 && !step2Ok) {
@@ -146,25 +162,10 @@ export default function RegistroPage() {
     setErr(null);
     setOk(true);
     try {
-      try {
-        await register({ firstName, lastName, email, nif, phone, country, password });
-      } catch {
-        const localUser = {
-          id: 'demo-' + Date.now().toString(36),
-          email: email.trim().toLowerCase(),
-          roles: ['USER'],
-          firstName: firstName.trim() || email.split('@')[0],
-          lastName: lastName.trim() || 'BET62',
-          twoFactorEnabled: !!enable2FA,
-        };
-        const fakeToken = 'demo.' + btoa(JSON.stringify({ sub: localUser.id, iat: Date.now() }));
-        setCredentials({ user: localUser, accessToken: fakeToken, refreshToken: fakeToken });
-      }
-      setStep(3);
-      setOk(false);
-      setTimeout(() => router.push('/'), 900);
-    } catch {
-      setErr('Erro ao criar conta. Tenta novamente.');
+      await register({ firstName, lastName, email, birthdate, nif, phone, country, password });
+      router.push('/conta');
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Erro ao criar conta. Tenta novamente.');
       setOk(false);
     }
   };
@@ -332,6 +333,13 @@ export default function RegistroPage() {
                           <Mail size={14} /> E-mail
                         </label>
                         <Input type="email" placeholder="tu@bet62.pt" leftIcon={<Mail size={16} />} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-sm font-semibold text-white/85 inline-flex items-center gap-2">
+                          <Info size={14} /> Data de nascimento
+                        </label>
+                        <Input type="date" value={birthdate} max={maxBirthdate()} onChange={(e) => setBirthdate(e.target.value)} autoComplete="bday" />
+                        <p className="text-[11px] text-white/40 pl-1">Só maiores de 18 anos podem jogar.</p>
                       </div>
                       <div className="grid sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
@@ -560,7 +568,7 @@ export default function RegistroPage() {
                             </p>
                           </div>
                         </div>
-                        <Switch label="Ativar 2FA neste momento (Autenticador)" checked={enable2FA} onChange={() => setEnable2FA((v) => !v)} glow="accent" />
+                        <p className="text-xs text-white/55">A verificação em dois passos fica disponível no perfil em breve.</p>
                       </div>
 
                       {enable2FA ? (
