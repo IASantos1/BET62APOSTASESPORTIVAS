@@ -27,7 +27,7 @@ export interface BetbyOutcome {
 export type BetbyMarkets = Record<string, Record<string, Record<string, BetbyOutcome>>>;
 
 // Diagnóstico temporário e restrito ao evento em investigação. Só escreve no console do browser.
-const MARKET_AUDIT_EVENT_ID = '2733659201518837788';
+const MARKET_AUDIT_EVENT_ID = '2734060900641296402';
 function auditMarketStage(stage: string, eventId: string, markets: unknown, extra: Record<string, unknown> = {}) {
   if (eventId !== MARKET_AUDIT_EVENT_ID) return;
   const value = markets && typeof markets === 'object' ? markets as Record<string, unknown> : {};
