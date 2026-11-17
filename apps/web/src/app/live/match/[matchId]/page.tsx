@@ -655,7 +655,7 @@ function Inner({ id }: { id: string }) {
               src={tracker}
               title="Tracker do jogo"
               scrolling="no"
-              className="mx-auto block aspect-[114/100] w-full max-w-[min(100%,calc(40dvh*1.14),360px)] lg:max-w-[min(100%,calc(52vh*1.14),480px)]"
+              className="trk-frame mx-auto block"
               style={{
                 ...(cfg?.trackerMobileWidthPx ? { width: `${cfg.trackerMobileWidthPx}px`, maxWidth: '100%' } : {}),
                 ...(cfg?.trackerMobileHeightPx ? { height: `${cfg.trackerMobileHeightPx}px`, aspectRatio: 'auto' } : {}),
