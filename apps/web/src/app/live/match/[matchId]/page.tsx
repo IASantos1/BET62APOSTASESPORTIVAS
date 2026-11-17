@@ -291,7 +291,10 @@ function useEventEndpoint(id: string, feed: 'live' | 'prematch', configured: str
       for (const c of EVENT_CANDIDATES) {
         try {
           const r = await fetch(fillTemplate(c, id, feed), { cache: 'no-store' });
-          if (!r.ok) continue;
+          if (!r.ok) {
+            if (id === '2733659201518837788') console.info('[BET62 MARKET AUDIT]', { stage: 'event-endpoint-candidate-http-error', candidate: c, httpStatus: r.status });
+            continue;
+          }
           const found = extractMarkets(await r.json(), id);
           if (id === '2733659201518837788') console.info('[BET62 MARKET AUDIT]', { stage: 'event-endpoint-candidate', candidate: c, httpStatus: r.status, marketCount: found ? Object.keys(found).length : 0, marketIds: found ? Object.keys(found) : [] });
           if (found && Object.keys(found).length > baseCount) {
