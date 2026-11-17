@@ -12,7 +12,7 @@ import { fmtOdds } from './links';
 
 function SlipBody() {
   const { picks, builder, mode, stake, setMode, setStake, remove, clear, setOpen } = useSlip();
-  const { events } = useBoard();
+  const { events, loading } = useBoard();
   const [notice, setNotice] = React.useState<string | null>(null);
   const unavailable = React.useMemo(() => {
     const result = new Map<string, string>();
@@ -20,11 +20,14 @@ function SlipBody() {
     for (const pick of legs) {
       const event = events.find((item) => item.id === pick.eventId);
       const outcome = event?.markets[pick.marketId]?.[pick.variant]?.[pick.outcomeId];
-      if (outcome?.b === 1) result.set(pick.key, 'Suspenso');
+      // Jogo que saiu do quadro (terminado) ou linha já decidida/fechada: não se pode apostar.
+      if (!loading && !event) result.set(pick.key, 'Jogo terminado');
+      else if (event && !outcome) result.set(pick.key, 'Mercado fechado');
+      else if (outcome?.b === 1) result.set(pick.key, 'Suspenso');
       else if (outcome && Number(outcome.k) <= 1) result.set(pick.key, 'Indisponível');
     }
     return result;
-  }, [builder, events, picks]);
+  }, [builder, events, loading, picks]);
   const count = builder ? builder.legs.length : picks.length;
   const total = builder ? builder.odds : mode === 'multiple' ? picks.reduce((p, x) => p * x.odds, 1) : 0;
   const totalStake = builder || mode === 'multiple' ? stake : stake * picks.length;

@@ -18,6 +18,7 @@ import { cn } from '../../../../lib/utils';
 import { fillTemplate, useSiteConfig } from '../../../../lib/site-config';
 import { trackerFor } from '../../../../lib/tracker';
 import { TrackerFrame } from '../../../../components/sports/TrackerFrame';
+import { closeDecidedMarkets } from '../../../../lib/lifecycle';
 import { useSportsTracker } from '../../../../components/sports/SportsTrackerContext';
 import { BETBY_CONFIG, type BetbyMarkets } from '../../../../lib/betby';
 
@@ -614,7 +615,9 @@ function Inner({ id }: { id: string }) {
   const marketCategory = (m: string) => catOf(m, marketName(m), marketEntry(m)?.market_type);
   const share = (m: string, o: string) =>
     distribution.markets?.find((x) => String(x.market_id) === m)?.outcomes.find((x) => String(x.outcome_id) === o)?.percentage;
-  const allMarkets: BetbyMarkets = mergeMarkets(e.markets, fullMarkets);
+  // A rota de detalhe pode ainda trazer linhas já decididas: o mesmo filtro do quadro.
+  const merged = mergeMarkets(e.markets, fullMarkets);
+  const allMarkets: BetbyMarkets = live && e.sport === 'futebol' ? closeDecidedMarkets(merged, e.raw?.score) : merged;
   const ev = { ...e, markets: allMarkets };
   const markets = Object.entries(allMarkets).sort((a, b) => marketRank(a[0]) - marketRank(b[0]));
   const stats = statRows(e.statistics);

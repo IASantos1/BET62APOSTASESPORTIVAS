@@ -4,6 +4,7 @@
 // desportos e ligas do catálogo e normalizados para as páginas (Destaques, Desporto, Ao Vivo,
 // Próximos, liga). Um único provider faz as leituras; as páginas só leem o resultado.
 import * as React from 'react';
+import { closeDecidedMarkets, isEventFinished } from './lifecycle';
 import { useBetbyFeed, useBetbySide, type BetbyDictionaries, type BetbyEvent, type BetbyMarkets, type BetbySideItem } from './betby';
 import { SPORT_BY_KEY, classifyLeague, isBigTeam, sportKeyOf, sportRank, type SportKey } from './sports/catalog';
 
@@ -325,7 +326,8 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
     gameScore,
     statistics: extractStatistics(raw),
     periods: raw.score?.period_scores,
-    markets: raw.markets,
+    // Futebol ao vivo: sem as linhas que o resultado atual já decidiu (lib/lifecycle.ts).
+    markets: status === 'live' && sport === 'futebol' ? closeDecidedMarkets(raw.markets, raw.score) : raw.markets,
     betbySport: d.sport,
     raw,
   };
@@ -334,8 +336,8 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
 const SOCCER_FEED_SILENCE_MS = 5 * 60_000;
 
 function isBetbyEventEnded(raw: BetbyEvent) {
-  // O demo BETBY usa match_status 100 para ENDED; status é um campo separado.
-  return raw.state?.match_status === 100;
+  // Códigos de fim (terminado, cancelado, abandonado…): ver lib/lifecycle.ts.
+  return isEventFinished(raw.state);
 }
 
 function isSoccerFeedSilentAfterRegulation(
@@ -384,7 +386,7 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     }
     for (const raw of live.events) {
       // Não remover apenas porque status deixou de ser 1: a BETBY pode usar estados
-      // intermédios (por exemplo HT/intervalo). Só match_status=100 confirma ENDED.
+      // intermédios (por exemplo HT/intervalo). Só os códigos de fim confirmam (lib/lifecycle.ts).
       if (isBetbyEventEnded(raw)) {
         byId.delete(raw.id);
         continue;
