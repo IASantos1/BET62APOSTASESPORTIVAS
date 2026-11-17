@@ -1,135 +1,91 @@
 'use client';
 
-// Minhas Apostas: bilhetes em aberto e liquidados do jogador (servidor: /api/bets).
+// Minhas apostas (modelo do repositório bet): separadores Em aberto · Resolvidas · Cash Out ·
+// Anuladas com o número de bilhetes, e os bilhetes completos (ao vivo, cash out, partilhar).
 import * as React from 'react';
 import Link from 'next/link';
-import { Loader2, Ticket } from 'lucide-react';
-import { Panel } from './ui';
+import { Loader2 } from 'lucide-react';
 import { api } from '../../stores/auth.store';
-import { cn, formatCurrencyEUR } from '../../lib/utils';
-
-interface Leg {
-  eventId: string;
-  event: string;
-  live: boolean;
-  startTime: string | null;
-  market: string;
-  outcome: string;
-  odds: number;
-  status: string;
-}
-interface Bet {
-  id: string;
-  kind: 'single' | 'multiple';
-  stake: number;
-  odds: number;
-  potential: number;
-  status: string;
-  payout: number;
-  createdAt: string;
-  settledAt: string | null;
-  legs: Leg[];
-}
-
-const STATUS: Record<string, [string, string]> = {
-  open: ['Em aberto', 'bg-sky-500/15 text-sky-300'],
-  review: ['Em análise', 'bg-amber-500/15 text-amber-300'],
-  won: ['Ganha', 'bg-emerald-500/15 text-emerald-300'],
-  lost: ['Perdida', 'bg-rose-500/15 text-rose-300'],
-  void: ['Anulada', 'bg-white/10 text-white/70'],
-  cashout: ['Cash out', 'bg-violet-500/15 text-violet-300'],
-  rejected: ['Recusada', 'bg-white/10 text-white/70'],
-  half_won: ['Meio ganha', 'bg-emerald-500/15 text-emerald-300'],
-  half_lost: ['Meio perdida', 'bg-rose-500/15 text-rose-300'],
-};
-
-function Status({ s }: { s: string }) {
-  const [label, cls] = STATUS[s] ?? [s, 'bg-white/10'];
-  return <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold', cls)}>{label}</span>;
-}
-
-function BetCard({ b }: { b: Bet }) {
-  return (
-    <div className="space-y-3 rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
-      <div className="flex items-center justify-between gap-2 text-xs text-white/55">
-        <span>
-          #{b.id} · {b.kind === 'single' ? 'Simples' : `Múltipla (${b.legs.length})`} · {new Date(b.createdAt).toLocaleString('pt-PT')}
-        </span>
-        <Status s={b.status} />
-      </div>
-      <div className="space-y-2">
-        {b.legs.map((l, i) => (
-          <div key={i} className="flex items-start justify-between gap-3 border-b border-bet62-border/50 pb-2 text-sm last:border-0 last:pb-0">
-            <div className="min-w-0">
-              <Link href={`/live/match/${l.eventId}`} className="block truncate font-semibold hover:underline">{l.event}</Link>
-              <p className="truncate text-xs text-white/60">{l.market}: <b className="text-white/85">{l.outcome}</b>{l.live && ' · ao vivo'}</p>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-1">
-              <span className="font-mono font-bold">{l.odds.toFixed(2)}</span>
-              {b.legs.length > 1 && <Status s={l.status} />}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-3 gap-2 text-center text-xs">
-        <div><p className="text-white/55">Valor</p><p className="font-mono font-bold">{formatCurrencyEUR(b.stake)}</p></div>
-        <div><p className="text-white/55">Cotação</p><p className="font-mono font-bold">{b.odds.toFixed(2)}</p></div>
-        <div>
-          <p className="text-white/55">{b.status === 'open' || b.status === 'review' ? 'Retorno potencial' : 'Pago'}</p>
-          <p className="font-mono font-bold text-emerald-400">{formatCurrencyEUR(b.status === 'open' || b.status === 'review' ? b.potential : b.payout)}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
+import { cn } from '../../lib/utils';
+import { TicketCard, type TicketData } from './Ticket';
 
 const TABS = [
-  ['open', 'Em aberto', 'Sem apostas em aberto'],
-  ['settled', 'Resolvidas', 'Sem apostas resolvidas'],
-  ['cashout', 'Cash out', 'Sem apostas com cash out'],
-  ['void', 'Anuladas', 'Sem apostas anuladas'],
+  ['open', 'Em aberto', 'Sem apostas em aberto.'],
+  ['settled', 'Resolvidas', 'Sem apostas resolvidas.'],
+  ['cashout', 'Cash Out', 'Sem apostas com cash out.'],
+  ['void', 'Anuladas', 'Sem apostas anuladas.'],
 ] as const;
 type Tab = (typeof TABS)[number][0];
+const inTab = (b: TicketData, t: Tab) =>
+  t === 'open' ? b.status === 'open' || b.status === 'review' : t === 'cashout' ? b.status === 'cashout' : t === 'void' ? b.status === 'void' || b.status === 'rejected' : b.status === 'won' || b.status === 'lost';
 
-/** Minhas apostas: Em aberto · Resolvidas · Cash out · Anuladas. `compact`: uma coluna (painel do cabeçalho). */
+/** `compact`: uma coluna (painel do cabeçalho). */
 export function BetsSection({ compact = false, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
   const [tab, setTab] = React.useState<Tab>('open');
-  const [bets, setBets] = React.useState<Bet[] | null>(null);
+  const [bets, setBets] = React.useState<TicketData[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    setBets(null);
-    setError(null);
-    api<{ bets: Bet[] }>(`/api/bets?status=${tab}`)
-      .then((r) => setBets(r.bets))
+  const load = React.useCallback(() => {
+    api<{ bets: TicketData[] }>('/api/bets?status=all')
+      .then((r) => {
+        setBets(r.bets);
+        setError(null);
+      })
       .catch((e) => setError(e instanceof Error ? e.message : 'Erro ao carregar.'));
-  }, [tab]);
+  }, []);
+  // Bilhetes em aberto: atualizar o estado dos jogos e o cash out a cada 20 s.
+  React.useEffect(() => {
+    load();
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') load();
+    }, 20_000);
+    window.addEventListener('bet62:bets-changed', load);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener('bet62:bets-changed', load);
+    };
+  }, [load]);
+  const list = (bets ?? []).filter((b) => inTab(b, tab));
   const empty = TABS.find(([t]) => t === tab)![2];
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {TABS.map(([t, label]) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={cn('shrink-0 rounded-full border px-4 py-1.5 text-sm font-bold', tab === t ? 'border-bet62-primary bg-bet62-primary text-onbrand' : 'border-bet62-border')}
-          >
-            {label}
-          </button>
-        ))}
+      <div className="flex gap-0.5 overflow-x-auto border-b border-bet62-border [scrollbar-width:none]">
+        {TABS.map(([t, label]) => {
+          const n = (bets ?? []).filter((b) => inTab(b, t)).length;
+          return (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={cn(
+                'inline-flex shrink-0 items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-[13.5px] font-extrabold',
+                tab === t ? 'border-bet62-primary text-white' : 'border-transparent text-white/55 hover:text-white',
+              )}
+            >
+              {label}
+              {n > 0 && <b className="grid h-5 min-w-5 place-items-center rounded-full bg-bet62-primary px-1.5 text-[11px] text-onbrand">{n}</b>}
+            </button>
+          );
+        })}
       </div>
       {error ? (
         <p className="text-sm text-rose-400">{error}</p>
       ) : bets === null ? (
         <div className="grid place-items-center py-16 text-white/60"><Loader2 className="animate-spin" /></div>
-      ) : bets.length === 0 ? (
-        <Panel title={empty}>
-          <p className="flex flex-wrap items-center gap-2 text-sm text-white/60">
-            <Ticket size={16} /> Os seus bilhetes aparecem aqui.{' '}
-            <Link href="/desporto" onClick={onNavigate} className="font-semibold text-bet62-primary hover:underline">Ver jogos</Link>
-          </p>
-        </Panel>
+      ) : list.length === 0 ? (
+        <div className="rounded-[14px] border border-bet62-border bg-bet62-surface-2 px-4 py-12 text-center text-white/55">
+          <div className="text-[44px] opacity-40">🎟️</div>
+          <p className="my-2">{empty}</p>
+          {tab === 'open' && (
+            <Link href="/desporto" onClick={onNavigate} className="inline-block rounded-xl border border-bet62-border px-4 py-2 text-sm font-bold text-white hover:bg-white/5">
+              Escolher um jogo
+            </Link>
+          )}
+        </div>
       ) : (
-        <div className={cn('grid gap-3', !compact && 'md:grid-cols-2')}>{bets.map((b) => <BetCard key={b.id} b={b} />)}</div>
+        <div className={cn('grid gap-3.5', !compact && 'lg:grid-cols-2')}>
+          {list.map((b) => (
+            <TicketCard key={b.id} b={b} onChanged={load} />
+          ))}
+        </div>
       )}
     </div>
   );

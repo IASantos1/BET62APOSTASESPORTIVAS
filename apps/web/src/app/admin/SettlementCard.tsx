@@ -37,6 +37,7 @@ interface Data {
   review?: ReviewBet[];
   manual?: ManualLeg[];
   log?: { bet_id: string | null; action: string; detail: string | null; source: string; created_at: string }[];
+  legs?: { eventId: string; marketId: string; variant: string; outcomeId: string }[];
 }
 
 const box = 'space-y-3 rounded-2xl border border-bet62-border bg-bet62-surface/50 p-5 text-sm';
@@ -108,7 +109,7 @@ export function SettlementCard() {
   const pre = useBetbyFeed('prematch', 60000);
   const [data, setData] = React.useState<Data | null>(null);
   const [open, setOpen] = React.useState<string | null>(null);
-  const [sync, setSync] = React.useState<{ at: Date; sent: number; decided: number } | null>(null);
+  const [sync, setSync] = React.useState<{ at: Date; sent: number; decided: number; prices: number } | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   const load = React.useCallback(async () => {
@@ -128,24 +129,31 @@ export function SettlementCard() {
     return () => clearInterval(t);
   }, [load]);
 
-  // A cada leitura da BETBY: enviar o estado dos jogos que têm apostas em aberto.
+  // A cada leitura da BETBY: enviar o estado dos jogos com apostas em aberto e as odds atuais das
+  // seleções em aberto (o servidor usa-as no cash out; sem preço recente, o cash out fica suspenso).
   const needed = React.useMemo(() => new Set((data?.events ?? []).map((e) => e.eventId)), [data]);
   React.useEffect(() => {
-    if (!needed.size || !live.updatedAt) return;
+    if ((!needed.size && !data?.legs?.length) || !live.updatedAt) return;
     const results = live.events.filter((e) => needed.has(e.id) && e.score).map(resultOf);
-    if (!results.length) return;
+    const prices = (data?.legs ?? []).flatMap((l) => {
+      const ev = live.events.find((e) => e.id === l.eventId) ?? pre.events.find((e) => e.id === l.eventId);
+      if (!ev) return [];
+      const o = ev.markets[l.marketId]?.[l.variant]?.[l.outcomeId];
+      return [{ ...l, odds: o ? Number(o.k) : null, active: !!o && o.b !== 1 && Number(o.k) > 1 }];
+    });
+    if (!results.length && !prices.length) return;
     let stop = false;
     void (async () => {
-      const r = await fetch('/api/admin/settlement', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ results }) });
+      const r = await fetch('/api/admin/settlement', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ results, prices }) });
       const j = await r.json().catch(() => ({}));
       if (stop) return;
-      setSync({ at: new Date(), sent: results.length, decided: Number(j.decided ?? 0) });
+      setSync({ at: new Date(), sent: results.length, decided: Number(j.decided ?? 0), prices: prices.length });
       if (Number(j.decided ?? 0) > 0) void load();
     })();
     return () => {
       stop = true;
     };
-  }, [live.updatedAt, live.events, needed, load]);
+  }, [live.updatedAt, live.events, pre.events, needed, data, load]);
 
   const currentOdds = (l: ReviewLeg) => {
     const ev = live.events.find((e) => e.id === l.eventId) ?? pre.events.find((e) => e.id === l.eventId);
@@ -174,7 +182,7 @@ export function SettlementCard() {
         <span className={cn('inline-flex items-center gap-1', live.error ? 'text-rose-300' : 'text-emerald-300')}>
           <CheckCircle2 size={13} /> BETBY: {live.error ? `erro (${live.error.slice(0, 60)})` : live.updatedAt ? `lida às ${live.updatedAt.toLocaleTimeString('pt-PT')}` : 'a ligar…'}
         </span>
-        {sync && <span className="text-white/60">Último envio {sync.at.toLocaleTimeString('pt-PT')}: {sync.sent} jogos, {sync.decided} seleções decididas</span>}
+        {sync && <span className="text-white/60">Último envio {sync.at.toLocaleTimeString('pt-PT')}: {sync.sent} jogos, {sync.decided} seleções decididas, {sync.prices} odds para o cash out</span>}
         {!!data?.voided && <span className="text-amber-300">{data.voided} seleções anuladas por falta de resultado (72 h)</span>}
         {error && <span className="text-rose-300">{error}</span>}
       </div>

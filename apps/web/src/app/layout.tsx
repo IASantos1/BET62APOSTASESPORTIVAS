@@ -1,20 +1,14 @@
 import type { Metadata, Viewport } from 'next';
-import { Space_Grotesk, JetBrains_Mono } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import Providers from '../providers/Providers';
 import '../styles/theme.css';
 import { themeScript } from '../lib/theme';
 
-const spaceGrotesk = Space_Grotesk({
+// A letra do repositório bet: Inter em todo o site (os números com algarismos da mesma largura).
+const inter = Inter({
   subsets: ['latin', 'latin-ext'],
-  weight: ['300', '400', '500', '600', '700'],
+  weight: ['400', '500', '600', '700', '800', '900'],
   variable: '--font-space',
-  display: 'swap',
-});
-
-const jetBrainsMono = JetBrains_Mono({
-  subsets: ['latin', 'latin-ext'],
-  weight: ['400', '600'],
-  variable: '--font-mono',
   display: 'swap',
 });
 
@@ -101,8 +95,7 @@ export const viewport: Viewport = {
   colorScheme: 'dark light',
 };
 
-const fontVars =
-  `${spaceGrotesk.variable} ${jetBrainsMono.variable}`.trim();
+const fontVars = inter.variable;
 
 export default function RootLayout({
   children,
@@ -119,7 +112,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <style
           dangerouslySetInnerHTML={{
-            __html: `:root{--font-space:${spaceGrotesk.style.fontFamily},ui-sans-serif,system-ui;--font-mono:${jetBrainsMono.style.fontFamily},ui-monospace,SFMono-Regular;}`,
+            __html: `:root{--font-space:${inter.style.fontFamily},ui-sans-serif,system-ui;--font-mono:${inter.style.fontFamily},ui-sans-serif,system-ui;}`,
           }}
         />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />

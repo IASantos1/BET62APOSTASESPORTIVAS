@@ -44,7 +44,7 @@ CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
 CREATE TABLE IF NOT EXISTS transactions (
   id                   BIGSERIAL PRIMARY KEY,
   user_id              BIGINT      NOT NULL REFERENCES users(id),
-  type                 TEXT        NOT NULL CHECK (type IN ('deposit', 'withdrawal', 'withdrawal_refund', 'bet', 'payout', 'refund', 'admin_credit', 'admin_debit')),
+  type                 TEXT        NOT NULL CHECK (type IN ('deposit', 'withdrawal', 'withdrawal_refund', 'bet', 'payout', 'refund', 'admin_credit', 'admin_debit', 'cashout')),
   amount_cents         BIGINT      NOT NULL,
   balance_after_cents  BIGINT      NOT NULL,
   reference            TEXT,
@@ -132,6 +132,39 @@ CREATE TABLE IF NOT EXISTS settlements (
   source      TEXT        NOT NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Bilhete partilhado: link público só com o bilhete (sem dados da conta).
+ALTER TABLE bets ADD COLUMN IF NOT EXISTS share_token TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS bets_share_token ON bets(share_token) WHERE share_token IS NOT NULL;
+
+-- Odds atuais da BETBY das seleções em aberto (enviadas pela página Liquidação do admin), para o cash out.
+CREATE TABLE IF NOT EXISTS leg_prices (
+  event_id    TEXT        NOT NULL,
+  market_id   TEXT        NOT NULL,
+  variant     TEXT        NOT NULL,
+  outcome_id  TEXT        NOT NULL,
+  odds        NUMERIC(12, 3),
+  active      BOOLEAN     NOT NULL,
+  at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (event_id, market_id, variant, outcome_id)
+);
+
+-- Cada cash out pago (auditoria).
+CREATE TABLE IF NOT EXISTS cashouts (
+  id           BIGSERIAL PRIMARY KEY,
+  bet_id       BIGINT      NOT NULL REFERENCES bets(id),
+  user_id      BIGINT      NOT NULL REFERENCES users(id),
+  stake_cents  BIGINT      NOT NULL,
+  value_cents  BIGINT      NOT NULL,
+  fair_cents   BIGINT      NOT NULL,
+  seen_cents   BIGINT      NOT NULL,
+  live         BOOLEAN     NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Movimento de cash out na carteira (bases criadas antes desta versão).
+ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_type_check;
+ALTER TABLE transactions ADD CONSTRAINT transactions_type_check CHECK (type IN ('deposit', 'withdrawal', 'withdrawal_refund', 'bet', 'payout', 'refund', 'admin_credit', 'admin_debit', 'cashout'));
 `;
 
 const g = globalThis as unknown as { __bet62Pool?: Pool; __bet62Schema?: Promise<void> };

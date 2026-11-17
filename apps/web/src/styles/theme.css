@@ -39,22 +39,27 @@
   --bet62-gradient-full: linear-gradient(135deg, var(--bet62-accent) 0%, var(--bet62-primary) 50%, #ffffff 110%);
 }
 
-/* Tema claro: html.light (escolhido no cabeçalho, guardado no navegador). */
+/* Tema claro: html.light (automático das 07:00 às 20:00). Puxado para o cinzento: fundo claro,
+   cartões num cinza suave e os botões das odds num cinza um pouco mais forte. */
 html.light {
   --c-fg: 15 23 42;
   --c-fg-theme: 15 23 42;
-  --c-bg: 241 244 248;
-  --c-surface: 255 255 255;
-  --c-surface-2: 233 237 243;
-  --c-surface-3: 220 226 235;
-  --c-border: rgba(15, 23, 42, 0.12);
-  --c-odd: 232 237 245;
-  --c-odd-hover: 214 222 235;
+  --c-bg: 236 239 243;
+  --c-surface: 220 225 231;
+  --c-surface-2: 208 214 222;
+  --c-surface-3: 196 203 213;
+  --c-border: rgba(15, 23, 42, 0.14);
+  --c-odd: 197 205 215;
+  --c-odd-hover: 182 191 203;
   --c-odd-price: 15 23 42;
   color-scheme: light;
 }
 
 @layer base {
+  /* Números (odds, resultados, valores) com algarismos da mesma largura, como no repositório bet. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
   * {
     box-sizing: border-box;
   }
@@ -269,3 +274,31 @@ html.light .page-red-fade {
   background: linear-gradient(180deg, rgb(200 16 46 / 0.9) 0%, rgb(200 16 46 / 0.45) 16%, rgb(200 16 46 / 0.16) 45%, transparent 100%);
 }
 
+
+/* Relógio ao vivo (modelo do repositório bet): ponto a pulsar na cor do ao vivo. */
+.pulse-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: live-pulse 1.4s ease-out infinite;
+}
+@keyframes live-pulse {
+  0% { box-shadow: 0 0 0 0 rgb(225 29 72 / 0.6); }
+  70% { box-shadow: 0 0 0 6px rgb(225 29 72 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(225 29 72 / 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot { animation: none; }
+}
+
+/* Bilhete: cores de estado legíveis nos dois temas. */
+.tk-pending { color: #fcd34d; }
+.tk-won { color: #34d399; }
+.tk-lost { color: #fb7185; }
+.tk-gold { color: #facc15; }
+html.light .tk-pending { color: #8a5d00; }
+html.light .tk-won { color: #16823a; }
+html.light .tk-lost { color: #c23651; }
+html.light .tk-gold { color: #9a6a00; }

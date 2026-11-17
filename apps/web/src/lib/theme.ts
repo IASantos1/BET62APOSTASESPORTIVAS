@@ -18,5 +18,5 @@ export function applyAutoTheme() {
   if (c.contains('light') === light && c.contains('dark') === !light) return;
   c.toggle('light', light);
   c.toggle('dark', !light);
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#f1f4f8' : '#0a0e17');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', light ? '#eceff3' : '#0a0e17');
 }
