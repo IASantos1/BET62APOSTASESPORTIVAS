@@ -369,7 +369,7 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
       // Se uma versão falhar, nenhuma versão posterior é aplicada ou marcada como aplicada:
       // no próximo ciclo, a versão em falta e as posteriores são descarregadas novamente
       // e processadas pela ordem do índice, evitando que um delta antigo sobrescreva um novo.
-      for ( (let i = 0; i < payloads.length; i++) ) {
+      for (let i = 0; i < payloads.length; i++) {
         const payload = payloads[i];
         if (!payload) break;
         applyDictionaries(dict, payload);
