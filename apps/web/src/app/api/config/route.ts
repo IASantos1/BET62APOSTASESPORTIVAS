@@ -25,6 +25,8 @@ export async function POST(req: Request) {
     ['trackerMobileHeightPx', 220, 1000],
     ['trackerDesktopWidthPx', 240, 900],
     ['trackerDesktopHeightPx', 220, 1000],
+    ['trackerMobileScalePct', 50, 200],
+    ['trackerDesktopScalePct', 50, 200],
   ] as const;
   for (const [key, min, max] of dimensions) {
     if (!(key in body)) continue;
@@ -34,7 +36,7 @@ export async function POST(req: Request) {
     } else if (typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max) {
       patch[key] = value;
     } else {
-      return NextResponse.json({ error: `${key} deve ser um inteiro entre ${min} e ${max} px, ou null.` }, { status: 400 });
+      return NextResponse.json({ error: `${key} deve ser um inteiro entre ${min} e ${max}, ou null.` }, { status: 400 });
     }
   }
   try {

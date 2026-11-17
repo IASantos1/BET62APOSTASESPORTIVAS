@@ -17,6 +17,7 @@ import { useSlip } from '../../../../stores/slip.store';
 import { cn } from '../../../../lib/utils';
 import { fillTemplate, useSiteConfig } from '../../../../lib/site-config';
 import { trackerFor } from '../../../../lib/tracker';
+import { TrackerFrame } from '../../../../components/sports/TrackerFrame';
 import { useSportsTracker } from '../../../../components/sports/SportsTrackerContext';
 import { BETBY_CONFIG, type BetbyMarkets } from '../../../../lib/betby';
 
@@ -651,16 +652,13 @@ function Inner({ id }: { id: string }) {
       {view === 'tracker' && live && !desktopTracker && (
         <div className="-mx-3 -mt-5 border-b border-bet62-border bg-bet62-bg sm:-mx-4 lg:mx-0 lg:mt-0 lg:overflow-hidden lg:rounded-2xl lg:border">
           {tracker ? (
-            <iframe
+            <TrackerFrame
               src={tracker}
               title="Tracker do jogo"
-              scrolling="no"
-              className="trk-frame mx-auto block"
-              style={{
-                ...(cfg?.trackerMobileWidthPx ? { width: `${cfg.trackerMobileWidthPx}px`, maxWidth: '100%' } : {}),
-                ...(cfg?.trackerMobileHeightPx ? { height: `${cfg.trackerMobileHeightPx}px`, aspectRatio: 'auto' } : {}),
-              }}
-              allow="fullscreen"
+              mode="mobile"
+              widthPx={cfg?.trackerMobileWidthPx}
+              heightPx={cfg?.trackerMobileHeightPx}
+              scalePct={cfg?.trackerMobileScalePct}
             />
           ) : (
             <p className="p-4 text-center text-sm text-white/60">

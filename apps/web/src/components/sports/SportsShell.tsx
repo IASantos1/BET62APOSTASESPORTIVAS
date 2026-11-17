@@ -32,6 +32,7 @@ export function SportsShell({ children }: { children: React.ReactNode }) {
             trackerActive={trackerPanel.active}
             trackerWidthPx={config?.trackerDesktopWidthPx}
             trackerHeightPx={config?.trackerDesktopHeightPx}
+            trackerScalePct={config?.trackerDesktopScalePct}
           />
         </div>
       </SportsTrackerContext.Provider>
