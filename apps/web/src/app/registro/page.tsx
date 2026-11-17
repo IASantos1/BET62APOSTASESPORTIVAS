@@ -15,8 +15,6 @@ import {
   MapPin,
   CreditCard,
   ShieldCheck,
-  Smartphone,
-  KeyRound,
   ArrowLeft,
   Gift,
   Sparkles,
@@ -25,8 +23,6 @@ import {
   ArrowRight,
   Info,
   Check,
-  Copy,
-  QrCode,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { Footer } from '../../components/layout/Footer';
@@ -36,7 +32,6 @@ import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Switch } from '../../components/ui/Switch';
 import { Progress } from '../../components/ui/Progress';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/Tabs';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../stores/auth.store';
 
@@ -62,16 +57,6 @@ const COUNTRIES = [
   { code: 'LU', name: 'Luxemburgo', dial: '+352' },
 ];
 
-const RECOVERY_CODES = [
-  'B62-7FK2-9QX1',
-  'B62-3MN8-2PA7',
-  'B62-ZR41-HS5V',
-  'B62-9LQ2-7BCW',
-  'B62-5XP6-N3D4',
-  'B62-T8Y1-K6JM',
-  'B62-2FG7-9RZX',
-  'B62-VL43-8QPB',
-];
 
 /** Idade a partir de "AAAA-MM-DD". */
 function isAdult(birth: string) {
@@ -109,7 +94,6 @@ export default function RegistroPage() {
   const [terms, setTerms] = React.useState(false);
   const [promo, setPromo] = React.useState(true);
   const [bonus, setBonus] = React.useState(true);
-  const [enable2FA, setEnable2FA] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
   const [ok, setOk] = React.useState(false);
 
@@ -150,7 +134,12 @@ export default function RegistroPage() {
       if (!terms) return setErr('Tens de aceitar os Termos e Política de Privacidade.');
       return;
     }
-    setStep((s) => Math.min(3, (s + 1) as Step));
+    // O passo 2 cria a conta (já não há passo de 2FA).
+    if (step === 2) {
+      void submit();
+      return;
+    }
+    setStep((s) => Math.min(2, (s + 1) as Step));
   };
 
   const prev = () => {
@@ -169,16 +158,6 @@ export default function RegistroPage() {
       setOk(false);
     }
   };
-
-  const qrSecret = 'BET62 - 2FA:' + email || 'demo@bet62.pt';
-  const fakeQrCells = Array.from({ length: 21 * 21 }, (_, i) => {
-    const x = i % 21;
-    const y = Math.floor(i / 21);
-    const corner = (x < 7 && y < 7) || (x >= 14 && y < 7) || (x < 7 && y >= 14);
-    const center = Math.abs(x - 10) + Math.abs(y - 10) < 2;
-    const pseudo = ((x * 97 + y * 31) ^ (x * y)) % 3 === 0;
-    return corner || center || pseudo;
-  });
 
   return (
     <div className="min-h-screen relative overflow-hidden">
@@ -209,7 +188,7 @@ export default function RegistroPage() {
                 </span>
               </h1>
               <p className="mt-3 text-white/65 max-w-md">
-                Registo em 3 passos. Verificação instantânea, depósitos em segundos e acesso a todos
+                Registo em 2 passos. Verificação instantânea, depósitos em segundos e acesso a todos
                 os mercados desportivos e cassino.
               </p>
             </div>
@@ -218,7 +197,6 @@ export default function RegistroPage() {
               {[
                 { n: 1, t: 'Conta', d: 'Dados pessoais básicos', active: step >= 1, done: step > 1 },
                 { n: 2, t: 'Segurança', d: 'Senha forte + termos', active: step >= 2, done: step > 2 },
-                { n: 3, t: '2FA + Bónus', d: 'Ativa proteção extra', active: step >= 3, done: false },
               ].map((s) => (
                 <li key={s.n} className="flex items-center gap-3">
                   <div
@@ -290,14 +268,14 @@ export default function RegistroPage() {
                     <p className="text-sm text-white/55 uppercase tracking-[0.2em] font-semibold mb-1">Criar conta</p>
                     <h2 className="text-3xl font-black tracking-tight inline-flex items-center gap-2">
                       <UserPlus size={24} className="text-bet62-primary" />
-                      Passo {step} de 3
+                      Passo {step} de 2
                     </h2>
                   </div>
                   <div className="hidden md:flex flex-col items-end gap-1 text-[11px] text-white/50">
                     <Badge variant="green" dot className="py-0 px-2">
                       <ShieldCheck size={11} /> GDPR + LGPD
                     </Badge>
-                    <span className="font-mono">Dados cifrados · 2FA obrigatório</span>
+                    <span className="font-mono">Dados cifrados</span>
                   </div>
                 </div>
 
@@ -395,7 +373,7 @@ export default function RegistroPage() {
                           />
                         </div>
                         <p className="text-[11px] text-white/40 pl-1 inline-flex items-center gap-1">
-                          <Info size={11} /> Usado para SMS 2FA e confirmação de levantamentos.
+                          <Info size={11} /> Usado para contacto e confirmação de levantamentos.
                         </p>
                       </div>
 
@@ -542,169 +520,12 @@ export default function RegistroPage() {
                         >
                           <ArrowLeft size={14} /> Voltar
                         </button>
-                        <Button size="lg" variant="glow" className="h-14 min-w-[180px]" icon={<ArrowRight size={18} />} type="submit">
-                          Seguinte
-                        </Button>
-                      </div>
-                    </motion.form>
-                  ) : (
-                    <motion.div
-                      key="s3"
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -6 }}
-                      className="space-y-6"
-                    >
-                      <div className="rounded-2xl border border-bet62-primary/30 bg-bet62-primary/8 p-5 space-y-4">
-                        <div className="flex items-start gap-3">
-                          <div className="h-12 w-12 shrink-0 rounded-xl bg-bet62-primary text-bet62-bg inline-flex items-center justify-center">
-                            <Smartphone size={22} />
-                          </div>
-                          <div>
-                            <p className="font-bold text-xl">Ativa a proteção 2FA (recomendado)</p>
-                            <p className="text-sm text-white/70 mt-1">
-                              Adiciona uma segunda camada de segurança. A cada login vais precisar de um código
-                              gerado pelo teu telemóvel.
-                            </p>
-                          </div>
-                        </div>
-                        <p className="text-xs text-white/55">A verificação em dois passos fica disponível no perfil em breve.</p>
-                      </div>
-
-                      {enable2FA ? (
-                        <Tabs defaultValue="qr">
-                          <TabsList>
-                            <TabsTrigger value="qr"><QrCode size={14} /> Código QR</TabsTrigger>
-                            <TabsTrigger value="manual"><KeyRound size={14} /> Chave manual</TabsTrigger>
-                          </TabsList>
-                          <TabsContent value="qr">
-                            <div className="grid md:grid-cols-[auto_1fr] gap-6 items-center border border-bet62-border rounded-2xl p-5 bg-bet62-bg/40">
-                              <div className="h-44 w-44 rounded-2xl bg-white p-3 grid grid-cols-[repeat(21,1fr)] gap-0 mx-auto md:mx-0">
-                                {fakeQrCells.map((filled, i) => (
-                                  <div
-                                    key={i}
-                                    className={cn(
-                                      'aspect-square',
-                                      filled ? 'bg-bet62-bg' : 'bg-transparent',
-                                      i < 21 && (i % 21) < 21 ? '' : '',
-                                    )}
-                                  />
-                                ))}
-                              </div>
-                              <div className="space-y-3">
-                                <p className="font-bold">Digitaliza com o Google Authenticator, Authy ou 1Password.</p>
-                                <ol className="list-decimal list-inside text-sm text-white/70 space-y-1.5">
-                                  <li>Abre a aplicação no teu telemóvel</li>
-                                  <li>Toca em “Adicionar conta” → “Digitalizar código QR”</li>
-                                  <li>Aponta a câmara para o código ao lado</li>
-                                  <li>Introduz os 6 dígitos gerados no final do formulário</li>
-                                </ol>
-                                <Input
-                                  readOnly
-                                  leftIcon={<KeyRound size={14} />}
-                                  value={qrSecret}
-                                  rightIcon={
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        navigator.clipboard?.writeText(qrSecret).catch(() => {});
-                                      }}
-                                      className="p-1 text-white/50 hover:text-bet62-primary"
-                                      aria-label="Copiar chave"
-                                    >
-                                      <Copy size={14} />
-                                    </button>
-                                  }
-                                  className="font-mono"
-                                />
-                              </div>
-                            </div>
-                          </TabsContent>
-                        </Tabs>
-                      ) : null}
-
-                      <Card>
-                        <CardContent className="p-5 space-y-3">
-                          <div className="flex items-start gap-3">
-                            <div className="h-10 w-10 shrink-0 rounded-xl bg-bet62-danger/15 border border-bet62-danger/40 inline-flex items-center justify-center text-bet62-danger">
-                              <AlertCircle size={18} />
-                            </div>
-                            <div>
-                              <p className="font-bold">Códigos de recuperação</p>
-                              <p className="text-sm text-white/70 mt-0.5">
-                                Guarda estes códigos num local seguro. Usas um deles se perderes o acesso ao teu telemóvel.
-                                Cada código só pode ser utilizado uma vez.
-                              </p>
-                            </div>
-                          </div>
-                          <div className="grid sm:grid-cols-2 gap-2 font-mono text-sm">
-                            {RECOVERY_CODES.map((c) => (
-                              <div
-                                key={c}
-                                className="flex items-center justify-between rounded-lg border border-bet62-border bg-bet62-bg/60 px-3 py-2"
-                              >
-                                <span>{c}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => navigator.clipboard?.writeText(c).catch(() => {})}
-                                  className="text-white/50 hover:text-bet62-primary"
-                                  aria-label="Copiar"
-                                >
-                                  <Copy size={12} />
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="flex flex-wrap gap-2 pt-1">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              type="button"
-                              icon={<Copy size={14} />}
-                              onClick={() => navigator.clipboard?.writeText(RECOVERY_CODES.join('\n')).catch(() => {})}
-                            >
-                              Copiar todos
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              type="button"
-                              icon={<Check size={14} />}
-                            >
-                              Descarregar .txt
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      <ErrBox err={err} />
-
-                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
-                        <button
-                          type="button"
-                          onClick={prev}
-                          className="h-12 px-5 rounded-xl border border-bet62-border text-white/75 hover:text-white hover:bg-white/[0.03] transition text-sm font-semibold inline-flex items-center justify-center gap-2"
-                        >
-                          <ArrowLeft size={14} /> Voltar
-                        </button>
-                        <Button
-                          size="lg"
-                          variant="glow"
-                          className="h-14 min-w-[200px]"
-                          icon={<Sparkles size={18} />}
-                          loading={isLoading || ok}
-                          loadingText="A criar conta..."
-                          onClick={submit}
-                        >
+                        <Button size="lg" variant="glow" className="h-14 min-w-[200px]" icon={<Sparkles size={18} />} type="submit" loading={isLoading || ok} loadingText="A criar conta...">
                           Criar a minha conta
                         </Button>
                       </div>
-
-                      <p className="text-center text-[11px] text-white/40">
-                        Após confirmação, o bónus será aplicado no teu primeiro depósito elegível.
-                      </p>
-                    </motion.div>
-                  )}
+                    </motion.form>
+                  ) : null}
                 </AnimatePresence>
               </CardContent>
             </Card>
