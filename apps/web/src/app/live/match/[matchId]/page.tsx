@@ -17,6 +17,7 @@ import { useSlip } from '../../../../stores/slip.store';
 import { cn } from '../../../../lib/utils';
 import { fillTemplate, useSiteConfig } from '../../../../lib/site-config';
 import { trackerFor } from '../../../../lib/tracker';
+import { useSportsTracker } from '../../../../components/sports/SportsTrackerContext';
 import { BETBY_CONFIG, type BetbyMarkets } from '../../../../lib/betby';
 
 // Nomes curados dos mercados mais comuns (ids Betradar usados pela BETBY). Têm prioridade sobre o
@@ -499,6 +500,7 @@ function Inner({ id }: { id: string }) {
   const picks = useSlip((s) => s.picks);
   const toggle = useSlip((s) => s.toggle);
   const cfg = useSiteConfig();
+  const { setTracker } = useSportsTracker();
   const live = e?.status === 'live';
   const feed = live ? 'live' : 'prematch';
   const [descriptions, setDescriptions] = React.useState<BetbyDescriptions>({});
@@ -506,12 +508,26 @@ function Inner({ id }: { id: string }) {
   const [catalog, setCatalog] = React.useState<BetbyMarketCatalog>({});
   const [cat, setCat] = React.useState('todos');
   const [view, setView] = React.useState<View>('mercados');
+  // PC largo (com a coluna do boletim): o minicampo vai para o topo dessa coluna.
+  const [desktopTracker, setDesktopTracker] = React.useState(false);
   const endpoint = useEventEndpoint(id, feed, cfg?.eventEndpoint, cfg !== null && !!e, e ? Object.keys(e.markets).length : 0);
   const fullMarketState = useFullMarkets(id, feed, endpoint);
   const fullMarkets = fullMarketState.markets;
   const betbyStats = useBetbyStats(id, feed, cfg?.statsEndpoint, view === 'estatisticas');
   const sideWidgets = widgets.get(id);
   const tracker = live && e ? trackerFor(e.raw, e.betbySport, cfg?.trackerField, sideWidgets, true) : null;
+  React.useEffect(() => {
+    const media = window.matchMedia('(min-width: 1280px)');
+    const update = () => setDesktopTracker(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  React.useEffect(() => {
+    const active = view === 'tracker' && !!live && desktopTracker;
+    setTracker(active ? tracker : null, active);
+    return () => setTracker(null, false);
+  }, [desktopTracker, live, setTracker, tracker, view]);
   // Jogo ao vivo: o minicampo abre logo (cabeçalho do jogo → minicampo → Tracker/Live → mercados).
   const autoTracker = React.useRef(false);
   React.useEffect(() => {
@@ -681,10 +697,10 @@ function Inner({ id }: { id: string }) {
         )}
       </div>
 
-      {/* Minicampo logo abaixo do cabeçalho do jogo e acima de Tracker/Live e dos mercados.
-          Telemóvel/tablet: cola-se ao menu superior, a toda a largura e com fundo opaco, e fica fixo
-          enquanto os mercados rolam por baixo. PC: no fluxo da página, centrado. */}
-      {view === 'tracker' && live && (
+      {/* Telemóvel/tablet: minicampo logo abaixo do cabeçalho do jogo e acima de Tracker/Live e dos
+          mercados; ao rolar cola-se ao menu superior, a toda a largura e com fundo opaco.
+          PC largo: fica no topo da coluna do boletim (BetSlip), entre o menu superior e o boletim. */}
+      {view === 'tracker' && live && !desktopTracker && (
         <div className="sticky top-[calc(4rem+env(safe-area-inset-top))] z-[35] -mx-3 border-b border-bet62-border bg-bet62-bg shadow-[0_8px_18px_rgba(0,0,0,0.25)] sm:-mx-4 lg:static lg:mx-0 lg:overflow-hidden lg:rounded-2xl lg:border lg:shadow-none">
           {tracker ? (
             <iframe
