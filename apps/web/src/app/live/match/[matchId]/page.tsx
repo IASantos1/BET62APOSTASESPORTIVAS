@@ -10,7 +10,7 @@ import { EmptyPanel } from '../../../../components/sports/blocks';
 import { LeagueLogo, TeamLogo, leagueApiId } from '../../../../components/sports/Logos';
 import { OddArrow } from '../../../../components/sports/blocks';
 import { fmtWhen } from '../../../../components/sports/links';
-import { fetchBetDistribution, fetchDescriptions, type BetbyDescriptions, type BetbyDistribution } from '../../../../lib/betby';
+import { fetchBetDistribution, fetchDescriptions, fetchMarketCatalog, type BetbyDescriptions, type BetbyDistribution, type BetbyMarketCatalog, type BetbyMarketCatalogEntry } from '../../../../lib/betby';
 import { pickOf, useBoard, type BoardEvent } from '../../../../lib/board';
 import { SPORT_BY_KEY, countryLabel } from '../../../../lib/sports/catalog';
 import { useSlip } from '../../../../stores/slip.store';
@@ -20,21 +20,24 @@ import { trackerFor } from '../../../../lib/tracker';
 import { BETBY_CONFIG, type BetbyMarkets } from '../../../../lib/betby';
 import { useSportsTracker } from '../../../../components/sports/SportsTrackerContext';
 
-// Nomes dos mercados mais comuns (ids Betradar usados pela BETBY). O nome da BETBY
-// (/api/v3/descriptions) tem prioridade; depois estes; senão o id.
+// Nomes curados dos mercados mais comuns (ids Betradar usados pela BETBY). Têm prioridade sobre o
+// catálogo oficial porque já estão em português e são mais descritivos ("Total de golos" vs "Total").
+// O catálogo oficial (/api/v3/descriptions/.../markets) cobre todos os restantes; o id só aparece
+// como último recurso.
 const MARKET_NAMES: Record<string, string> = {
   '1': 'Resultado final', '8': 'Próximo golo', '10': 'Dupla hipótese', '11': 'Empate anula aposta', '14': 'Handicap europeu',
   '16': 'Handicap', '18': 'Total de golos', '19': 'Total de golos (casa)', '20': 'Total de golos (fora)', '26': 'Par / Ímpar',
   '29': 'Ambas as equipas marcam', '35': 'Resultado e ambas marcam', '37': 'Resultado e total de golos', '45': 'Resultado exato',
-  '47': 'Intervalo / Final', '60': 'Resultado 1.ª parte', '63': 'Dupla hipótese 1.ª parte', '66': 'Handicap 1.ª parte',
-  '68': 'Total de golos 1.ª parte', '69': 'Total 1.ª parte (casa)', '70': 'Total 1.ª parte (fora)', '74': 'Ambas marcam 1.ª parte',
-  '75': 'Ambas marcam 2.ª parte', '81': 'Resultado exato 1.ª parte', '83': 'Resultado 2.ª parte', '186': 'Vencedor',
+  '47': 'Intervalo / Tempo regulamentar', '60': 'Resultado 1.ª parte', '63': 'Dupla hipótese 1.ª parte', '66': 'Handicap 1.ª parte',
+  '68': 'Total de golos 1.ª parte', '69': 'Total 1.ª parte (casa)', '70': 'Total 1.ª parte (fora)', '74': '1.ª parte - Ímpar/Par',
+  '75': '1.ª parte - Ambas marcam', '81': 'Resultado exato 1.ª parte', '83': 'Resultado 2.ª parte', '186': 'Vencedor',
   '187': 'Handicap de jogos', '189': 'Total de jogos', '199': 'Resultado exato (sets)', '202': 'Vencedor do set',
   '219': 'Vencedor (incl. prolongamento)', '223': 'Handicap (incl. prolongamento)', '225': 'Total (incl. prolongamento)',
-  '340': 'Vencedor', '406': 'Vencedor (incl. prolongamento)',
+  '340': 'Vencedor (incl. super over)', '406': 'Vencedor (incl. prolongamento e penalties)',
 };
 const OUTCOME_NAMES: Record<string, string> = {
   '2': 'Empate', '9': '1X', '10': '12', '11': 'X2', '12': 'Mais', '13': 'Menos', '70': 'Ímpar', '72': 'Par', '74': 'Sim', '76': 'Não',
+  '1712': 'Empate',
   '78': '1 e Sim', '80': '1 e Não', '82': 'X e Sim', '84': 'X e Não', '86': '2 e Sim', '88': '2 e Não',
   '794': '1 e Menos', '796': '1 e Mais', '798': 'X e Menos', '800': 'X e Mais', '802': '2 e Menos', '804': '2 e Mais',
 };
@@ -63,31 +66,85 @@ const CAT_BY_NAME: [string, RegExp][] = [
   ['combinadas', /&|\band\b|\be\b.*(total|golos|ambas)/i],
   ['handicap', /handicap|spread/i],
   ['equipa', /\b(team [12]|home team|away team)\b|\(casa\)|\(fora\)|equipa/i],
-  ['golos', /goal|total|both|golo|odd|even|par|ímpar|marcam/i],
+  ['golos', /goal|total|both|golo|odd|even|\bpar\b|ímpar|marcam|marcar/i],
   ['resultados', /result|score|exact|margin|exato|resultado/i],
 ];
-const catOf = (id: string, name: string) => CAT_BY_ID[id] ?? CAT_BY_NAME.find(([, re]) => re.test(name))?.[0] ?? 'especiais';
+// Tipo de mercado (campo market_type do catálogo oficial): última rede quando o id e o nome não
+// dizem nada. Ajuda sobretudo nos mercados exóticos, que antes caíam todos em "Especiais".
+const CAT_BY_TYPE: Record<string, string> = {
+  Total: 'golos', TotalFast: 'golos', TotalEP: 'golos', Range: 'golos', OddEven: 'golos',
+  Handicap: 'handicap', HandicapFast: 'handicap', HandicapCorrectScore: 'handicap',
+  Result: 'resultados', ResultFast: 'resultados', ResultEP: 'resultados', CorrectScore: 'resultados',
+  CorrectScoreEP: 'resultados', Race: 'resultados', RacingResult: 'resultados',
+  Combo: 'combinadas',
+  PlayerProps: 'marcadores', PlayerPropsPlus: 'marcadores', PlayerPropsPlus2: 'marcadores',
+  PlayerPropsH2H: 'marcadores', PlayerPropsTotal: 'marcadores', PlayerPropsCombo: 'marcadores',
+  PlayerPropsExtra: 'marcadores', PlayerPropsYesNo: 'marcadores', PlayerPropsPrebuilt: 'marcadores',
+  PlayerPropsOddEven: 'marcadores', PlayerPropsEP: 'marcadores', PlayersH2H: 'marcadores',
+};
+const catOf = (id: string, name: string, type?: string | null) =>
+  CAT_BY_ID[id] ?? CAT_BY_NAME.find(([, re]) => re.test(name))?.[0] ?? (type ? CAT_BY_TYPE[type] : undefined) ?? 'especiais';
 
 // Mercados principais primeiro, depois pelo id.
 const ORDER = ['1', '186', '219', '340', '406', '10', '18', '29', '16', '11', '60', '68', '37', '35', '45'];
 const marketRank = (id: string) => (ORDER.includes(id) ? ORDER.indexOf(id) : 100 + Number(id) / 1e6);
 
+/** Separa os especificadores de uma variante ("total=2.5|hcp=-1") num mapa {total:"2.5", hcp:"-1"}. */
+function specifiersOf(variant: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const part of (variant || '').split('|')) {
+    const i = part.indexOf('=');
+    if (i <= 0) continue;
+    out[part.slice(0, i).trim().toLowerCase()] = part.slice(i + 1).trim();
+  }
+  return out;
+}
+
+const VARIANT_PREFIX: Record<string, string> = {
+  total: 'Linha ', hcp: 'Handicap ', setnr: 'Set ', gamenr: 'Jogo ', quarternr: 'Período ',
+  periodnr: 'Período ', goalnr: 'Golo n.º ', inningsnr: 'Innings ', matchnr: 'Jogo ',
+};
+
 function variantLabel(variant: string) {
-  // "variant=..." são ids internos (as seleções já trazem o nome); o resto são linhas como "total=2.5".
-  if (!variant || variant.startsWith('variant=') || variant === 'type=general') return '';
-  return variant
-    .split('|')
-    .map((part) =>
-      part
-        .replace(/^total=/, 'Linha ')
-        .replace(/^hcp=/, 'Handicap ')
-        .replace(/^setnr=/, 'Set ')
-        .replace(/^gamenr=/, 'Jogo ')
-        .replace(/^(quarternr|periodnr)=/, 'Período ')
-        .replace(/^goalnr=/, 'Golo n.º ')
-        .replace(/=/g, ' '),
-    )
-    .join(' · ');
+  // "type=…" e "variant=…" são ids internos (a linha visível é a mesma para todas as seleções).
+  if (!variant) return '';
+  const parts: string[] = [];
+  for (const part of variant.split('|')) {
+    const i = part.indexOf('=');
+    const key = (i > 0 ? part.slice(0, i) : part).trim().toLowerCase();
+    const value = i > 0 ? part.slice(i + 1).trim() : '';
+    if (key === 'type' || key === 'variant' || !value) continue;
+    parts.push(`${VARIANT_PREFIX[key] ?? `${key} `}${value}`);
+  }
+  return parts.join(' · ');
+}
+
+/**
+ * Preenche os marcadores dos nomes oficiais da BETBY com texto simples:
+ *   {$competitor1}/{$competitor2} (equipas), {total}/{hcp}/{+hcp}/{-hcp} (linhas do mercado),
+ *   {from}/{to}/{!goalnr}… (especificadores). O que não tiver valor é removido, para nunca
+ *   aparecer "{$competitor1}" ou "{total}" no ecrã.
+ */
+function fillBetbyText(template: string, values: Record<string, string>): string {
+  return template
+    .replace(/\{[^}]+\}/g, (token) => {
+      const raw = token.slice(1, -1).trim();
+      const key = raw.replace(/^[!%$]/, '').toLowerCase();
+      if (key === 'competitor1') return values.$competitor1 ?? '';
+      if (key === 'competitor2') return values.$competitor2 ?? '';
+      if (raw.startsWith('+') || raw.startsWith('-')) {
+        const n = Number(values[raw.slice(1).toLowerCase()]);
+        if (!Number.isFinite(n)) return '';
+        const signed = raw.startsWith('-') ? -n : n;
+        return signed > 0 ? `+${signed}` : String(signed);
+      }
+      return values[key] ?? '';
+    })
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\(\s*\)/g, '')
+    .replace(/\s*[-–]\s*$/, '')
+    .replace(/\s+([,.;:!?])/g, '$1')
+    .trim();
 }
 
 /** Ordena linhas de totais/handicaps pelo valor numérico, nunca pela ordem de chegada do JSON. */
@@ -445,6 +502,7 @@ function Inner({ id }: { id: string }) {
   const feed = live ? 'live' : 'prematch';
   const [descriptions, setDescriptions] = React.useState<BetbyDescriptions>({});
   const [distribution, setDistribution] = React.useState<BetbyDistribution>({});
+  const [catalog, setCatalog] = React.useState<BetbyMarketCatalog>({});
   const [cat, setCat] = React.useState('todos');
   const [view, setView] = React.useState<View>('mercados');
   const [desktopTracker, setDesktopTracker] = React.useState(false);
@@ -470,6 +528,10 @@ function Inner({ id }: { id: string }) {
     fetchDescriptions(id).then(setDescriptions).catch(() => setDescriptions({}));
     fetchBetDistribution(id).then(setDistribution).catch(() => setDistribution({}));
   }, [id]);
+  // Catálogo oficial de mercados da marca (nomes em português). É o mesmo para todos os jogos.
+  React.useEffect(() => {
+    fetchMarketCatalog().then(setCatalog).catch(() => setCatalog({}));
+  }, []);
 
   if (!e) return <EmptyPanel>{loading ? 'A carregar…' : 'Jogo não encontrado (pode já ter terminado).'}</EmptyPanel>;
 
@@ -479,8 +541,17 @@ function Inner({ id }: { id: string }) {
     const all = descriptions.markets ?? {};
     if (all[marketId]) return all[marketId];
     const normalized = String(Number(marketId));
-    const key = Object.keys(all).find((candidate) => /^\\d+$/.test(candidate) && String(Number(candidate)) === normalized);
+    if (!/^\d+$/.test(normalized)) return undefined;
+    const key = Object.keys(all).find((candidate) => /^\d+$/.test(candidate) && String(Number(candidate)) === normalized);
     return key ? all[key] : undefined;
+  };
+  // Entrada do catálogo oficial da marca para um mercado (nomes de mercado e de seleção).
+  const marketEntry = (marketId: string): BetbyMarketCatalogEntry | undefined => {
+    if (catalog[marketId]) return catalog[marketId];
+    const normalized = String(Number(marketId));
+    if (!/^\d+$/.test(normalized)) return undefined;
+    const key = Object.keys(catalog).find((candidate) => /^\d+$/.test(candidate) && String(Number(candidate)) === normalized);
+    return key ? catalog[key] : undefined;
   };
   const variantDescription = (marketId: string, variantId: string) => {
     const variants = marketDescription(marketId)?.variants;
@@ -493,17 +564,40 @@ function Inner({ id }: { id: string }) {
     const entries = Object.values(variants).flat();
     return entries.length === 1 ? entries[0] : undefined;
   };
-  const marketName = (m: string) => {
-    const official = marketDescription(m)?.name?.trim();
-    return official || MARKET_NAMES[m] || `Mercado ${m}`;
+  // Valores para preencher os marcadores dos nomes oficiais ({$competitor1}, {total}…).
+  const tmplValues = (variant: string) => ({
+    ...specifiersOf(variant),
+    $competitor1: e.home,
+    $competitor2: e.away,
+  });
+  // Seleções do catálogo para o mercado/variante (a variante da BETBY pode vir com "variant=").
+  const catalogOutcomes = (marketId: string, variant: string) => {
+    const variants = marketEntry(marketId)?.variants;
+    if (!variants) return undefined;
+    return (variants[variant] ?? Object.values(variants)[0])?.[0]?.outcomes;
+  };
+  const marketName = (m: string, variant = '') => {
+    const curated = MARKET_NAMES[m];
+    if (curated) return curated;
+    const template = marketEntry(m)?.name?.trim();
+    const fromCatalog = template ? fillBetbyText(template, tmplValues(variant)) : '';
+    return fromCatalog || marketDescription(m)?.name?.trim() || `Mercado ${m}`;
   };
   const outcomeName = (m: string, variant: string, o: string) => {
     const described = variantDescription(m, variant)?.outcomes.find((x) => String(x.id) === String(o))?.name;
     if (described?.trim()) return described.trim();
-    if (o === '1' || o === '4' || o === '1714') return e.home;
-    if (o === '3' || o === '5' || o === '1715') return e.away;
-    return OUTCOME_NAMES[o] ?? `Seleção ${o}`;
+    const known = OUTCOME_NAMES[o];
+    if (known) return known;
+    if (o === '1' || o === '4' || o === '1711' || o === '1714') return e.home;
+    if (o === '3' || o === '5' || o === '1713' || o === '1715') return e.away;
+    const catalogName = catalogOutcomes(m, variant)?.find((x) => String(x.id) === String(o))?.name;
+    if (catalogName?.trim()) {
+      const filled = fillBetbyText(catalogName, tmplValues(variant));
+      if (filled) return filled;
+    }
+    return `Seleção ${o}`;
   };
+  const marketCategory = (m: string) => catOf(m, marketName(m), marketEntry(m)?.market_type);
   const share = (m: string, o: string) =>
     distribution.markets?.find((x) => String(x.market_id) === m)?.outcomes.find((x) => String(x.outcome_id) === o)?.percentage;
   const allMarkets: BetbyMarkets = mergeMarkets(e.markets, fullMarkets);
@@ -512,9 +606,9 @@ function Inner({ id }: { id: string }) {
   const markets = Object.entries(allMarkets).sort((a, b) => marketRank(a[0]) - marketRank(b[0]));
   const stats = statRows(e.statistics);
   const counts = new Map<string, number>();
-  for (const [m] of markets) counts.set(catOf(m, marketName(m)), (counts.get(catOf(m, marketName(m))) ?? 0) + 1);
+  for (const [m] of markets) counts.set(marketCategory(m), (counts.get(marketCategory(m)) ?? 0) + 1);
   const activeCat = cat !== 'todos' && counts.has(cat) ? cat : 'todos';
-  const shown = activeCat === 'todos' ? markets : markets.filter(([m]) => catOf(m, marketName(m)) === activeCat);
+  const shown = activeCat === 'todos' ? markets : markets.filter(([m]) => marketCategory(m) === activeCat);
   if (id === '2734060900641296402') console.info('[BET62 MARKET AUDIT]', { stage: 'match-page-visible', activeCategory: activeCat, visibleMarketCount: shown.length, visibleMarketIds: shown.map(([marketId]) => marketId) });
   const broadcast = broadcasts.get(id)?.find((b) => b.url)?.url;
   // Estatísticas: o widget do side feed que traz um endereço próprio (Oddin/Betgenius), senão a
