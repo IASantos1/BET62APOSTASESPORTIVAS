@@ -12,7 +12,11 @@ import { SPORTS, countryLabel, type SportKey } from '../../lib/sports/catalog';
 import { cn } from '../../lib/utils';
 import { leagueHref } from './links';
 
-export function SportsSidebar({ className }: { className?: string }) {
+/**
+ * A árvore Desportos → países → ligas (e os atalhos de Explorar). No PC é a coluna da esquerda;
+ * no telemóvel aparece dentro do menu lateral (Header), com `onNavigate` a fechar o menu.
+ */
+export function SportsMenu({ onNavigate, explore = true }: { onNavigate?: () => void; explore?: boolean }) {
   const { events, leagues } = useBoard();
   const pathname = usePathname();
   const [open, setOpen] = React.useState<Record<string, boolean>>({});
@@ -31,8 +35,7 @@ export function SportsSidebar({ className }: { className?: string }) {
   };
 
   return (
-    <aside className={cn('w-60 shrink-0 border-r border-bet62-border bg-bet62-bg/60', className)}>
-      <div className="sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto p-3 space-y-1 text-sm">
+      <div className="space-y-1 text-sm">
         <p className="px-2 pt-1 pb-2 text-[11px] font-bold uppercase tracking-widest text-white/45">Desportos</p>
         {SPORTS.filter((s) => counts[s.key]).map((s) => {
           const isOpen = !!open[s.key];
@@ -49,7 +52,7 @@ export function SportsSidebar({ className }: { className?: string }) {
               </button>
               {isOpen && (
                 <div className="ml-4 border-l border-bet62-border pl-2 pb-1">
-                  <Link href={`/desporto?sport=${s.key}`} className="block rounded-md px-2 py-1.5 text-xs text-bet62-primary hover:bg-white/5">
+                  <Link href={`/desporto?sport=${s.key}`} onClick={onNavigate} className="block rounded-md px-2 py-1.5 text-xs text-bet62-primary hover:bg-white/5">
                     Todos os jogos
                   </Link>
                   {tree(s.key).map(([country, list]) => {
@@ -73,6 +76,7 @@ export function SportsSidebar({ className }: { className?: string }) {
                               <Link
                                 key={l.competition}
                                 href={href}
+                                onClick={onNavigate}
                                 className={cn(
                                   'ml-4 flex items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-white/5',
                                   pathname === href.split('?')[0] ? 'text-white' : 'text-white/60',
@@ -93,6 +97,7 @@ export function SportsSidebar({ className }: { className?: string }) {
         })}
         {!events.length && <p className="px-2 py-2 text-xs text-white/40">A carregar desportos…</p>}
 
+        {explore && <>
         <div className="my-3 border-t border-bet62-border" />
         <p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-white/45">Explorar</p>
         {[
@@ -114,6 +119,16 @@ export function SportsSidebar({ className }: { className?: string }) {
             {l.badge ? <b className="text-xs font-normal text-white/40">{l.badge}</b> : null}
           </Link>
         ))}
+        </>}
+      </div>
+  );
+}
+
+export function SportsSidebar({ className }: { className?: string }) {
+  return (
+    <aside className={cn('w-60 shrink-0 border-r border-bet62-border bg-bet62-bg/60', className)}>
+      <div className="sticky top-16 max-h-[calc(100vh-4rem)] overflow-y-auto p-3">
+        <SportsMenu />
       </div>
     </aside>
   );
