@@ -212,6 +212,38 @@ CREATE TABLE IF NOT EXISTS wh_events (
 );
 CREATE INDEX IF NOT EXISTS wh_events_status ON wh_events(status, start_time);
 
+-- Configuração guardada pelo admin (ex.: chave da conta demo BETBY para a liquidação automática).
+CREATE TABLE IF NOT EXISTS app_settings (
+  key         TEXT        PRIMARY KEY,
+  value       JSONB       NOT NULL DEFAULT '{}'::jsonb,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Liquidação automática pela BETBY: cada seleção BETBY dos nossos bilhetes é enviada à conta demo
+-- da BETBY como aposta simples (uma vez por seleção, mesmo que esteja em vários bilhetes); quando a
+-- BETBY a liquida lá (my_bets/list), as nossas seleções iguais são liquidadas cá.
+CREATE TABLE IF NOT EXISTS bb_mirror (
+  leg_key       TEXT        PRIMARY KEY,
+  event_id      TEXT        NOT NULL,
+  market_id     TEXT        NOT NULL,
+  variant       TEXT        NOT NULL DEFAULT '',
+  outcome_id    TEXT        NOT NULL,
+  odds          NUMERIC(12, 3),
+  status        TEXT        NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'placed', 'rejected', 'settled')),
+  betby_bet_id  TEXT,
+  betby_k       NUMERIC(12, 3),
+  betby_status  TEXT,
+  error         TEXT,
+  attempts      INT         NOT NULL DEFAULT 0,
+  first_bet_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  placed_at     TIMESTAMPTZ,
+  settled_at    TIMESTAMPTZ,
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS bb_mirror_status ON bb_mirror(status);
+-- Conta demo (sub da chave) onde cada aposta espelho ficou: só se lê com a chave dessa conta.
+ALTER TABLE bb_mirror ADD COLUMN IF NOT EXISTS account TEXT;
+
 -- Estado do coletor (quem recolhe, saúde das rotas, fuso estimado), partilhado entre instâncias.
 CREATE TABLE IF NOT EXISTS wh_state (
   key         TEXT        PRIMARY KEY,

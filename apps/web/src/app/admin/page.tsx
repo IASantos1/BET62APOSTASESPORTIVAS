@@ -39,6 +39,7 @@ import { BetbyExplorer, IntegrationsCard } from './Explorer';
 import { TrackerSizeCard } from './TrackerSizeCard';
 import { PlayersCard } from './PlayersCard';
 import { SettlementCard } from './SettlementCard';
+import { MirrorCard } from './MirrorCard';
 import { WinHouseCard } from './WinHouseCard';
 import { BETBY_CONFIG, eventTitle, feedUrl, useBetbyFeed, type BetbyFeed } from '../../lib/betby';
 import { cn, formatCurrencyEUR as eur } from '../../lib/utils';
@@ -431,7 +432,8 @@ export default function AdminPage() {
           {tab === 'bets' && <BetsTab reloadKey={reloadKey} />}
           {/* A Liquidação fica sempre montada (escondida nas outras secções): é ela que lê a BETBY
               e envia resultados e odds ao servidor enquanto o painel está aberto. */}
-          <div className={tab === 'settlement' ? '' : 'hidden'}>
+          <div className={tab === 'settlement' ? 'space-y-6' : 'hidden'}>
+            <MirrorCard />
             <SettlementCard />
           </div>
           {tab === 'integrations' && (
