@@ -173,7 +173,7 @@ export function EventRow({ e }: { e: BoardEvent }) {
       <Link href={matchHref(e.id, live)} className="contents">
         <div className="text-xs leading-[1.4] text-white/70">
           {live ? <LiveClock e={e} /> : <span className="whitespace-pre-line">{fmtWhen(e.startTime).replace(', ', '\n')}</span>}
-          <SourceBadge source={e.source ?? 'betby'} linked={!!e.betbyId} className="mt-1" />
+          <SourceBadge source={e.source ?? 'betby'} linked={!!e.betbyId} className="mt-1 flex w-fit" />
         </div>
         {tennis ? (
           <TennisScoreTable

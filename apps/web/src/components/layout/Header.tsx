@@ -1,5 +1,6 @@
 'use client';
 
+import { SportsMenu } from '../sports/SportsSidebar';
 import * as React from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -310,7 +311,7 @@ export function Header() {
                   <X size={20} />
                 </button>
               </div>
-              <nav className="flex-1 p-3 flex flex-col gap-1">
+              <nav className="flex-1 overflow-y-auto overscroll-contain p-3 flex flex-col gap-1">
                 {NAV.map((n) => (
                   <Link
                     key={n.href}
@@ -327,6 +328,10 @@ export function Header() {
                     {n.badge ? <Badge variant="pink" className="ml-auto py-0 text-[10px]">{n.badge}</Badge> : null}
                   </Link>
                 ))}
+                {/* Como no PC: desportos → países → ligas. */}
+                <div className="mt-2 border-t border-bet62-border pt-3">
+                  <SportsMenu onNavigate={() => setMobileOpen(false)} explore={false} />
+                </div>
               </nav>
               <div className="p-4 border-t border-bet62-border space-y-2">
                 <Button variant="primary" size="lg" className="w-full uppercase font-bold tracking-wider" asChild>

@@ -450,7 +450,9 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     }
     // WinHouse (modo do admin): os jogos dele mandam; a BETBY liga-se a eles e completa. Sem
     // WinHouse (desligado, coletor parado ou lista vazia) o site fica só com a BETBY.
-    const mode: OddsMode = wh.enabled && wh.healthy && wh.events.length ? wh.mode : 'betby';
+    // "Só WinHouse" mostra só o WinHouse mesmo sem jogos naquele momento; a BETBY só entra
+    // como reserva quando o WinHouse está desligado ou em baixo (healthy = falso).
+    const mode: OddsMode = wh.enabled && wh.healthy ? wh.mode : 'betby';
     // Até o WinHouse responder pela 1.ª vez (máx. 4 s) o quadro espera: sem isto via-se a BETBY
     // e logo a seguir os mesmos jogos trocados pelos do WinHouse.
     let list = wh.ready ? [...byId.values()] : [];
