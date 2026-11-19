@@ -423,7 +423,7 @@ function isSoccerFeedSilentAfterRegulation(
 export const byPriority = (a: BoardEvent, b: BoardEvent) => a.tier - b.tier || (a.startTime ?? 0) - (b.startTime ?? 0);
 
 export function BoardProvider({ children }: { children: React.ReactNode }) {
-  const live = useBetbyFeed('live', 4000);
+  const live = useBetbyFeed('live', 2000);
   const pre = useBetbyFeed('prematch', 30000);
   const side = useBetbySide(20000);
   const wh = useWinHouseFeed(10000);

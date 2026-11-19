@@ -12,7 +12,7 @@ import * as React from 'react';
 // Cada delta traz só o que mudou: state (estado/relógio), score (placar/parciais) e
 // markets { idMercado: { variante: { idSeleção: { k: odd, b: 1 = bloqueada } } } }; null remove.
 
-import { applyDeltas, applyDictionaries, emptyDictionaries, versionsOf, type BetbyDictionaries, type BetbyEvent, type BetbyFeed, type BetbyMarkets, type BetbyOutcome } from './betby-core';
+import { applyDeltas, applyDictionaries, emptyDictionaries, rebuildFromSnapshots, versionsOf, type BetbyDictionaries, type BetbyEvent, type BetbyFeed, type BetbyMarkets, type BetbyOutcome } from './betby-core';
 export * from './betby-core';
 
 export const BETBY_CONFIG = {
@@ -285,15 +285,12 @@ async function fetchVersions(feed: BetbyFeed, versions: string[], signal: AbortS
  * Só as versões novas do índice são descarregadas (as já aplicadas não mudam), em paralelo; o último
  * quadro fica guardado no navegador para a página seguinte abrir logo com ele.
  */
-const FULL_SYNC_MS = 60_000;
-
 export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
   const storeRef = React.useRef(new Map<string, BetbyEvent>());
   const lastEventUpdatesRef = React.useRef(new Map<string, number>());
   const dictRef = React.useRef(emptyDictionaries());
   const appliedRef = React.useRef(new Set<string>());
   const busyRef = React.useRef(false);
-  const fullSyncRef = React.useRef(0);
   const [events, setEvents] = React.useState<BetbyEvent[]>([]);
   const [lastEventUpdates, setLastEventUpdates] = React.useState<Map<string, number>>(new Map());
   const [dictionaries, setDictionaries] = React.useState<BetbyDictionaries>(emptyDictionaries());
@@ -336,29 +333,17 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
       applyDictionaries(dict, index);
       applyDeltas(store, index, lastEventUpdatesRef.current);
       const versions = versionsOf(index);
-      // A cada 60 s todas as versões do índice são lidas de novo, pela ordem do índice: se a BETBY
-      // muda o conteúdo de uma versão sem lhe mudar o número, as odds não ficam presas. Aplicar de
-      // novo as mesmas versões pela mesma ordem dá o mesmo resultado (cada campo fica com o último).
-      const full = Date.now() - fullSyncRef.current >= FULL_SYNC_MS;
-      const fresh = full ? versions : versions.filter((v) => !appliedRef.current.has(v));
-      const { payloads, failures } = await fetchVersions(feed, fresh, controller.signal);
-      // Aplicar apenas o prefixo contínuo de versões válidas.
-      // Se uma versão falhar, nenhuma versão posterior é aplicada ou marcada como aplicada:
-      // no próximo ciclo, a versão em falta e as posteriores são descarregadas novamente
-      // e processadas pela ordem do índice, evitando que um delta antigo sobrescreva um novo.
-      for (let i = 0; i < payloads.length; i++) {
-        const payload = payloads[i];
-        if (!payload) break;
-        applyDictionaries(dict, payload);
-        applyDeltas(store, payload, lastEventUpdatesRef.current);
-        appliedRef.current.add(fresh[i]);
+      // Fotografias: só quando o índice traz versões novas é que se lê de novo (e o quadro é refeito
+      // com elas todas). Se uma versão falhar, o quadro anterior fica até à próxima leitura.
+      const same = versions.length === appliedRef.current.size && versions.every((v) => appliedRef.current.has(v));
+      const { payloads, failures } = same ? { payloads: [], failures: [] as string[] } : await fetchVersions(feed, versions, controller.signal);
+      if (!same && !failures.length) {
+        for (const p of payloads) applyDictionaries(dict, p);
+        storeRef.current = rebuildFromSnapshots(store, payloads as Record<string, unknown>[], lastEventUpdatesRef.current);
+        appliedRef.current = new Set(versions);
       }
-      if (full && !failures.length) fullSyncRef.current = Date.now();
-      // Esquece versões que já saíram do índice (a lista não cresce para sempre).
-      const current = new Set(versions);
-      for (const v of appliedRef.current) if (!current.has(v)) appliedRef.current.delete(v);
       // Só expira após uma leitura bem-sucedida: uma falha temporária da BETBY não limpa o quadro.
-      if (feed === 'live') pruneStaleLiveEvents(store, lastEventUpdatesRef.current);
+      if (feed === 'live') pruneStaleLiveEvents(storeRef.current, lastEventUpdatesRef.current);
       publish();
       setLastEventUpdates(new Map(lastEventUpdatesRef.current));
       setUpdatedAt(new Date());
@@ -369,7 +354,7 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
       );
       writeSnapshot(feed, {
         at: Date.now(),
-        events: [...store.entries()],
+        events: [...storeRef.current.entries()],
         lastEventUpdates: [...lastEventUpdatesRef.current],
         dict,
         applied: [...appliedRef.current],
