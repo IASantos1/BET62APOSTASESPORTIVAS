@@ -40,6 +40,7 @@ import { TrackerSizeCard } from './TrackerSizeCard';
 import { PlayersCard } from './PlayersCard';
 import { SettlementCard } from './SettlementCard';
 import { MirrorCard } from './MirrorCard';
+import { FeedDiagCard } from './FeedDiagCard';
 import { WinHouseCard } from './WinHouseCard';
 import { BETBY_CONFIG, eventTitle, feedUrl, useBetbyFeed, type BetbyFeed } from '../../lib/betby';
 import { cn, formatCurrencyEUR as eur } from '../../lib/utils';
@@ -448,6 +449,7 @@ export default function AdminPage() {
           {tab === 'tracker' && <TrackerSizeCard key={reloadKey} />}
           {tab === 'betby' && (
             <>
+              <FeedDiagCard />
               <BetbyExplorer />
               <FeedCard feed="live" />
               <FeedCard feed="prematch" />

@@ -5,7 +5,7 @@
 // Próximos, liga). Um único provider faz as leituras; as páginas só leem o resultado.
 import * as React from 'react';
 import { closeDecidedMarkets, isEventFinished } from './lifecycle';
-import { useBetbyFeed, useBetbySide, type BetbyDictionaries, type BetbyEvent, type BetbyMarkets, type BetbySideItem } from './betby';
+import { oddsStale, useBetbyFeed, useBetbySide, type BetbyDictionaries, type BetbyEvent, type BetbyMarkets, type BetbySideItem } from './betby';
 import { SPORT_BY_KEY, classifyLeague, isBigTeam, sportKeyOf, sportRank, type SportKey } from './sports/catalog';
 import { linkEvents, mergeLinked, useWinHouseFeed, whToBoard, type OddsMode } from './winhouse-board';
 
@@ -323,6 +323,18 @@ function clockTimestamp(ts: unknown) {
   return Math.abs(Date.now() - ms) < 6 * 3600_000 ? ms : undefined;
 }
 
+export function suspendIfStale(markets: BetbyMarkets, raw: BetbyEvent): BetbyMarkets {
+  if (!oddsStale(raw)) return markets;
+  const out: BetbyMarkets = {};
+  for (const [m, variants] of Object.entries(markets)) {
+    out[m] = {};
+    for (const [v, outcomes] of Object.entries(variants)) {
+      out[m][v] = Object.fromEntries(Object.entries(outcomes).map(([o, x]) => [o, { ...x, b: 1 }]));
+    }
+  }
+  return out;
+}
+
 function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: BetbyDictionaries): BoardEvent | null {
   const d = raw.desc;
   if (!d || d.virtual || !d.competitors || d.competitors.length < 2) return null;
@@ -369,7 +381,9 @@ function toBoardEvent(raw: BetbyEvent, status: 'live' | 'scheduled', dict: Betby
     statistics: extractStatistics(raw),
     periods: raw.score?.period_scores,
     // Futebol ao vivo: sem as linhas que o resultado atual já decidiu (lib/lifecycle.ts).
-    markets: status === 'live' && sport === 'futebol' ? closeDecidedMarkets(raw.markets, raw.score) : raw.markets,
+    // Ao vivo, odds mais antigas do que o placar (golo sem odds novas) ficam suspensas: nunca se
+    // aposta numa odd de antes do golo.
+    markets: status === 'live' ? suspendIfStale(sport === 'futebol' ? closeDecidedMarkets(raw.markets, raw.score) : raw.markets, raw) : raw.markets,
     betbySport: d.sport,
     raw,
     source: 'betby',

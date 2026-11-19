@@ -58,6 +58,10 @@ export interface BetbyEvent {
     [key: string]: unknown;
   };
   markets: BetbyMarkets;
+  /** quando chegaram odds novas deste jogo (ms; aqui, não da BETBY) */
+  marketsAt?: number;
+  /** quando o placar mudou pela última vez (ms) */
+  scoreChangedAt?: number;
 }
 
 interface Delta {
@@ -226,6 +230,14 @@ export function applyDictionaries(dict: BetbyDictionaries, payload: Record<strin
   }
 }
 
+/** Tolerância entre o placar e as odds novas (a BETBY manda-os em atualizações separadas). */
+const SCORE_ODDS_GRACE_MS = 3_000;
+
+/** Ao vivo: odds de antes do último golo (o placar mudou e não chegaram odds novas) → suspensas. */
+export function oddsStale(raw: Pick<BetbyEvent, 'marketsAt' | 'scoreChangedAt'>) {
+  return !!raw.scoreChangedAt && (!raw.marketsAt || raw.marketsAt < raw.scoreChangedAt - SCORE_ODDS_GRACE_MS);
+}
+
 export function applyDeltas(
   store: Map<string, BetbyEvent>,
   payload: Record<string, unknown> | null,
@@ -244,20 +256,32 @@ export function applyDeltas(
     const current: BetbyEvent = store.get(id) ?? { id, markets: {} };
     if (raw.desc) current.desc = { ...current.desc, ...raw.desc };
     if (raw.state) current.state = { ...current.state, ...raw.state };
-    if (raw.score) current.score = { ...current.score, ...raw.score };
+    if (raw.score) {
+      const before = `${current.score?.home_score ?? ''}-${current.score?.away_score ?? ''}`;
+      current.score = { ...current.score, ...raw.score };
+      const after = `${current.score?.home_score ?? ''}-${current.score?.away_score ?? ''}`;
+      // Golo (ou correção do placar): as odds anteriores deixam de valer até chegarem novas.
+      if (before !== '-' && before !== after) current.scoreChangedAt = Date.now();
+    }
     if (raw.markets) {
+      // "Odds novas" só quando alguma muda de facto (uma releitura das mesmas versões não conta).
+      let changed = false;
       for (const [marketId, variants] of Object.entries(raw.markets)) {
         if (variants === null) {
+          if (current.markets[marketId]) changed = true;
           delete current.markets[marketId];
           continue;
         }
-        const merged = { ...current.markets[marketId] };
+        const before = current.markets[marketId];
+        const merged = { ...before };
         for (const [variant, outcomes] of Object.entries(variants)) {
           if (outcomes === null) delete merged[variant];
           else merged[variant] = outcomes;
         }
+        if (!changed && JSON.stringify(before ?? null) !== JSON.stringify(merged)) changed = true;
         current.markets[marketId] = merged;
       }
+      if (changed) current.marketsAt = Date.now();
     }
     store.set(id, current);
   }
@@ -391,12 +415,15 @@ async function fetchVersions(feed: BetbyFeed, versions: string[], signal: AbortS
  * Só as versões novas do índice são descarregadas (as já aplicadas não mudam), em paralelo; o último
  * quadro fica guardado no navegador para a página seguinte abrir logo com ele.
  */
+const FULL_SYNC_MS = 60_000;
+
 export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
   const storeRef = React.useRef(new Map<string, BetbyEvent>());
   const lastEventUpdatesRef = React.useRef(new Map<string, number>());
   const dictRef = React.useRef(emptyDictionaries());
   const appliedRef = React.useRef(new Set<string>());
   const busyRef = React.useRef(false);
+  const fullSyncRef = React.useRef(0);
   const [events, setEvents] = React.useState<BetbyEvent[]>([]);
   const [lastEventUpdates, setLastEventUpdates] = React.useState<Map<string, number>>(new Map());
   const [dictionaries, setDictionaries] = React.useState<BetbyDictionaries>(emptyDictionaries());
@@ -439,7 +466,11 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
       applyDictionaries(dict, index);
       applyDeltas(store, index, lastEventUpdatesRef.current);
       const versions = versionsOf(index);
-      const fresh = versions.filter((v) => !appliedRef.current.has(v));
+      // A cada 60 s todas as versões do índice são lidas de novo, pela ordem do índice: se a BETBY
+      // muda o conteúdo de uma versão sem lhe mudar o número, as odds não ficam presas. Aplicar de
+      // novo as mesmas versões pela mesma ordem dá o mesmo resultado (cada campo fica com o último).
+      const full = Date.now() - fullSyncRef.current >= FULL_SYNC_MS;
+      const fresh = full ? versions : versions.filter((v) => !appliedRef.current.has(v));
       const { payloads, failures } = await fetchVersions(feed, fresh, controller.signal);
       // Aplicar apenas o prefixo contínuo de versões válidas.
       // Se uma versão falhar, nenhuma versão posterior é aplicada ou marcada como aplicada:
@@ -452,6 +483,7 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
         applyDeltas(store, payload, lastEventUpdatesRef.current);
         appliedRef.current.add(fresh[i]);
       }
+      if (full && !failures.length) fullSyncRef.current = Date.now();
       // Esquece versões que já saíram do índice (a lista não cresce para sempre).
       const current = new Set(versions);
       for (const v of appliedRef.current) if (!current.has(v)) appliedRef.current.delete(v);

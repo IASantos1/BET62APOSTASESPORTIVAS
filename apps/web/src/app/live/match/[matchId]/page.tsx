@@ -11,7 +11,7 @@ import { LeagueLogo, TeamLogo, leagueApiId } from '../../../../components/sports
 import { OddArrow } from '../../../../components/sports/blocks';
 import { fmtWhen } from '../../../../components/sports/links';
 import { fetchBetDistribution, fetchDescriptions, fetchMarketCatalog, type BetbyDescriptions, type BetbyDistribution, type BetbyMarketCatalog, type BetbyMarketCatalogEntry } from '../../../../lib/betby';
-import { betbyIdOf, pickOf, useBoard, type BoardEvent } from '../../../../lib/board';
+import { betbyIdOf, pickOf, suspendIfStale, useBoard, type BoardEvent } from '../../../../lib/board';
 import { isWhId, useWinHouseEvent } from '../../../../lib/winhouse-board';
 import { SourceBadge } from '../../../../components/sports/SourceBadge';
 import { SPORT_BY_KEY, countryLabel } from '../../../../lib/sports/catalog';
@@ -670,6 +670,8 @@ function Inner({ id }: { id: string }) {
     }
   } else {
     merged = mergeMarkets(e.markets, fullMarkets);
+    // Golo sem odds novas: também os mercados completos ficam suspensos (não sobrepõem o bloqueio).
+    if (live && e.raw) merged = suspendIfStale(merged, e.raw);
   }
   const liveScore = isWh && e.score ? ({ home_score: Number(e.score.home), away_score: Number(e.score.away) } as NonNullable<typeof e.raw>['score']) : e.raw?.score;
   const allMarkets: BetbyMarkets = live && e.sport === 'futebol' ? closeDecidedMarkets(merged, liveScore) : merged;
