@@ -75,6 +75,22 @@ export function MirrorCard() {
   const [busy, setBusy] = React.useState(false);
   const [test, setTest] = React.useState<Json | null>(null);
   const [testing, setTesting] = React.useState(false);
+  const [disc, setDisc] = React.useState<Json | null>(null);
+  const [discovering, setDiscovering] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+  const runDiscover = async () => {
+    setDiscovering(true);
+    setDisc(null);
+    setCopied(false);
+    try {
+      const r = await fetch('/api/admin/betby-mirror', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'discoverToken' }) });
+      setDisc(r.ok ? await r.json() : { error: `HTTP ${r.status}` });
+    } catch (e) {
+      setDisc({ error: (e as Error).message });
+    } finally {
+      setDiscovering(false);
+    }
+  };
   const runTest = async () => {
     setTesting(true);
     setTest(null);
@@ -172,6 +188,72 @@ export function MirrorCard() {
                 {!r.ok && r.bodyStart && <div className="mt-1 break-all font-mono text-white/45">{r.bodyStart}</div>}
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* Descobrir como o demo da BETBY cria a chave (para a renovar sozinha) */}
+      <div className="rounded-lg border border-bet62-border bg-bet62-surface-2 p-3 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="font-semibold">Descobrir como a BETBY cria a chave</span>
+          <button onClick={() => void runDiscover()} disabled={discovering} className="inline-flex items-center gap-2 rounded-lg border border-bet62-border px-3 py-2 text-xs font-bold disabled:opacity-50">
+            {discovering ? <Loader2 size={14} className="animate-spin" /> : <KeyRound size={14} />} {discovering ? 'A ler o site demo… (até 1 min)' : 'Descobrir'}
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-white/45">Só leitura: o servidor abre demo.betby.com e os scripts que ele carrega e procura os pedidos de login, sessão e token.</p>
+        {disc && (
+          <div className="mt-3 space-y-3 text-xs">
+            {disc.error ? (
+              <p className="text-bet62-primary">{disc.error}</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-white/60">{(disc.visited as Json[]).length} ficheiros lidos · {(disc.routes as Json[]).length} rotas · {(disc.hits as Json[]).length} trechos de código</span>
+                  <button
+                    onClick={() => {
+                      void navigator.clipboard.writeText(JSON.stringify(disc, null, 2)).then(() => setCopied(true));
+                    }}
+                    className="rounded-md bg-bet62-primary px-2 py-1 font-bold text-onbrand"
+                  >
+                    {copied ? 'Copiado ✓' : 'Copiar tudo (para enviar)'}
+                  </button>
+                </div>
+                <div>
+                  <div className="mb-1 font-semibold text-white/70">Rotas de login / sessão / token</div>
+                  <div className="max-h-56 divide-y divide-bet62-border/60 overflow-auto rounded-md bg-black/20">
+                    {(disc.routes as Json[]).length ? (
+                      (disc.routes as Json[]).map((r) => (
+                        <div key={r.route} className="px-3 py-1.5">
+                          <span className="break-all font-mono text-sky-300">{r.route}</span>
+                          <span className="ml-2 text-white/35">{(r.where as string[]).join(', ')}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="px-3 py-2 text-white/45">Nenhuma encontrada.</p>
+                    )}
+                  </div>
+                </div>
+                <details>
+                  <summary className="cursor-pointer font-semibold text-white/70">Código à volta de token / Bearer ({(disc.hits as Json[]).length})</summary>
+                  <div className="mt-1 max-h-72 space-y-1 overflow-auto">
+                    {(disc.hits as Json[]).map((h, i) => (
+                      <div key={i} className="rounded-md bg-black/20 px-3 py-1.5">
+                        <div className="text-white/40">{h.where} · <b className="text-amber-300">{h.match}</b></div>
+                        <div className="break-all font-mono text-[11px] text-white/60">{h.around}</div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+                <details>
+                  <summary className="cursor-pointer font-semibold text-white/70">Ficheiros lidos ({(disc.visited as Json[]).length})</summary>
+                  <div className="mt-1 max-h-48 overflow-auto font-mono text-[11px] text-white/50">
+                    {(disc.visited as Json[]).map((v, i) => (
+                      <div key={i}>{v.status ?? '—'} · {v.bytes} B · {v.url}{v.error ? ` · ${v.error}` : ''}</div>
+                    ))}
+                  </div>
+                </details>
+              </>
+            )}
           </div>
         )}
       </div>

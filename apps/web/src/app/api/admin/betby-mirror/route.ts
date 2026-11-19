@@ -71,6 +71,10 @@ export const POST = route(async (req: Request) => {
     return json({ ok: true, enabled: s.enabled, stake: s.stake, hasToken: !!s.token, tokenInfo: tokenInfo(s.token) });
   }
   if (b.action === 'serverTest') return json(await serverTest());
+  if (b.action === 'discoverToken') {
+    const { discoverBetbyToken } = await import('../../../../lib/server/betby-discover');
+    return json(await discoverBetbyToken());
+  }
   if (b.action === 'placed') {
     const clean = <T,>(v: unknown) => (Array.isArray(v) ? (v.slice(0, 100) as T[]) : []);
     const accepted = clean<{ key: unknown; betId: unknown }>(b.accepted)
