@@ -4,7 +4,6 @@
 // agrupados por liga, 8 ligas de cada vez (como no outro projeto) para a página não pesar.
 import * as React from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { RefreshCw } from 'lucide-react';
 import { SportsShell } from './SportsShell';
 import { CompetitionGroups, EmptyPanel, LeagueCards, SportTiles } from './blocks';
 import { useBoard, type BoardEvent } from '../../lib/board';
@@ -13,15 +12,15 @@ const BLOCK = 8;
 
 interface Props {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   filter: (e: BoardEvent) => boolean;
   basePath: string;
   emptyText: string;
   showLeagues?: boolean;
 }
 
-function Inner({ title, subtitle, filter, basePath, emptyText, showLeagues }: Props) {
-  const { events, leagues, loading, error, updatedAt, reload } = useBoard();
+function Inner({ title, filter, basePath, emptyText, showLeagues }: Props) {
+  const { events, leagues, loading, error } = useBoard();
   const router = useRouter();
   const sport = useSearchParams().get('sport') ?? '';
   const [shown, setShown] = React.useState(BLOCK);
@@ -32,18 +31,7 @@ function Inner({ title, subtitle, filter, basePath, emptyText, showLeagues }: Pr
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-black tracking-tight">{title}</h1>
-          <p className="mt-1 text-sm text-white/55">
-            {subtitle}
-            {updatedAt && <span className="text-white/35"> · atualizado às {updatedAt.toLocaleTimeString('pt-PT')}</span>}
-          </p>
-        </div>
-        <button onClick={reload} className="flex items-center gap-2 rounded-xl border border-bet62-border px-3 py-2 text-sm text-white/70 hover:text-white">
-          <RefreshCw size={14} /> Atualizar
-        </button>
-      </div>
+      <h1 className="text-2xl md:text-3xl font-black tracking-tight">{title}</h1>
 
       <SportTiles events={all} active={sport} onPick={(s) => router.replace(s ? `${basePath}?sport=${s}` : basePath, { scroll: false })} />
       {showLeagues && <LeagueCards leagues={leagues} sport={sport} />}
