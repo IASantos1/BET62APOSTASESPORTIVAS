@@ -73,6 +73,20 @@ export function MirrorCard() {
   const [stake, setStake] = React.useState('');
   const [msg, setMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [test, setTest] = React.useState<Json | null>(null);
+  const [testing, setTesting] = React.useState(false);
+  const runTest = async () => {
+    setTesting(true);
+    setTest(null);
+    try {
+      const r = await fetch('/api/admin/betby-mirror', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'serverTest' }) });
+      setTest(r.ok ? await r.json() : { verdict: `Erro HTTP ${r.status}`, results: [] });
+    } catch (e) {
+      setTest({ verdict: `Sem ligação ao nosso servidor: ${(e as Error).message}`, results: [] });
+    } finally {
+      setTesting(false);
+    }
+  };
 
   const load = React.useCallback(async () => {
     const r = await fetch('/api/admin/betby-mirror', { cache: 'no-store' }).catch(() => null);
@@ -132,6 +146,35 @@ export function MirrorCard() {
           )}
         </div>
       )}
+
+      {/* Teste: o servidor (Railway) consegue falar com a BETBY? */}
+      <div className="rounded-lg border border-bet62-border bg-bet62-surface-2 p-3 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="font-semibold">Testar a BETBY a partir do servidor</span>
+          <button onClick={() => void runTest()} disabled={testing} className="inline-flex items-center gap-2 rounded-lg bg-bet62-primary px-3 py-2 text-xs font-bold text-onbrand disabled:opacity-50">
+            {testing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />} Testar agora
+          </button>
+        </div>
+        <p className="mt-1 text-[11px] text-white/45">Só leitura: o servidor pede o feed de jogos e as apostas da conta demo. Nenhuma aposta é feita.</p>
+        {test && (
+          <div className="mt-3 space-y-2">
+            <p className={cn('flex items-start gap-2 text-sm font-semibold', test.serverWorks ? 'text-emerald-500' : 'text-amber-400')}>
+              {test.serverWorks ? <CheckCircle2 size={16} className="mt-0.5 shrink-0" /> : <AlertTriangle size={16} className="mt-0.5 shrink-0" />}
+              {test.verdict}
+            </p>
+            {(test.results as Json[]).map((r) => (
+              <div key={r.name} className="rounded-md bg-black/20 px-3 py-2 text-xs">
+                <div className="flex flex-wrap items-center gap-x-3">
+                  <span className={cn('h-2 w-2 rounded-full', r.ok ? 'bg-emerald-500' : 'bg-bet62-primary')} />
+                  <span className="font-semibold">{r.name}</span>
+                  <span className="font-mono text-white/60">{r.status ? `HTTP ${r.status}` : 'sem resposta'} · {r.ms} ms{r.reason ? ` · bb-rsn ${r.reason}` : ''}</span>
+                </div>
+                {!r.ok && r.bodyStart && <div className="mt-1 break-all font-mono text-white/45">{r.bodyStart}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Chave */}
       <div className="rounded-lg border border-bet62-border bg-bet62-surface-2 p-3 text-sm">
