@@ -11,109 +11,29 @@
 import * as React from 'react';
 import { AlertTriangle, CheckCircle2, KeyRound, Loader2, RefreshCw } from 'lucide-react';
 import { BETBY_CONFIG } from '../../lib/betby';
+import { mirrorCycle } from '../../lib/mirror-cycle';
 import { cn } from '../../lib/utils';
 
 type Json = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
-interface PlaceItem { leg_key: string; event_id: string; market_id: string; variant: string; outcome_id: string; odds: string }
-interface Account { token: string; account: string | null; open: number; current: boolean }
-
 const panel = 'rounded-xl border border-bet62-border bg-bet62-surface';
 const CYCLE_MS = 30_000;
 
-const requestId = (p: PlaceItem) => `${p.event_id}_${p.market_id}_${p.variant}_${p.outcome_id}`;
-const odd = (v: string | number) => String(Math.round(Number(v) * 1000) / 1000);
+const post = async (body: Json) => (await fetch('/api/admin/betby-mirror', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })).json() as Promise<Json>;
 
-async function betby(path: string, token: string, init?: RequestInit) {
-  const r = await fetch(`${BETBY_CONFIG.baseUrl}${path}`, {
-    ...init,
-    headers: { accept: 'application/json', 'content-type': 'application/json', authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
-    cache: 'no-store',
-  });
-  const text = await r.text();
-  let body: unknown = null;
-  try {
-    body = JSON.parse(text);
-  } catch {
-    // não é JSON
-  }
-  return { status: r.status, ok: r.ok, body: body as Json | null, text };
-}
-
-/** Um ciclo: enviar o que falta e ler o que a BETBY já liquidou. */
-async function cycle(): Promise<{ placed: number; rejected: number; read: number; decided: number; confirmed: number; error?: string }> {
-  const st = (await (await fetch('/api/admin/betby-mirror', { cache: 'no-store' })).json()) as Json;
-  if (!st.enabled || !st.token) return { placed: 0, rejected: 0, read: 0, decided: 0, confirmed: 0 };
-  const token = String(st.token);
-  const currency = st.tokenInfo?.currency || 'EUR';
-  const out = { placed: 0, rejected: 0, read: 0, decided: 0, confirmed: 0, error: undefined as string | undefined };
-
-  // 1. Enviar as seleções novas (uma aposta simples cada).
-  const items = (st.place ?? []) as PlaceItem[];
-  if (items.length) {
-    const body = items.map((p) => ({
-      type: '1/1',
-      sum: String(st.stake ?? 1),
-      k: odd(p.odds),
-      global_id: null,
-      bonus_id: null,
-      bet_request_id: requestId(p),
-      odds_change: 'any',
-      selections: [{ event_id: p.event_id, market_id: p.market_id, specifiers: p.variant, outcome_id: p.outcome_id, k: odd(p.odds), promo_id: null, bonus_id: null, timestamp: Date.now() }],
-    }));
-    const r = await betby(`/api/v2/coupon/brand/${BETBY_CONFIG.brandId}/bet/place`, token, { method: 'POST', body: JSON.stringify(body) });
-    if (r.status === 401 || r.status === 403) {
-      out.error = `A BETBY recusou a chave (HTTP ${r.status}): faça login no demo e cole a chave nova.`;
-    } else if (!r.ok || !r.body) {
-      out.error = `bet/place: HTTP ${r.status} ${r.text.slice(0, 160)}`;
-    } else {
-      const acc = (Array.isArray(r.body.accepted) ? r.body.accepted : []) as Json[];
-      const errs = (Array.isArray(r.body.error) ? r.body.error : []) as Json[];
-      const accepted: { key: string; betId: string }[] = [];
-      const rejected: { key: string; error: string }[] = [];
-      items.forEach((p, i) => {
-        const a = acc.find((x) => x.bet_request_id === requestId(p));
-        if (a?.bet_id) accepted.push({ key: p.leg_key, betId: String(a.bet_id) });
-        else {
-          const e = errs.find((x) => x?.bet_request_id === requestId(p)) ?? (errs.length === items.length ? errs[i] : null);
-          rejected.push({ key: p.leg_key, error: e ? JSON.stringify(e).slice(0, 300) : 'sem resposta para esta seleção' });
-        }
-      });
-      await fetch('/api/admin/betby-mirror', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'placed', accepted, rejected }) });
-      out.placed = accepted.length;
-      out.rejected = rejected.length;
-    }
-  }
-
-  // 2. Ler as apostas das contas com apostas por liquidar (até 10 páginas de 50).
-  for (const a of (st.accounts ?? []) as Account[]) {
-    if (!a.current && !a.open) continue;
-    const results: Json[] = [];
-    for (let page = 0; page < 10; page++) {
-      const q = `currency=${encodeURIComponent(currency)}&lang=${encodeURIComponent(BETBY_CONFIG.locale)}&limit=50&skip=${page * 50}&status=&timestamp_from&timestamp_to`;
-      const r = await betby(`/api/v1/my_bets/list?${q}`, a.token);
-      if (!r.ok || !r.body) {
-        if (a.current) out.error ??= `my_bets/list: HTTP ${r.status}`;
-        break;
-      }
-      const list = (Array.isArray(r.body.results) ? r.body.results : []) as Json[];
-      // Só o que o servidor usa (sem as descrições dos jogos).
-      for (const b of list) {
-        results.push({
-          id: b.id,
-          status: b.status,
-          selections: (b.selections ?? []).map((s: Json) => ({ event_id: s.event_id, market_id: s.market_id, specifiers: s.specifiers, outcome_id: s.outcome_id, k: s.k, status: s.status })),
-        });
-      }
-      if (list.length < 50 || results.length >= Number(r.body.count ?? 0)) break;
-    }
-    out.read += results.length;
-    if (results.length) {
-      const j = (await (await fetch('/api/admin/betby-mirror', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'mybets', results }) })).json()) as Json;
-      out.decided += Number(j.decided ?? 0);
-      out.confirmed += Number(j.confirmed ?? 0);
-    }
-  }
-  return out;
+/** Um ciclo no navegador do admin (só quando o servidor não consegue: a BETBY bloqueia-o). */
+function cycle() {
+  return mirrorCycle(
+    {
+      async work() {
+        const st = (await (await fetch('/api/admin/betby-mirror', { cache: 'no-store' })).json()) as Json;
+        if (!st.enabled || !st.token || st.byServer) return null;
+        return { token: String(st.token), stake: Number(st.stake ?? 1), currency: st.tokenInfo?.currency || 'EUR', place: st.place ?? [], accounts: st.accounts ?? [] };
+      },
+      placed: async (accepted, rejected) => void (await post({ action: 'placed', accepted, rejected })),
+      myBets: (results) => post({ action: 'mybets', results }),
+    },
+    BETBY_CONFIG,
+  );
 }
 
 /** Corre sempre que o painel está aberto (montado escondido nas outras secções). */
@@ -194,9 +114,24 @@ export function MirrorCard() {
         </label>
       </div>
       <p className="text-xs text-white/55">
-        Cada seleção BETBY dos bilhetes é enviada à conta demo da BETBY. Quando a BETBY a liquida, o bilhete é liquidado e pago aqui. Funciona enquanto este painel estiver aberto.
+        Cada seleção BETBY dos bilhetes é enviada à conta demo da BETBY. Quando a BETBY a liquida, o bilhete é liquidado e pago aqui. O servidor faz isto sozinho se a BETBY o deixar; senão, este painel.
         Seleções recusadas pela BETBY são liquidadas pelo nosso motor, como antes.
       </p>
+
+      {/* Quem faz o trabalho: o servidor (24 h) ou este painel */}
+      {s?.enabled && (
+        <div className={cn('rounded-lg border p-3 text-xs', s?.byServer ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400' : 'border-amber-500/40 bg-amber-500/10 text-amber-300')}>
+          {s?.byServer ? (
+            <>A correr <b>no servidor, 24 h por dia</b>: o admin pode estar fechado. Último ciclo {s.server?.at ? new Date(s.server.at).toLocaleTimeString('pt-PT') : '—'}.</>
+          ) : s?.server?.blocked ? (
+            <>O servidor foi bloqueado pela BETBY ({s.server.error}). Volta a tentar às {s.server.nextTryAt ? new Date(s.server.nextTryAt).toLocaleTimeString('pt-PT') : '—'}. Até lá, é <b>este painel</b> que envia e liquida: mantenha-o aberto.</>
+          ) : s?.server?.error ? (
+            <>O servidor não conseguiu ({s.server.error}). É <b>este painel</b> que envia e liquida enquanto estiver aberto.</>
+          ) : (
+            <>O servidor está a testar a ligação à BETBY (até 1 min). Entretanto, é este painel que trabalha.</>
+          )}
+        </div>
+      )}
 
       {/* Chave */}
       <div className="rounded-lg border border-bet62-border bg-bet62-surface-2 p-3 text-sm">

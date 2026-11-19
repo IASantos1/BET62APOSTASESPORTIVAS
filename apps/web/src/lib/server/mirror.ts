@@ -214,3 +214,113 @@ export async function mirrorSummary() {
   );
   return { counts: Object.fromEntries(counts.map((c) => [c.status, Number(c.n)])), recent };
 }
+
+// ---------- contas a ler e trabalho no servidor ----------
+
+/** Contas a ler no my_bets/list: a atual e as anteriores que ainda têm apostas em aberto. */
+export async function accountsToRead(token: string | null, old: string[]) {
+  const open = await placedByAccount();
+  const out: { token: string; account: string | null; open: number; current: boolean }[] = [];
+  for (const [i, t] of [token, ...old].entries()) {
+    if (!t) continue;
+    const info = tokenInfo(t);
+    if (info?.expired) continue;
+    const n = open[info?.sub ?? ''] ?? 0;
+    if (i === 0 || n > 0) out.push({ token: t, account: info?.sub ?? null, open: n, current: i === 0 });
+  }
+  return out;
+}
+
+export interface ServerStatus {
+  at: string | null;
+  ok: boolean;
+  blocked: boolean;
+  error: string | null;
+  /** quando o servidor volta a tentar (bloqueado: de 10 em 10 min) */
+  nextTryAt: string | null;
+  lastOkAt: string | null;
+  last?: Record<string, unknown>;
+}
+
+export async function getServerStatus(): Promise<ServerStatus> {
+  const r = (await query<{ value: ServerStatus }>(`SELECT value FROM app_settings WHERE key = 'betby_mirror_server'`))[0];
+  return r?.value ?? { at: null, ok: false, blocked: false, error: null, nextTryAt: null, lastOkAt: null };
+}
+
+async function saveServerStatus(s: ServerStatus) {
+  await query(
+    `INSERT INTO app_settings (key, value, updated_at) VALUES ('betby_mirror_server', $1, now())
+     ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
+    [JSON.stringify(s)],
+  );
+}
+
+/** O servidor está a tratar do espelho (último ciclo bom há menos de 2 min): o navegador do admin não repete. */
+export const serverActive = (s: ServerStatus) => !!s.lastOkAt && Date.now() - Date.parse(s.lastOkAt) < 120_000;
+
+/** Um ciclo no servidor (com contrato, para só uma instância o fazer). */
+export async function serverCycle(owner: string) {
+  const lease = (
+    await query<{ owner: string }>(
+      `INSERT INTO wh_state (key, owner, until) VALUES ('mirror_lease', $1, now() + interval '50 seconds')
+       ON CONFLICT (key) DO UPDATE SET owner = $1, until = now() + interval '50 seconds', updated_at = now()
+         WHERE wh_state.owner = $1 OR wh_state.until IS NULL OR wh_state.until < now()
+       RETURNING owner`,
+      [owner],
+    )
+  )[0];
+  if (lease?.owner !== owner) return null;
+  const prev = await getServerStatus();
+  // Bloqueado pela BETBY: só volta a tentar passados 10 min.
+  if (prev.nextTryAt && Date.parse(prev.nextTryAt) > Date.now()) return null;
+  const { mirrorCycle } = await import('../mirror-cycle');
+  const s = await getMirrorSettings();
+  const info = tokenInfo(s.token);
+  const r = await mirrorCycle(
+    {
+      async work() {
+        if (!s.enabled || !s.token || info?.expired) return null;
+        await queueOpenLegs();
+        return { token: s.token, stake: s.stake, currency: info?.currency || 'EUR', place: await toPlace(20), accounts: await accountsToRead(s.token, s.oldTokens ?? []) };
+      },
+      placed: (a, rj) => recordPlacement(a, rj, info?.sub ?? null),
+      myBets: (results) => applyMyBets(results as MyBet[]),
+    },
+    {
+      baseUrl: (process.env.NEXT_PUBLIC_BETBY_BASE_URL || 'https://demoapi.betby.com').replace(/\/$/, ''),
+      brandId: process.env.NEXT_PUBLIC_BETBY_BRAND_ID || '1653815133341880320',
+      locale: process.env.NEXT_PUBLIC_BETBY_LOCALE || 'en-GB',
+    },
+  ).catch((e: Error) => ({ placed: 0, rejected: 0, read: 0, decided: 0, confirmed: 0, error: `rede: ${e.message}` }) as import('../mirror-cycle').CycleResult);
+  if (r.skipped) return r;
+  const now = new Date();
+  const ok = !r.error;
+  await saveServerStatus({
+    at: now.toISOString(),
+    ok,
+    blocked: !!r.blocked,
+    error: r.error ?? null,
+    nextTryAt: r.blocked ? new Date(now.getTime() + 10 * 60_000).toISOString() : null,
+    lastOkAt: ok ? now.toISOString() : prev.lastOkAt,
+    last: { placed: r.placed, rejected: r.rejected, read: r.read, decided: r.decided, confirmed: r.confirmed },
+  });
+  return r;
+}
+
+const gm = globalThis as unknown as { __bbMirror?: boolean };
+
+/** Arranca o ciclo do servidor (instrumentation.ts): a cada 30 s, só quando o espelho está ligado. */
+export function startServerMirror() {
+  if (gm.__bbMirror || !process.env.DATABASE_URL) return;
+  gm.__bbMirror = true;
+  const owner = `${process.pid}-${Math.random().toString(36).slice(2)}`;
+  const tick = async () => {
+    try {
+      await serverCycle(owner);
+    } catch (e) {
+      console.error('Espelho BETBY (servidor):', (e as Error).message);
+    }
+    setTimeout(tick, 30_000).unref?.();
+  };
+  setTimeout(tick, 10_000).unref?.();
+}
