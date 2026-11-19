@@ -147,6 +147,8 @@ export function rebuildFromSnapshots(
   payloads: Record<string, unknown>[],
   lastEventUpdates?: Map<string, number>,
   now = Date.now(),
+  /** comparar odds/placar com o quadro anterior (ao vivo); no pré-jogo não é preciso e poupa tempo */
+  compare = true,
 ) {
   const next = new Map<string, BetbyEvent>();
   for (const payload of payloads) {
@@ -175,11 +177,11 @@ export function rebuildFromSnapshots(
         marketsAt: old?.marketsAt,
         scoreChangedAt: old?.scoreChangedAt,
       };
-      const marketsChanged = !old || JSON.stringify(old.markets) !== JSON.stringify(markets);
+      const marketsChanged = !old || (compare ? JSON.stringify(old.markets) !== JSON.stringify(markets) : false);
       if (marketsChanged) ev.marketsAt = now;
       const s = (x?: BetbyEvent['score']) => `${x?.home_score ?? ''}-${x?.away_score ?? ''}`;
       if (old && s(old.score) !== '-' && s(old.score) !== s(ev.score)) ev.scoreChangedAt = now;
-      if (!old || marketsChanged || JSON.stringify(old.state) !== JSON.stringify(ev.state) || s(old.score) !== s(ev.score)) lastEventUpdates?.set(id, now);
+      if (lastEventUpdates && (!old || marketsChanged || JSON.stringify(old.state) !== JSON.stringify(ev.state) || s(old.score) !== s(ev.score))) lastEventUpdates.set(id, now);
       next.set(id, ev);
     }
   }

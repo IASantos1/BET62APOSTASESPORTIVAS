@@ -2,16 +2,16 @@ import { isEventFinished } from '../lifecycle';
 import { applyDeltas, applyDictionaries, emptyDictionaries, oddsStale, rebuildFromSnapshots, versionsOf, type BetbyEvent, type BetbyFeed } from '../betby-core';
 
 // O feed da BETBY também no servidor (o Railway é aceite pela BETBY): ao vivo a cada 1 s, pré-jogo
-// a cada 10 s, para validar as apostas no momento em que são feitas — odd atual, seleção suspensa
+// a cada 60 s, para validar as apostas no momento em que são feitas — odd atual, seleção suspensa
 // (lances perigosos, VAR…), golo entretanto. O navegador mostra as odds; quem aceita é o servidor.
 
 const base = () => (process.env.NEXT_PUBLIC_BETBY_BASE_URL || 'https://demoapi.betby.com').replace(/\/$/, '');
 const brand = () => process.env.NEXT_PUBLIC_BETBY_BRAND_ID || '1653815133341880320';
 const locale = () => process.env.NEXT_PUBLIC_BETBY_LOCALE || 'en-GB';
 
-const EVERY_MS: Record<BetbyFeed, number> = { live: 1_000, prematch: 10_000 };
+const EVERY_MS: Record<BetbyFeed, number> = { live: 1_000, prematch: 60_000 };
 /** O feed conta como fiável enquanto a última leitura boa tiver menos do que isto. */
-const HEALTHY_MS: Record<BetbyFeed, number> = { live: 20_000, prematch: 120_000 };
+const HEALTHY_MS: Record<BetbyFeed, number> = { live: 20_000, prematch: 240_000 };
 
 interface FeedState {
   store: Map<string, BetbyEvent>;
@@ -69,7 +69,11 @@ export async function syncFeed(feed: BetbyFeed) {
       );
       ok = pages.every(Boolean);
       if (ok) {
-        s.store = rebuildFromSnapshots(s.store, pages as Record<string, unknown>[]);
+        // Cede o processador entre versões (o pré-jogo tem milhares de jogos): o resto do servidor
+        // continua a responder enquanto o quadro é refeito.
+        await new Promise((r) => setImmediate(r));
+        s.store = rebuildFromSnapshots(s.store, pages as Record<string, unknown>[], undefined, Date.now(), feed === 'live');
+        await new Promise((r) => setImmediate(r));
         s.applied = new Set(versions);
       }
     }
@@ -82,10 +86,15 @@ export async function syncFeed(feed: BetbyFeed) {
   }
 }
 
+/** Feeds lidos pelo servidor. O pré-jogo (milhares de jogos, ~15 MB) pesa demasiado para o servidor
+ * (bloqueios de meio segundo e centenas de MB): só com BETBY_SERVER_PREMATCH=on. As odds de pré-jogo
+ * são confirmadas pela liquidação automática (a BETBY aceita a aposta espelho). */
+export const SERVER_FEEDS: BetbyFeed[] = process.env.BETBY_SERVER_PREMATCH === 'on' ? ['live', 'prematch'] : ['live'];
+
 export function startBetbyFeeds() {
   if (g.__bbFeedTimers) return;
   g.__bbFeedTimers = true;
-  for (const feed of ['live', 'prematch'] as BetbyFeed[]) {
+  for (const feed of SERVER_FEEDS) {
     const tick = async () => {
       await syncFeed(feed).catch(() => undefined);
       setTimeout(tick, EVERY_MS[feed]).unref?.();
@@ -96,7 +105,7 @@ export function startBetbyFeeds() {
 
 export const feedHealthy = (feed: BetbyFeed) => Date.now() - feeds[feed].okAt < HEALTHY_MS[feed];
 export function feedStatus() {
-  return Object.fromEntries((['live', 'prematch'] as BetbyFeed[]).map((f) => [f, { events: feeds[f].store.size, okAt: feeds[f].okAt ? new Date(feeds[f].okAt).toISOString() : null, healthy: feedHealthy(f), error: feeds[f].error }]));
+  return Object.fromEntries((['live', 'prematch'] as BetbyFeed[]).map((f) => [f, { enabled: SERVER_FEEDS.includes(f), events: feeds[f].store.size, okAt: feeds[f].okAt ? new Date(feeds[f].okAt).toISOString() : null, healthy: feedHealthy(f), error: feeds[f].error }]));
 }
 
 export type LegCheck =
