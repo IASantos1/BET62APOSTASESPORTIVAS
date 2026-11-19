@@ -3,23 +3,11 @@ import { isAdminAuthorized } from '../../../../lib/admin-auth';
 import { fail, json, route } from '../../../../lib/server/auth';
 import { hasDatabase } from '../../../../lib/server/db';
 import {
-  applyMyBets, getMirrorSettings, mirrorSummary, placedByAccount, queueOpenLegs, recordPlacement, saveMirrorSettings, toPlace, tokenInfo, type MyBet,
+  accountsToRead, applyMyBets, getMirrorSettings, getServerStatus, mirrorSummary, queueOpenLegs, serverActive, recordPlacement, saveMirrorSettings, toPlace, tokenInfo, type MyBet,
 } from '../../../../lib/server/mirror';
 
 export const dynamic = 'force-dynamic';
 
-async function accountsToRead(token: string | null, old: string[]) {
-  const open = await placedByAccount();
-  const out: { token: string; account: string | null; open: number; current: boolean }[] = [];
-  for (const [i, t] of [token, ...old].entries()) {
-    if (!t) continue;
-    const info = tokenInfo(t);
-    if (info?.expired) continue;
-    const n = open[info?.sub ?? ''] ?? 0;
-    if (i === 0 || n > 0) out.push({ token: t, account: info?.sub ?? null, open: n, current: i === 0 });
-  }
-  return out;
-}
 
 const denied = () => NextResponse.json({ error: 'Sem sessão de admin.' }, { status: 401 });
 
@@ -32,10 +20,15 @@ export const GET = route(async () => {
   if (!hasDatabase()) return json({ database: false });
   const s = await getMirrorSettings();
   const info = tokenInfo(s.token);
-  const active = s.enabled && !!s.token && !info?.expired;
+  const server = await getServerStatus();
+  // O servidor já está a tratar (a BETBY não o bloqueia): o navegador do admin não repete o trabalho.
+  const byServer = serverActive(server);
+  const active = s.enabled && !!s.token && !info?.expired && !byServer;
   if (active) await queueOpenLegs();
   return json({
     database: true,
+    server,
+    byServer,
     enabled: s.enabled,
     stake: s.stake,
     hasToken: !!s.token,
@@ -44,7 +37,7 @@ export const GET = route(async () => {
     tokenInfo: info,
     place: active ? await toPlace(20) : [],
     // Contas a ler no my_bets/list: a atual e as anteriores que ainda têm apostas em aberto.
-    accounts: s.enabled ? await accountsToRead(s.token, s.oldTokens ?? []) : [],
+    accounts: active ? await accountsToRead(s.token, s.oldTokens ?? []) : [],
     summary: await mirrorSummary(),
   });
 });
