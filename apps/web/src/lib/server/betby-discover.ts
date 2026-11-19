@@ -15,6 +15,10 @@ export interface DiscoverResult {
   routes: { route: string; where: string[] }[];
   hits: { where: string; match: string; around: string }[];
   storage: { where: string; around: string }[];
+  /** o HTML da página inicial (para ver o que ela carrega) */
+  startHtml: string;
+  /** scripts, iframes e links que cada página/script referencia (seguidos ou não) */
+  refs: { from: string; kind: string; url: string; followed: boolean }[];
 }
 
 async function get(url: string) {
@@ -32,7 +36,7 @@ async function get(url: string) {
 }
 
 export async function discoverBetbyToken({ maxScripts = 40 } = {}): Promise<DiscoverResult> {
-  const out: DiscoverResult = { at: new Date().toISOString(), start: START, visited: [], routes: [], hits: [], storage: [] };
+  const out: DiscoverResult = { at: new Date().toISOString(), start: START, visited: [], routes: [], hits: [], storage: [], startHtml: '', refs: [] };
   const routes = new Map<string, Set<string>>();
   const queue: string[] = [START];
   const seen = new Set<string>();
@@ -55,18 +59,27 @@ export async function discoverBetbyToken({ maxScripts = 40 } = {}): Promise<Disc
     if (url !== START) scripts += 1;
     if (!r.text) continue;
     const where = shortName(url);
-    // Scripts que a página / os scripts carregam (só dos domínios da BETBY).
-    const add = (ref: string) => {
+    const isPage = url === START || /<html|<!doctype/i.test(r.text.slice(0, 500));
+    if (url === START) out.startHtml = r.text.slice(0, 6000);
+    // O que a página / o script carrega. Da página inicial (e das páginas em iframe) segue-se tudo;
+    // dos scripts, só os dos domínios da BETBY (o resto é analytics, fontes…).
+    const add = (ref: string, kind: string, page = false) => {
       try {
         const u = new URL(ref, url);
-        if (allowed(u) && /\.m?js(\?|$)/.test(u.pathname + u.search) && !seen.has(u.href)) queue.push(u.href);
+        if (!/^https?:$/.test(u.protocol)) return;
+        const js = /\.m?js(\?|$)/.test(u.pathname + u.search) || kind === 'script';
+        const follow = (page && (js || kind === 'iframe')) || (allowed(u) && js);
+        if (out.refs.length < 200) out.refs.push({ from: where, kind, url: u.href.slice(0, 200), followed: follow && !seen.has(u.href) });
+        if (follow && !seen.has(u.href)) kind === 'iframe' ? queue.unshift(u.href) : queue.push(u.href);
       } catch {
         // endereço inválido
       }
     };
-    for (const m of r.text.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)) add(m[1]);
-    for (const m of r.text.matchAll(/<link[^>]+href=["']([^"']+\.m?js[^"']*)["']/gi)) add(m[1]);
-    for (const m of r.text.matchAll(/["'`]((?:https?:\/\/[a-z0-9.-]+)?(?:\.{0,2}\/)[a-z0-9_\-./]+\.m?js)["'`]/gi)) add(m[1]);
+    for (const m of r.text.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)) add(m[1], 'script', isPage);
+    for (const m of r.text.matchAll(/<link[^>]+href=["']([^"']+)["'][^>]*>/gi)) if (/\.m?js|modulepreload|preload/i.test(m[0])) add(m[1], 'link', isPage);
+    for (const m of r.text.matchAll(/<(?:iframe|frame)[^>]+src=["']([^"']+)["']/gi)) add(m[1], 'iframe', true);
+    for (const m of r.text.matchAll(/(?:location(?:\.href)?\s*=|window\.open\()\s*["'`](https?:\/\/[^"'`]+)["'`]/gi)) add(m[1], 'iframe', true);
+    for (const m of r.text.matchAll(/["'`]((?:https?:\/\/[a-z0-9.-]+)?(?:\.{0,2}\/)[a-z0-9_\-./]+\.m?js)["'`]/gi)) add(m[1], 'script', isPage);
     // Rotas de login / sessão / token.
     for (const m of r.text.matchAll(ROUTE)) {
       const route = m[1];

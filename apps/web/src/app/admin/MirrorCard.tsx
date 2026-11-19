@@ -244,6 +244,20 @@ export function MirrorCard() {
                     ))}
                   </div>
                 </details>
+                <details open={(disc.routes as Json[]).length === 0}>
+                  <summary className="cursor-pointer font-semibold text-white/70">O que a página carrega ({(disc.refs as Json[] | undefined)?.length ?? 0})</summary>
+                  <div className="mt-1 max-h-48 overflow-auto font-mono text-[11px] text-white/50">
+                    {((disc.refs as Json[] | undefined) ?? []).map((r, i) => (
+                      <div key={i} className="break-all">{r.followed ? '✓' : '·'} {r.kind} · {r.url}</div>
+                    ))}
+                  </div>
+                </details>
+                {disc.startHtml && (
+                  <details>
+                    <summary className="cursor-pointer font-semibold text-white/70">HTML da página inicial</summary>
+                    <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-all rounded-md bg-black/30 p-2 text-[11px] text-white/60">{String(disc.startHtml)}</pre>
+                  </details>
+                )}
                 <details>
                   <summary className="cursor-pointer font-semibold text-white/70">Ficheiros lidos ({(disc.visited as Json[]).length})</summary>
                   <div className="mt-1 max-h-48 overflow-auto font-mono text-[11px] text-white/50">
