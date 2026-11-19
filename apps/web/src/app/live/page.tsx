@@ -9,7 +9,6 @@ export default function LivePage() {
   return (
     <EventListPage
       title="Ao Vivo"
-      subtitle="Jogos a decorrer, por liga."
       filter={isLive}
       basePath="/live"
       emptyText="Não há jogos ao vivo neste momento."
