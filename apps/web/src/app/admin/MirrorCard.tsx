@@ -167,12 +167,10 @@ export function MirrorCard() {
       {s?.feeds && (
         <p className="text-xs text-white/55">
           Validação das apostas no servidor:{' '}
-          {(['live', 'prematch'] as const).map((f) => (
-            <span key={f} className={cn('mr-3', s.feeds[f].healthy ? 'text-emerald-500' : 'text-amber-400')}>
-              {f === 'live' ? 'ao vivo' : 'pré-jogo'} {s.feeds[f].healthy ? `✓ ${s.feeds[f].events} jogos` : `✗ ${s.feeds[f].error ?? 'sem leitura'}`}
-            </span>
-          ))}
-          · apostas ao vivo confirmadas 4 s depois.
+          <span className={cn('mr-3', s.feeds.live.healthy ? 'text-emerald-500' : 'text-amber-400')}>
+            ao vivo {s.feeds.live.healthy ? `✓ ${s.feeds.live.events} jogos` : `✗ ${s.feeds.live.error ?? 'sem leitura'}`}
+          </span>
+          · apostas ao vivo confirmadas 4 s depois; pré-jogo confirmado pela liquidação automática.
         </p>
       )}
 

@@ -315,9 +315,22 @@ export default function AdminPage() {
   }, []);
   React.useEffect(() => void check(), [check]);
 
+  const [statsError, setStatsError] = React.useState<string | null>(null);
   const loadStats = React.useCallback(async () => {
-    const r = await fetch('/api/admin/stats', { cache: 'no-store' }).catch(() => null);
-    if (r?.ok) setStats(await r.json());
+    // Sem resposta em 15 s: mostra o erro em vez de ficar a carregar para sempre.
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), 15_000);
+    try {
+      const r = await fetch('/api/admin/stats', { cache: 'no-store', signal: ctl.signal });
+      if (r.ok) {
+        setStats(await r.json());
+        setStatsError(null);
+      } else setStatsError(`O servidor respondeu HTTP ${r.status}${r.status === 401 ? ' (sessão de admin expirada: entre de novo)' : ''}.`);
+    } catch (e) {
+      setStatsError((e as Error).name === 'AbortError' ? 'O servidor não respondeu em 15 s (pode estar sobrecarregado).' : `Sem ligação ao servidor: ${(e as Error).message}`);
+    } finally {
+      clearTimeout(t);
+    }
   }, []);
   React.useEffect(() => {
     if (!authorized) return;
@@ -428,7 +441,17 @@ export default function AdminPage() {
         </div>
 
         <div className="flex flex-col gap-6 p-3 sm:p-6">
-          {tab === 'dashboard' && <Dashboard stats={stats} onGo={go} />}
+          {tab === 'dashboard' && statsError && !stats && (
+            <div className={cn(panel, 'space-y-3 p-5 text-sm')}>
+              <p className="flex items-center gap-2 font-semibold text-amber-400"><AlertTriangle size={16} /> Não foi possível carregar a visão geral</p>
+              <p className="text-white/60">{statsError}</p>
+              <div className="flex gap-2">
+                <button onClick={() => void loadStats()} className="rounded-lg bg-bet62-primary px-3 py-2 text-xs font-bold text-onbrand">Tentar de novo</button>
+                <a href="/api/health" target="_blank" rel="noreferrer" className="rounded-lg border border-bet62-border px-3 py-2 text-xs font-bold">Ver saúde do servidor</a>
+              </div>
+            </div>
+          )}
+          {tab === 'dashboard' && !(statsError && !stats) && <Dashboard stats={stats} onGo={go} />}
           {tab === 'users' && <PlayersCard key={reloadKey} />}
           {tab === 'bets' && <BetsTab reloadKey={reloadKey} />}
           {/* A Liquidação fica sempre montada (escondida nas outras secções): é ela que lê a BETBY
