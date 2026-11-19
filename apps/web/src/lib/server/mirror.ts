@@ -34,7 +34,17 @@ export async function saveMirrorSettings(patch: Partial<MirrorSettings>) {
   if (patch.token !== undefined && prev.token && prev.token !== patch.token) {
     next.oldTokens = [prev.token, ...(prev.oldTokens ?? [])];
   }
-  next.oldTokens = (next.oldTokens ?? []).filter((t) => t !== next.token && !tokenInfo(t)?.expired).slice(0, 10);
+  // Chaves antigas da mesma conta não fazem falta (a chave atual lê as apostas dessa conta).
+  const sub = tokenInfo(next.token)?.sub;
+  const seen = new Set<string>();
+  next.oldTokens = (next.oldTokens ?? [])
+    .filter((t) => {
+      const i = tokenInfo(t);
+      if (t === next.token || i?.expired || (sub && i?.sub === sub) || seen.has(i?.sub ?? t)) return false;
+      seen.add(i?.sub ?? t);
+      return true;
+    })
+    .slice(0, 10);
   await query(
     `INSERT INTO app_settings (key, value, updated_at) VALUES ('betby_mirror', $1, now())
      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
@@ -323,4 +333,52 @@ export function startServerMirror() {
     setTimeout(tick, 30_000).unref?.();
   };
   setTimeout(tick, 10_000).unref?.();
+}
+
+/**
+ * Teste do admin (só leitura): o servidor chama a BETBY e diz o que voltou. Sem chave: o feed
+ * público de jogos; com a chave: o my_bets/list da conta demo. Nenhuma aposta é feita.
+ */
+export async function serverTest() {
+  const base = (process.env.NEXT_PUBLIC_BETBY_BASE_URL || 'https://demoapi.betby.com').replace(/\/$/, '');
+  const brand = process.env.NEXT_PUBLIC_BETBY_BRAND_ID || '1653815133341880320';
+  const locale = process.env.NEXT_PUBLIC_BETBY_LOCALE || 'en-GB';
+  const s = await getMirrorSettings();
+  const probe = async (name: string, url: string, token?: string | null) => {
+    const started = Date.now();
+    try {
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), 15_000);
+      const r = await fetch(url, { headers: { accept: 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, cache: 'no-store', signal: ctl.signal });
+      clearTimeout(t);
+      const text = await r.text();
+      const blocked = /access blocked/i.test(text);
+      return {
+        name, ok: r.ok && !blocked, status: r.status, ms: Date.now() - started, blocked, reason: r.headers.get('bb-rsn'),
+        bodyStart: text.slice(0, 200),
+      };
+    } catch (e) {
+      const err = e as Error;
+      return { name, ok: false, status: null, ms: Date.now() - started, blocked: false, reason: null, bodyStart: err.name === 'AbortError' ? 'sem resposta em 15 s' : `rede: ${err.message}` };
+    }
+  };
+  const results = [await probe('Feed de jogos (público, sem chave)', `${base}/api/v4/prematch/brand/${brand}/${locale}/0`)];
+  if (s.token) results.push(await probe('Apostas da conta demo (my_bets/list, com a chave)', `${base}/api/v1/my_bets/list?currency=EUR&lang=${locale}&limit=1&skip=0&status=&timestamp_from&timestamp_to`, s.token));
+  const blocked = results.some((r) => r.blocked);
+  const allOk = results.every((r) => r.ok);
+  return {
+    at: new Date().toISOString(),
+    hasToken: !!s.token,
+    results,
+    verdict: allOk
+      ? s.token
+        ? 'O servidor consegue falar com a BETBY: a liquidação automática corre 24 h sem o admin aberto.'
+        : 'O servidor consegue ler a BETBY. Guarde a chave da conta demo para testar também as apostas.'
+      : blocked
+        ? 'A BETBY bloqueia este servidor (access blocked): a liquidação só corre com o painel do admin aberto.'
+        : results.some((r) => r.status === 401 || r.status === 403)
+          ? 'O servidor chega à BETBY, mas a chave foi recusada: faça login no demo e cole a chave nova.'
+          : 'O servidor não conseguiu falar com a BETBY (ver detalhes).',
+    serverWorks: allOk,
+  };
 }

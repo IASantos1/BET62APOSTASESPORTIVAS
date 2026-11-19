@@ -3,7 +3,7 @@ import { isAdminAuthorized } from '../../../../lib/admin-auth';
 import { fail, json, route } from '../../../../lib/server/auth';
 import { hasDatabase } from '../../../../lib/server/db';
 import {
-  accountsToRead, applyMyBets, getMirrorSettings, getServerStatus, mirrorSummary, queueOpenLegs, serverActive, recordPlacement, saveMirrorSettings, toPlace, tokenInfo, type MyBet,
+  accountsToRead, applyMyBets, serverTest, getMirrorSettings, getServerStatus, mirrorSummary, queueOpenLegs, serverActive, recordPlacement, saveMirrorSettings, toPlace, tokenInfo, type MyBet,
 } from '../../../../lib/server/mirror';
 
 export const dynamic = 'force-dynamic';
@@ -70,6 +70,7 @@ export const POST = route(async (req: Request) => {
     const s = await saveMirrorSettings(patch);
     return json({ ok: true, enabled: s.enabled, stake: s.stake, hasToken: !!s.token, tokenInfo: tokenInfo(s.token) });
   }
+  if (b.action === 'serverTest') return json(await serverTest());
   if (b.action === 'placed') {
     const clean = <T,>(v: unknown) => (Array.isArray(v) ? (v.slice(0, 100) as T[]) : []);
     const accepted = clean<{ key: unknown; betId: unknown }>(b.accepted)
