@@ -7,5 +7,8 @@ export async function register() {
     // Liquidação automática pela BETBY a partir do servidor (se a BETBY não o bloquear).
     const { startServerMirror } = await import('./lib/server/mirror');
     startServerMirror();
+    // Feed da BETBY no servidor (validação das apostas: odd atual, suspensões, golos).
+    const { startBetbyFeeds } = await import('./lib/server/betby-feed');
+    startBetbyFeeds();
   }
 }

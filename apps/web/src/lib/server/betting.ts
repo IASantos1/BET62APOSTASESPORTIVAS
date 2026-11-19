@@ -2,10 +2,14 @@ import { tx } from './db';
 import { InsufficientFunds, moveBalance } from './wallet';
 import type { UserRow } from './auth';
 import { currentPrice } from './winhouse/view';
+import { checkLeg, feedHealthy } from './betby-feed';
 
 // Colocação de apostas. A odd vem do navegador (o servidor não consegue ler a BETBY), por isso:
 // limites de valor e de ganho, e bilhetes acima dos limites de revisão ficam "Em análise" até o
 // operador os aprovar na página Liquidação (onde o navegador do admin mostra a odd atual da BETBY).
+/** Espera das apostas ao vivo antes de confirmar (lances perigosos suspendem as odds nesse tempo). */
+export const LIVE_DELAY_MS = Number(process.env.LIVE_BET_DELAY_MS ?? 4000);
+
 export const LIMITS = {
   minStake: 1,
   maxStake: 500,
@@ -95,11 +99,28 @@ export async function placeBets(user: UserRow, kind: 'single' | 'multiple' | 'bu
   for (const l of legs) {
     if (l.startTime && l.startTime > now + 60 * 86400_000) throw new BetError('Data do jogo inválida.');
   }
-  // Seleções do WinHouse: o servidor lê a odd atual (não confia na do navegador). Odd mais baixa
-  // agora → o boletim mostra a nova; mais alta → fica a que o jogador viu. Mercado fechado → recusa.
+  // Ao vivo, como nas casas de apostas: o servidor espera LIVE_DELAY_MS e só então confirma — uma
+  // seleção que entretanto ficou suspensa (lance perigoso, VAR, golo) é recusada.
+  if (legs.some((l) => l.startTime && l.startTime <= now) && (feedHealthy('live') || legs.some((l) => isWhEvent(l.eventId)))) {
+    await new Promise((r) => setTimeout(r, LIVE_DELAY_MS));
+  }
+  // O servidor lê a odd atual (não confia na do navegador): WinHouse (o coletor) e BETBY (o feed
+  // lido pelo servidor). Odd mais baixa agora → o boletim mostra a nova; mais alta → fica a que o
+  // jogador viu. Suspensa / mercado fechado → recusa.
   const changed: { index: number; odds: number }[] = [];
+  const confirmed = new Set<number>();
+  for (const [index, l] of legs.entries()) {
+    if (isWhEvent(l.eventId)) continue;
+    const c = checkLeg(l.eventId, l.marketId, l.variant, l.outcomeId, !!l.startTime && l.startTime <= Date.now());
+    if ('message' in c) throw new BetError(`${l.eventName}: ${l.outcomeName} — ${c.message}. Escolha de novo.`);
+    if ('price' in c) {
+      if (c.price < l.odds - 1e-9) changed.push({ index, odds: c.price });
+      confirmed.add(index);
+    }
+  }
   for (const [index, l] of legs.entries()) {
     if (!isWhEvent(l.eventId)) continue;
+    confirmed.add(index);
     const { row, price } = await currentPrice(l.eventId.slice(2), l.marketId, l.variant, l.outcomeId);
     if (!row || (row.status !== 'live' && row.status !== 'scheduled')) throw new BetError(`${l.eventName}: jogo terminado ou indisponível.`);
     if (row.status === 'scheduled' && new Date(row.start_time).getTime() < now - 2 * 60_000) throw new BetError(`${l.eventName}: o jogo está a começar. Aposte no ao vivo.`);
@@ -112,6 +133,7 @@ export async function placeBets(user: UserRow, kind: 'single' | 'multiple' | 'bu
     l.startTime = new Date(row.start_time).getTime();
   }
   if (changed.length) throw new OddsChanged(changed);
+  const confirmedLegs = new Set([...confirmed].map((i) => legs[i]));
   const keys = new Set(legs.map((l) => `${l.eventId}|${l.marketId}|${l.variant}|${l.outcomeId}`));
   if (keys.size !== legs.length) throw new BetError('Seleção repetida no boletim.');
   const game = (l: LegInput) => l.gameId ?? l.eventId;
@@ -148,9 +170,9 @@ export async function placeBets(user: UserRow, kind: 'single' | 'multiple' | 'bu
           `INSERT INTO bets (user_id, kind, stake_cents, odds, potential_cents, status, note, odds_check, odds_check_note) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
           [
             user.id, t.length > 1 ? kind : 'single', stakeCents, odds, potential, needsReview ? 'review' : 'open', needsReview ? 'Acima do limite de revisão' : null,
-            // Só seleções WinHouse: odds já confirmadas pelo servidor. Com BETBY: o admin confirma.
-            t.every((l) => isWhEvent(l.eventId)) ? 'ok' : 'pending',
-            t.every((l) => isWhEvent(l.eventId)) ? 'Confirmadas pelo servidor (WinHouse)' : null,
+            // Todas as seleções confirmadas pelo servidor (WinHouse / feed BETBY) → odds confirmadas.
+            t.every((l) => confirmedLegs.has(l)) ? 'ok' : 'pending',
+            t.every((l) => confirmedLegs.has(l)) ? 'Confirmadas pelo servidor ao apostar' : null,
           ],
         )
       ).rows[0];

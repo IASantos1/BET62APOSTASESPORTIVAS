@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { isAdminAuthorized } from '../../../../lib/admin-auth';
 import { fail, json, route } from '../../../../lib/server/auth';
 import { hasDatabase } from '../../../../lib/server/db';
+import { feedStatus } from '../../../../lib/server/betby-feed';
 import {
   accountsToRead, applyMyBets, serverTest, getMirrorSettings, getServerStatus, mirrorSummary, queueOpenLegs, serverActive, recordPlacement, saveMirrorSettings, toPlace, tokenInfo, type MyBet,
 } from '../../../../lib/server/mirror';
@@ -27,6 +28,7 @@ export const GET = route(async () => {
   if (active) await queueOpenLegs();
   return json({
     database: true,
+    feeds: feedStatus(),
     server,
     byServer,
     enabled: s.enabled,

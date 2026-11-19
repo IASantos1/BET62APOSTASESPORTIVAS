@@ -163,6 +163,19 @@ export function MirrorCard() {
         </div>
       )}
 
+      {/* Feed BETBY no servidor: valida as apostas (odd atual, suspensões, golos) */}
+      {s?.feeds && (
+        <p className="text-xs text-white/55">
+          Validação das apostas no servidor:{' '}
+          {(['live', 'prematch'] as const).map((f) => (
+            <span key={f} className={cn('mr-3', s.feeds[f].healthy ? 'text-emerald-500' : 'text-amber-400')}>
+              {f === 'live' ? 'ao vivo' : 'pré-jogo'} {s.feeds[f].healthy ? `✓ ${s.feeds[f].events} jogos` : `✗ ${s.feeds[f].error ?? 'sem leitura'}`}
+            </span>
+          ))}
+          · apostas ao vivo confirmadas 4 s depois.
+        </p>
+      )}
+
       {/* Teste: o servidor (Railway) consegue falar com a BETBY? */}
       <div className="rounded-lg border border-bet62-border bg-bet62-surface-2 p-3 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
