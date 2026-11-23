@@ -5,7 +5,7 @@ import { divisionOf } from './footballdivisions.js';
 import { leagueCountry } from './countryleagues.js';
 import { leagueTier } from './leagues.js';
 import { tourOf } from './tennistours.js';
-import { BASKETBALL_TREE, FOOTBALL_TREE, MINOR, MINOR_TT, WOMEN, YOUTH, YOUTH_LEAGUE, leagueKey } from './trees.js';
+import { BASKETBALL_TREE, MINOR, MINOR_TT, WOMEN, YOUTH, YOUTH_LEAGUE, leagueKey } from './trees.js';
 
 export type SportKey =
   | 'futebol' | 'basquetebol' | 'tenis' | 'futamericano' | 'hoquei' | 'boxe' | 'voleibol' | 'andebol' | 'dardos'
@@ -49,9 +49,10 @@ export function sportKeyOf(sport?: { name?: string; slug?: string }): SportKey |
 }
 
 const treeNames = (tree: unknown) => (tree as [string, string[]][]).flatMap(([, leagues]) => leagues);
-const FOOTBALL_LISTED = new Set(treeNames(FOOTBALL_TREE).map(leagueKey));
 const BASKETBALL_LISTED = new Set(treeNames(BASKETBALL_TREE).map(leagueKey));
 const TOUR_CATEGORY = /^(atp|wta|challenger|atp challenger|wta 125)/i;
+// Competições de base, reservas e divisões regionais têm nomes variados entre os fornecedores.
+const LOWER_COMPETITION = /\b(reserve|reserves|development|academy|junior|youth|under\s*\d{2}|u\s*[-/]?\s*\d{2}|regional|amateur|2nd division|third division|fourth division|division [3-9]|league [3-9]|serie [c-z]|liga [3-9])\b/i;
 
 export interface LeagueInfo {
   /** "England. Premier League": o formato que as regras do outro projeto esperam. */
@@ -69,14 +70,17 @@ export function classifyLeague(
   sport: SportKey,
   category: string,
   tournament: string,
-  includeUnlistedFootball = false,
+  _includeUnlistedFootball = false,
 ): LeagueInfo | null {
   const country = String(category || '').trim();
   const name = String(tournament || '').trim();
   if (!name) return null;
   const fullName = country ? `${country}. ${name}` : name;
-  // Femininas, jovens, virtuais e circuitos menores ficam de fora (como no outro projeto).
+  // Femininas, jovens, virtuais e circuitos menores ficam de fora.
   if (WOMEN.test(fullName) || YOUTH.test(fullName) || YOUTH_LEAGUE.test(name) || MINOR.test(fullName)) return null;
+  // No futebol, a tabela de divisões decide quais países recebem a 1.ª/2.ª divisão e taças.
+  if (sport !== 'futebol' && LOWER_COMPETITION.test(fullName)) return null;
+  if (/\bwnba\b/i.test(fullName)) return null;
   if (sport === 'tenismesa' && MINOR_TT.test(fullName)) return null;
   const tier = leagueTier(sport, fullName);
   const base = { fullName, country: country || 'World', label: name, tier };
@@ -85,9 +89,6 @@ export function classifyLeague(
       if (
         divisionOf(fullName)
         || tier <= 2
-        || FOOTBALL_LISTED.has(leagueKey(fullName))
-        || FOOTBALL_LISTED.has(leagueKey(name))
-        || includeUnlistedFootball
       ) return base;
       return null;
     case 'tenis': {
@@ -96,7 +97,10 @@ export function classifyLeague(
       return TOUR_CATEGORY.test(country) ? { ...base, country: country.toUpperCase().startsWith('WTA') ? 'WTA' : country.toUpperCase().startsWith('ATP') && !/challenger/i.test(country) ? 'ATP' : 'Challengers' } : null;
     }
     case 'basquetebol':
-      if (BASKETBALL_LISTED.has(leagueKey(fullName)) || BASKETBALL_LISTED.has(leagueKey(name))) return base;
+      if (tier <= 2 && (BASKETBALL_LISTED.has(leagueKey(fullName)) || BASKETBALL_LISTED.has(leagueKey(name)) || leagueCountry(sport, fullName))) return base;
+      return null;
+    case 'hoquei':
+      if (tier <= 2 && leagueCountry(sport, fullName)) return base;
       break;
     default:
       break;
