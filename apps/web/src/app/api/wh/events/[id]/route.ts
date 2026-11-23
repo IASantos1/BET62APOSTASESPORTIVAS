@@ -3,6 +3,7 @@ import { hasDatabase } from '../../../../../lib/server/db';
 import { createWinHouseClient, envOptions } from '../../../../../lib/server/winhouse/client';
 import { readWinHouseStats } from '../../../../../lib/server/winhouse/tracker';
 import { eventDetail } from '../../../../../lib/server/winhouse/view';
+import { goalApiMatch } from '../../../../../lib/server/goal-api';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,5 +14,6 @@ export const GET = route(async (_req: Request, { params }: { params: { id: strin
   const ev = await eventDetail(params.id);
   if (!ev) return fail('Jogo não encontrado.', 404);
   const statistics = ev.status === 'live' ? await readWinHouseStats(createWinHouseClient(envOptions()), params.id) : null;
-  return json({ event: { ...ev, statistics } });
+  const goalApi = await goalApiMatch({ id: ev.id, home: ev.home, away: ev.away, startTime: ev.startTime, sport: ev.sport, competition: ev.competition });
+  return json({ event: { ...ev, statistics: statistics && Object.keys(statistics).length ? statistics : goalApi.statistics, goalApi } });
 });

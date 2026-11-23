@@ -700,9 +700,9 @@ function Inner({ id }: { id: string }) {
     .filter((m) => String(m.market_id) in allMarkets)
     .slice(0, 4);
 
-  // Ao vivo: Tracker e Live. Pré-jogo: Estatísticas (não há tracker nem transmissão).
+  // Ao vivo: Tracker, estatísticas e Live. Pré-jogo: Estatísticas.
   const views: [View, string, React.ReactNode][] = live
-    ? [['tracker', 'Tracker', <Activity key="t" size={15} />], ['live', 'Live', <MonitorPlay key="l" size={15} />]]
+    ? [['tracker', 'Tracker', <Activity key="t" size={15} />], ['estatisticas', 'Estatísticas', <BarChart3 key="s" size={15} />], ['live', 'Live', <MonitorPlay key="l" size={15} />]]
     : [['estatisticas', 'Estatísticas', <BarChart3 key="s" size={15} />]];
 
   return (
