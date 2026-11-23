@@ -255,6 +255,9 @@ CREATE TABLE IF NOT EXISTS wh_state (
 `;
 
 const g = globalThis as unknown as { __bet62Pool?: Pool; __bet62Schema?: Promise<void> };
+const SCHEMA_VERSION = 1;
+const SCHEMA_RETRY_DELAY_MS = 30_000;
+const runtime = g as typeof g & { __bet62SchemaRetryAt?: number };
 
 export function hasDatabase() {
   return Boolean(process.env.DATABASE_URL);
@@ -286,6 +289,9 @@ export class DatabaseMissing extends Error {
 }
 
 async function ready() {
+  if (!runtime.__bet62Schema && (runtime.__bet62SchemaRetryAt ?? 0) > Date.now()) {
+    throw new Error('A inicialização do banco falhou recentemente; aguardando antes de tentar novamente.');
+  }
   g.__bet62Schema ??= (async () => {
     const client = await pool().connect();
     const schemaLock = 62062001;
@@ -296,7 +302,17 @@ async function ready() {
       await client.query(`SET statement_timeout = '60s'`);
       await client.query('SELECT pg_advisory_lock($1)', [schemaLock]);
       locked = true;
-      await client.query(SCHEMA);
+      await client.query(`CREATE TABLE IF NOT EXISTS bet62_schema_version (
+        version INT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`);
+      const current = await client.query<{ version: number | null }>(
+        'SELECT MAX(version) AS version FROM bet62_schema_version',
+      );
+      if (Number(current.rows[0]?.version ?? 0) < SCHEMA_VERSION) {
+        await client.query(SCHEMA);
+        await client.query('INSERT INTO bet62_schema_version (version) VALUES ($1) ON CONFLICT DO NOTHING', [SCHEMA_VERSION]);
+      }
     } finally {
       if (locked) await client.query('SELECT pg_advisory_unlock($1)', [schemaLock]).catch(() => undefined);
       await client.query('RESET statement_timeout').catch(() => undefined);
@@ -304,8 +320,10 @@ async function ready() {
     }
   })().catch((e) => {
     g.__bet62Schema = undefined;
+    runtime.__bet62SchemaRetryAt = Date.now() + SCHEMA_RETRY_DELAY_MS;
     throw e;
   });
+  runtime.__bet62SchemaRetryAt = undefined;
   return g.__bet62Schema;
 }
 
