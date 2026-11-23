@@ -72,14 +72,21 @@ export function useWinHouseFeed(intervalMs = 10_000): WhFeed {
     let stop = false;
     let timer: ReturnType<typeof setTimeout>;
     const run = async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12_000);
       try {
-        const r = await fetch('/api/wh/events?hours=72', { cache: 'no-store' });
+        const r = await fetch('/api/wh/events?hours=72', { cache: 'no-store', signal: controller.signal });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         const j = await r.json();
         if (!stop) setS({ ready: true, enabled: !!j.enabled, mode: j.mode ?? 'betby', healthy: !!j.healthy, events: Array.isArray(j.events) ? j.events : [], updatedAt: Date.now(), error: null });
       } catch (e) {
-        // Falha a ler: mantém o último quadro até 60 s; depois o site fica só com a BETBY.
-        if (!stop) setS((p) => ({ ...p, ready: true, error: (e as Error).message, ...(p.updatedAt && Date.now() - p.updatedAt > 60_000 ? { events: [], healthy: false } : {}) }));
+        // Keep WinHouse as the only source and make a stalled database request visible.
+        const error = (e as Error).name === 'AbortError'
+          ? 'O servidor de dados WinHouse não respondeu em 12 s.'
+          : (e as Error).message;
+        if (!stop) setS((p) => ({ ...p, ready: true, error, ...(p.updatedAt && Date.now() - p.updatedAt > 60_000 ? { events: [], healthy: false } : {}) }));
+      } finally {
+        clearTimeout(timeout);
       }
       if (!stop) timer = setTimeout(run, document.hidden ? intervalMs * 3 : intervalMs);
     };

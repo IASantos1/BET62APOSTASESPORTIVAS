@@ -269,6 +269,10 @@ function pool() {
     g.__bet62Pool = new Pool({
       connectionString: url,
       max: 10,
+      // Fail visibly when Railway's Postgres is unreachable instead of leaving admin/feed
+      // requests waiting on the driver's OS-level TCP timeout.
+      connectionTimeoutMillis: 8_000,
+      statement_timeout: 15_000,
       ssl: internal || /sslmode=disable/.test(url) ? undefined : { rejectUnauthorized: false },
     });
   }

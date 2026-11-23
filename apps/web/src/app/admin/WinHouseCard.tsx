@@ -105,8 +105,18 @@ export function WinHouseCard() {
   const [gameId, setGameId] = React.useState('');
 
   const load = React.useCallback(async () => {
-    const r = await fetch('/api/admin/winhouse', { cache: 'no-store' }).catch(() => null);
-    setS(r?.ok ? await r.json() : { error: `HTTP ${r?.status ?? 'rede'}` });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12_000);
+    try {
+      const r = await fetch('/api/admin/winhouse', { cache: 'no-store', signal: controller.signal });
+      setS(r.ok ? await r.json() : { error: `HTTP ${r.status}` });
+    } catch (error) {
+      setS({ error: error instanceof Error && error.name === 'AbortError'
+        ? 'O servidor/banco de dados não respondeu em 12 s. Confirme DATABASE_URL e o estado do Postgres no Railway.'
+        : `Não foi possível consultar o servidor: ${error instanceof Error ? error.message : 'falha de rede'}` });
+    } finally {
+      clearTimeout(timeout);
+    }
   }, []);
   React.useEffect(() => {
     void load();
