@@ -1,5 +1,7 @@
 import { fail, json, route } from '../../../../../lib/server/auth';
 import { hasDatabase } from '../../../../../lib/server/db';
+import { createWinHouseClient, envOptions } from '../../../../../lib/server/winhouse/client';
+import { readWinHouseStats } from '../../../../../lib/server/winhouse/tracker';
 import { eventDetail } from '../../../../../lib/server/winhouse/view';
 
 export const dynamic = 'force-dynamic';
@@ -9,5 +11,7 @@ export const GET = route(async (_req: Request, { params }: { params: { id: strin
   if (!process.env.WINHOUSE_BASE_URL || !hasDatabase()) return fail('WinHouse desligado.', 404);
   if (!/^\d{1,20}$/.test(params.id)) return fail('Jogo inválido.', 400);
   const ev = await eventDetail(params.id);
-  return ev ? json({ event: ev }) : fail('Jogo não encontrado.', 404);
+  if (!ev) return fail('Jogo não encontrado.', 404);
+  const statistics = ev.status === 'live' ? await readWinHouseStats(createWinHouseClient(envOptions()), params.id) : null;
+  return json({ event: { ...ev, statistics } });
 });

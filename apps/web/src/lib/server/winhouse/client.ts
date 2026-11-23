@@ -1,4 +1,5 @@
 import { detailOdds, eventsOf, parseOdds } from './parse';
+import { normalizeWinHouseStats } from './tracker';
 
 // WinHouse — cliente HTTP (só no servidor). Todos os endereços vêm do ambiente (WINHOUSE_*):
 // uma mudança de rota do lado do WinHouse é uma variável, não código. Nenhuma chave vai ao navegador.
@@ -11,6 +12,7 @@ export const ROUTES = {
   prematchBySport: '/ajax/prematchgamesbysport/{sportId}?lang={lang}',
   prematchEvent: '/ajax/prematchgame/{gameId}?lang={lang}',
   liveEvent: '/ajax/livegame/{gameId}?lang={lang}',
+  tracker: '/ajax/tracker/{gameId}?lang={lang}',
 } as const;
 export type RouteKey = keyof typeof ROUTES;
 
@@ -23,6 +25,7 @@ const ROUTE_ENV: Record<RouteKey, string> = {
   prematchBySport: 'WINHOUSE_PREMATCH_BY_SPORT',
   prematchEvent: 'WINHOUSE_PREMATCH_EVENT',
   liveEvent: 'WINHOUSE_LIVE_EVENT',
+  tracker: 'WINHOUSE_TRACKER_ROUTE',
 };
 
 export interface WhResponse {
@@ -113,11 +116,11 @@ export function createWinHouseClient({ baseUrl = '', lang = 'pt', routes = {}, t
     const out: Record<string, unknown>[] = [];
     let preId: string | null = gameId;
     let liveId: string | null = null;
-    for (const key of ['live', 'liveEvent', 'prematchMain', 'prematchTop', 'prematch24h', 'prematchEvent'] as RouteKey[]) {
-      const page = key === 'prematchEvent' || key === 'liveEvent';
-      const id = key === 'liveEvent' ? liveId : preId;
+    for (const key of ['live', 'liveEvent', 'tracker', 'prematchMain', 'prematchTop', 'prematch24h', 'prematchEvent'] as RouteKey[]) {
+      const page = key === 'prematchEvent' || key === 'liveEvent' || key === 'tracker';
+      const id = key === 'liveEvent' || key === 'tracker' ? liveId : preId;
       if (page && !id) {
-        out.push({ route: key, skipped: key === 'liveEvent' ? 'nenhum jogo na lista ao vivo' : 'nenhum jogo nas listas pré-jogo' });
+        out.push({ route: key, skipped: key === 'liveEvent' || key === 'tracker' ? 'nenhum jogo na lista ao vivo' : 'nenhum jogo nas listas pré-jogo' });
         continue;
       }
       try {
@@ -126,9 +129,9 @@ export function createWinHouseClient({ baseUrl = '', lang = 'pt', routes = {}, t
         const firstId = events.find((e) => e?.id !== undefined)?.id;
         if (key === 'live') liveId = firstId !== undefined ? String(firstId) : null;
         else if (!preId && !page && firstId !== undefined) preId = String(firstId);
-        const pageOdds = page ? detailOdds(r.body) : [];
+        const pageOdds = key === 'tracker' ? [] : page ? detailOdds(r.body) : [];
         const first = events[0];
-        const odds = page ? pageOdds : first ? parseOdds(first.odd ?? first.odds) : [];
+        const odds = key === 'tracker' ? [] : page ? pageOdds : first ? parseOdds(first.odd ?? first.odds) : [];
         out.push({
           route: key,
           path: pathOf(key, { gameId: id ?? '' }),
@@ -141,6 +144,7 @@ export function createWinHouseClient({ baseUrl = '', lang = 'pt', routes = {}, t
           events: page ? undefined : events.length,
           odds: odds.length,
           markets: new Set(odds.map((o) => o.m)).size,
+          stats: key === 'tracker' ? Object.keys(normalizeWinHouseStats(r.body) ?? {}).length : undefined,
           firstItem: first && !page ? shape(first) : undefined,
           bodyStart: r.body === null ? r.text.slice(0, 300) : undefined,
         });
@@ -165,6 +169,7 @@ export function createWinHouseClient({ baseUrl = '', lang = 'pt', routes = {}, t
     prematchBySport: (sportId: number) => request('prematchBySport', { sportId }),
     prematchEvent: (gameId: string) => request('prematchEvent', { gameId }),
     liveEvent: (gameId: string) => request('liveEvent', { gameId }),
+    tracker: (gameId: string) => request('tracker', { gameId }),
   };
 }
 

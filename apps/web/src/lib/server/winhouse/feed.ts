@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { hasDatabase, one, query } from '../db';
 import { createWinHouseClient, envOptions, type WhResponse, type WinHouseClient } from './client';
 import { settleWinHouse } from './settle';
-import { detailOdds, estimateOffset, eventsOf, finishVerdict, listedButOver, normalizeItem, sameGame, type WhItem } from './parse';
+import { detailOdds, estimateOffset, eventsOf, finishVerdict, listedButOver, normalizeItem, sameGame, SPORTS, type WhItem } from './parse';
 
 // WinHouse — coletor. Corre no servidor (arranca em instrumentation.ts quando WINHOUSE_BASE_URL
 // existe) e guarda no PostgreSQL os jogos, o placar, o relógio e as cotações:
@@ -28,7 +28,9 @@ export function feedSettings(env: NodeJS.ProcessEnv = process.env) {
     liveSeconds: num(env.WINHOUSE_LIVE_SECONDS, 15, 5, 300),
     prematchSeconds: num(env.WINHOUSE_PREMATCH_SECONDS, 60, 20, 3600),
     bySportMinutes: num(env.WINHOUSE_BY_SPORT_MINUTES, 10, 2, 720),
-    bySport: (env.WINHOUSE_BY_SPORT ?? '1,2,5').split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0),
+    // Recolhe o calendário completo de todos os desportos que o parser e o site suportam.
+    // WINHOUSE_BY_SPORT pode restringir a lista; uma string vazia desliga esta recolha alargada.
+    bySport: (env.WINHOUSE_BY_SPORT ?? Object.keys(SPORTS).join(',')).split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0 && !!SPORTS[n]),
     finishConfirmSeconds: num(env.WINHOUSE_FINISH_CONFIRM_SECONDS, 180, 0, 3600),
     liveDetailSeconds: num(env.WINHOUSE_LIVE_DETAIL_SECONDS, 30, 5, 600),
     liveDetailPerCycle: num(env.WINHOUSE_LIVE_DETAIL_PER_CYCLE, 10, 0, 100),
@@ -286,7 +288,11 @@ export function createWinHouseFeed({ client, settings, now = () => Date.now(), l
     const t = now();
     if (settings.bySport.length && t - lastBySportAt >= settings.bySportMinutes * 60_000) {
       lastBySportAt = t;
-      for (const sid of settings.bySport) lists.push(await read(`prematchBySport:${sid}`, () => client.prematchBySport(sid)));
+      // Lê em lotes pequenos para cobrir todos os desportos sem lançar dezasseis pedidos ao mesmo tempo.
+      for (let i = 0; i < settings.bySport.length; i += 3) {
+        const batch = await Promise.all(settings.bySport.slice(i, i + 3).map((sid) => read(`prematchBySport:${sid}`, () => client.prematchBySport(sid))));
+        lists.push(...batch);
+      }
     }
     const byId = new Map<string, WhItem>();
     for (const l of lists) for (const e of l?.events ?? []) {

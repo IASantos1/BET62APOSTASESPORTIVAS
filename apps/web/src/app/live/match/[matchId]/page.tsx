@@ -541,7 +541,8 @@ function Inner({ id }: { id: string }) {
   const endpoint = useEventEndpoint(bbId ?? '', feed, bbId ? cfg?.eventEndpoint : null, cfg !== null && !!e && !!bbId && bbMarkets, e ? Object.keys(e.markets).length : 0);
   const fullMarketState = useFullMarkets(bbId ?? '', feed, bbId && bbMarkets ? endpoint : null);
   const fullMarkets = fullMarketState.markets;
-  const betbyStats = useBetbyStats(bbId ?? '', feed, bbId ? cfg?.statsEndpoint : null, view === 'estatisticas');
+  const hasWinHouseStats = isWh && Object.keys(whEvent?.statistics ?? {}).length > 0;
+  const betbyStats = useBetbyStats(bbId ?? '', feed, bbId ? cfg?.statsEndpoint : null, view === 'estatisticas' && !hasWinHouseStats);
   const sideWidgets = bbId ? widgets.get(bbId) : undefined;
   const tracker = live && e ? trackerFor(e.raw, e.betbySport, cfg?.trackerField, sideWidgets, true) : null;
   React.useEffect(() => {
@@ -677,7 +678,7 @@ function Inner({ id }: { id: string }) {
   const allMarkets: BetbyMarkets = live && e.sport === 'futebol' ? closeDecidedMarkets(merged, liveScore) : merged;
   const ev = { ...e, markets: allMarkets, marketSource: isWh ? source : e.marketSource };
   const markets = Object.entries(allMarkets).sort((a, b) => marketRank(a[0]) - marketRank(b[0]));
-  const stats = statRows(e.statistics);
+  const stats = statRows(isWh ? whEvent?.statistics ?? e.statistics : e.statistics);
   const counts = new Map<string, number>();
   for (const [m] of markets) counts.set(marketCategory(m), (counts.get(marketCategory(m)) ?? 0) + 1);
   const activeCat = cat !== 'todos' && counts.has(cat) ? cat : 'todos';
@@ -687,13 +688,14 @@ function Inner({ id }: { id: string }) {
   // página de estatísticas da BETBY (ui.invisiblesport.com/stats.html), que só existe para jogos
   // com fornecedor de estatísticas associado (os que têm widgets no side feed).
   const statsWidget = sideWidgets?.find((w) => w.url && /statistic/i.test(w.type))?.url;
-  const statsFrame =
-    statsWidget ??
-    (sideWidgets?.length
-      ? `https://ui.invisiblesport.com/stats.html?brandId=${encodeURIComponent(BETBY_CONFIG.brandId)}&eventId=${encodeURIComponent(bbId ?? '')}&lang=${encodeURIComponent(BETBY_CONFIG.locale)}`
-      : null);
+  const statsFrame = hasWinHouseStats
+    ? null
+    : statsWidget ??
+      (sideWidgets?.length
+        ? `https://ui.invisiblesport.com/stats.html?brandId=${encodeURIComponent(BETBY_CONFIG.brandId)}&eventId=${encodeURIComponent(bbId ?? '')}&lang=${encodeURIComponent(BETBY_CONFIG.locale)}`
+        : null);
   const league = leagueApiId(e.sport, e.league, e.country);
-  const extraStats = pairsOf(betbyStats.data);
+  const extraStats = hasWinHouseStats ? [] : pairsOf(betbyStats.data);
   const distRows = (distribution.markets ?? [])
     .filter((m) => String(m.market_id) in allMarkets)
     .slice(0, 4);

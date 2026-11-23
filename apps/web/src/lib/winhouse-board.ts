@@ -33,6 +33,8 @@ export interface WhApiEvent {
   suspended: boolean;
   marketCount: number;
   markets: BetbyMarkets;
+  /** Estatísticas normalizadas do tracker WinHouse (lidas no servidor e atualizadas com cache). */
+  statistics?: Record<string, { home: number; away: number }> | null;
   names?: Record<string, string>;
   outcomes?: Record<string, string>;
 }
@@ -144,6 +146,7 @@ export function whToBoard(w: WhApiEvent): BoardEvent | null {
     clockStopped: w.clockStopped,
     clockAt: w.clockMmss && w.clockAt ? Date.parse(w.clockAt) : undefined,
     score: w.score && w.live ? { home: String(w.score.home ?? 0), away: String(w.score.away ?? 0) } : undefined,
+    statistics: w.statistics ?? undefined,
     markets,
     marketSource: Object.fromEntries(Object.keys(markets).map((m) => [m, 'wh' as const])),
     marketNames: w.names,
@@ -204,7 +207,7 @@ export function mergeLinked(w: BoardEvent, b: BoardEvent, withMarkets: boolean):
     betbyId: b.id,
     betbySport: b.betbySport,
     raw: b.raw,
-    statistics: b.statistics,
+    statistics: w.statistics ?? b.statistics,
     periods: b.periods,
     gameScore: b.gameScore,
     homePhoto: w.homePhoto ?? b.homePhoto,
