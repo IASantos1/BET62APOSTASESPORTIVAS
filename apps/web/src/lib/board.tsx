@@ -429,9 +429,10 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
 
   const value = React.useMemo<BoardState>(() => {
     const mode: OddsMode = 'winhouse';
-    // No provider fallback: when WinHouse is unavailable the board stays empty until it recovers.
-    const list = wh.ready && wh.healthy
-      ? wh.events.map(whToBoard).filter((e): e is BoardEvent => !!e && e.leagueKnown)
+    // WinHouse stays the only source. Show scheduled fixtures even if the live-feed health
+    // timestamp is stale; the API already filters stale in-play events.
+    const list = wh.ready
+      ? wh.events.map(whToBoard).filter((e): e is BoardEvent => !!e)
       : [];
     const events = list.sort((a, b) => sportRank(a.sport) - sportRank(b.sport) || byPriority(a, b));
     const leagueMap = new Map<string, LeagueNode>();

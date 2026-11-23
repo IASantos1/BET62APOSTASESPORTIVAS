@@ -20,5 +20,9 @@ export const GET = route(async (req: Request) => {
   const st = await one<{ value: { routes?: { live?: { ok?: boolean; at?: string } }; lastLiveOkAt?: string } }>(`SELECT value FROM wh_state WHERE key = 'status'`);
   const okAt = Date.parse(st?.value?.lastLiveOkAt ?? '');
   const healthy = Number.isFinite(okAt) && Date.now() - okAt < 120_000;
-  return json({ enabled: true, mode, healthy, at: new Date().toISOString(), events: healthy ? events : [] });
+  // Do not hide the WinHouse board because the *live* health timestamp is stale: that
+  // timestamp is independent of the scheduled collector. Keep upcoming fixtures visible;
+  // suppress only possibly stale live events until the live feed reports again.
+  const visibleEvents = healthy ? events : events.filter((event) => !event.live);
+  return json({ enabled: true, mode, healthy, at: new Date().toISOString(), events: visibleEvents });
 });
