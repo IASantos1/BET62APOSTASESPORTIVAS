@@ -142,6 +142,7 @@ export function whToBoard(w: WhApiEvent): BoardEvent | null {
   if (!sport) return null;
   const [country, tournament] = splitLeague(w.competition);
   const league = classifyLeague(sport, country, tournament, w.live && sport === 'futebol');
+  if (!league) return null;
   const markets = w.markets ?? {};
   return {
     id: whSiteId(w.id),
@@ -150,11 +151,11 @@ export function whToBoard(w: WhApiEvent): BoardEvent | null {
     status: w.live ? 'live' : 'scheduled',
     sport,
     sportName: SPORT_BY_KEY[sport].name,
-    competition: league?.fullName ?? w.competition,
-    country: league?.country ?? (country || 'World'),
-    league: league?.label ?? tournament,
-    tier: league?.tier ?? 9,
-    leagueKnown: !!league,
+    competition: league.fullName,
+    country: league.country,
+    league: league.label,
+    tier: league.tier,
+    leagueKnown: true,
     home: w.home,
     away: w.away,
     homePhoto: w.homeLogo ?? undefined,
