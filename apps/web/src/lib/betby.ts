@@ -285,7 +285,7 @@ async function fetchVersions(feed: BetbyFeed, versions: string[], signal: AbortS
  * Só as versões novas do índice são descarregadas (as já aplicadas não mudam), em paralelo; o último
  * quadro fica guardado no navegador para a página seguinte abrir logo com ele.
  */
-export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
+export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000, enabled = true) {
   const storeRef = React.useRef(new Map<string, BetbyEvent>());
   const lastEventUpdatesRef = React.useRef(new Map<string, number>());
   const dictRef = React.useRef(emptyDictionaries());
@@ -306,6 +306,13 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
 
   // Abre com o último quadro guardado (até 10 min), enquanto o novo chega.
   React.useEffect(() => {
+    if (!enabled) {
+      storeRef.current.clear();
+      setEvents([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     const snap = readSnapshot(feed);
     if (!snap || storeRef.current.size) return;
     storeRef.current = new Map(snap.events);
@@ -319,9 +326,10 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
     setLastEventUpdates(new Map(lastEventUpdatesRef.current));
     setUpdatedAt(new Date(snap.at));
     setLoading(false);
-  }, [feed, publish]);
+  }, [enabled, feed, publish]);
 
   const load = React.useCallback(async () => {
+    if (!enabled) return;
     if (busyRef.current) return;
     busyRef.current = true;
     const controller = new AbortController();
@@ -366,13 +374,14 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
       busyRef.current = false;
       setLoading(false);
     }
-  }, [feed, publish]);
+  }, [enabled, feed, publish]);
 
   React.useEffect(() => {
+    if (!enabled) return;
     void load();
     const id = setInterval(() => void load(), intervalMs);
     return () => clearInterval(id);
-  }, [load, intervalMs]);
+  }, [enabled, load, intervalMs]);
 
   return { events, dictionaries, lastEventUpdates, loading, error, updatedAt, reload: load };
 }
@@ -382,7 +391,7 @@ export function useBetbyFeed(feed: BetbyFeed, intervalMs = 15000) {
  * transmissões. Não substitui o feed de odds — é o único sítio onde vem, p. ex., o id Statscore que
  * abre o minicampo. Se falhar, o site continua a funcionar sem estes extras.
  */
-export function useBetbySide(intervalMs = 20000) {
+export function useBetbySide(intervalMs = 20000, enabled = true) {
   const widgetsRef = React.useRef(new Map<string, BetbySideItem[]>());
   const broadcastsRef = React.useRef(new Map<string, BetbySideItem[]>());
   const versionRef = React.useRef<string | null>(null);
@@ -392,6 +401,7 @@ export function useBetbySide(intervalMs = 20000) {
   const [loading, setLoading] = React.useState(true);
 
   const load = React.useCallback(async () => {
+    if (!enabled) return;
     if (busyRef.current) return;
     busyRef.current = true;
     const controller = new AbortController();
@@ -418,13 +428,19 @@ export function useBetbySide(intervalMs = 20000) {
       busyRef.current = false;
       setLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   React.useEffect(() => {
+    if (!enabled) {
+      setWidgets(new Map());
+      setBroadcasts(new Map());
+      setLoading(false);
+      return;
+    }
     void load();
     const id = setInterval(() => void load(), intervalMs);
     return () => clearInterval(id);
-  }, [load, intervalMs]);
+  }, [enabled, load, intervalMs]);
 
   return { widgets, broadcasts, loading };
 }

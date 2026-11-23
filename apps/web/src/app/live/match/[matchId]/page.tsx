@@ -11,8 +11,8 @@ import { LeagueLogo, TeamLogo, leagueApiId } from '../../../../components/sports
 import { OddArrow } from '../../../../components/sports/blocks';
 import { fmtWhen } from '../../../../components/sports/links';
 import { fetchBetDistribution, fetchDescriptions, fetchMarketCatalog, type BetbyDescriptions, type BetbyDistribution, type BetbyMarketCatalog, type BetbyMarketCatalogEntry } from '../../../../lib/betby';
-import { betbyIdOf, pickOf, suspendIfStale, useBoard, type BoardEvent } from '../../../../lib/board';
-import { isWhId, useWinHouseEvent } from '../../../../lib/winhouse-board';
+import { pickOf, suspendIfStale, useBoard, type BoardEvent } from '../../../../lib/board';
+import { useWinHouseEvent } from '../../../../lib/winhouse-board';
 import { SourceBadge } from '../../../../components/sports/SourceBadge';
 import { SPORT_BY_KEY, countryLabel } from '../../../../lib/sports/catalog';
 import { useSlip } from '../../../../stores/slip.store';
@@ -24,7 +24,7 @@ import { closeDecidedMarkets } from '../../../../lib/lifecycle';
 import { useMarketTooltips } from '../../../../lib/tooltips';
 import { LiveClockText } from '../../../../lib/clock';
 import { useSportsTracker } from '../../../../components/sports/SportsTrackerContext';
-import { BETBY_CONFIG, type BetbyMarkets } from '../../../../lib/betby';
+import type { BetbyMarkets } from '../../../../lib/betby';
 
 // Nomes curados dos mercados mais comuns (ids Betradar usados pela BETBY). Têm prioridade sobre o
 // catálogo oficial porque já estão em português e são mais descritivos ("Total de golos" vs "Total").
@@ -516,13 +516,12 @@ function StatBars({ rows }: { rows: { key: string; home: number; away: number }[
 type View = 'mercados' | 'tracker' | 'live' | 'estatisticas';
 
 function Inner({ id }: { id: string }) {
-  const { events, loading, widgets, broadcasts, mode } = useBoard();
+  const { events, loading, widgets, broadcasts } = useBoard();
   const e = events.find((x) => x.id === id);
-  // Id BETBY (minicampo, estatísticas, descrições): o do jogo, ou o do jogo BETBY ligado a um do WinHouse.
-  const bbId = e ? betbyIdOf(e) : isWhId(id) ? null : id;
   const isWh = e?.source === 'winhouse';
-  // Mercados extra da BETBY num jogo WinHouse só no modo "ambos".
-  const bbMarkets = !isWh || mode === 'both';
+  // BETBY remains disabled for the public sports pages; WinHouse supplies all displayed markets.
+  const bbId = null;
+  const bbMarkets = false;
   const picks = useSlip((s) => s.picks);
   const toggle = useSlip((s) => s.toggle);
   const cfg = useSiteConfig();
@@ -542,9 +541,9 @@ function Inner({ id }: { id: string }) {
   const fullMarketState = useFullMarkets(bbId ?? '', feed, bbId && bbMarkets ? endpoint : null);
   const fullMarkets = fullMarketState.markets;
   const hasWinHouseStats = isWh && Object.keys(whEvent?.statistics ?? {}).length > 0;
-  const betbyStats = useBetbyStats(bbId ?? '', feed, bbId ? cfg?.statsEndpoint : null, view === 'estatisticas' && !hasWinHouseStats);
+  const betbyStats = useBetbyStats(bbId ?? '', feed, bbId ? cfg?.statsEndpoint : null, false);
   const sideWidgets = bbId ? widgets.get(bbId) : undefined;
-  const tracker = live && e ? trackerFor(e.raw, e.betbySport, cfg?.trackerField, sideWidgets, true) : null;
+  const tracker = null;
   React.useEffect(() => {
     const media = window.matchMedia('(min-width: 1280px)');
     const update = () => setDesktopTracker(media.matches);
@@ -558,14 +557,10 @@ function Inner({ id }: { id: string }) {
     return () => setTracker(null, false);
   }, [desktopTracker, live, setTracker, tracker, view]);
   const mobileTracker = view === 'tracker' && !!live && !desktopTracker && !!tracker;
-  // Jogo ao vivo: o minicampo abre logo (cabeçalho do jogo → minicampo → Tracker/Live → mercados).
-  const autoTracker = React.useRef(false);
+  // Jogos ao vivo abrem logo as estatísticas recebidas da WinHouse.
   React.useEffect(() => {
-    if (live && !autoTracker.current) {
-      autoTracker.current = true;
-      setView((v) => (v === 'mercados' ? 'tracker' : v));
-    }
-  }, [live]);
+    if (live) setView('estatisticas');
+  }, [live, e?.id]);
   React.useEffect(() => {
     if (!bbId) {
       setDescriptions({});
@@ -683,27 +678,18 @@ function Inner({ id }: { id: string }) {
   for (const [m] of markets) counts.set(marketCategory(m), (counts.get(marketCategory(m)) ?? 0) + 1);
   const activeCat = cat !== 'todos' && counts.has(cat) ? cat : 'todos';
   const shown = activeCat === 'todos' ? markets : markets.filter(([m]) => marketCategory(m) === activeCat);
-  const broadcast = bbId ? broadcasts.get(bbId)?.find((b) => b.url)?.url : undefined;
-  // Estatísticas: o widget do side feed que traz um endereço próprio (Oddin/Betgenius), senão a
-  // página de estatísticas da BETBY (ui.invisiblesport.com/stats.html), que só existe para jogos
-  // com fornecedor de estatísticas associado (os que têm widgets no side feed).
-  const statsWidget = sideWidgets?.find((w) => w.url && /statistic/i.test(w.type))?.url;
-  const statsFrame = hasWinHouseStats
-    ? null
-    : statsWidget ??
-      (sideWidgets?.length
-        ? `https://ui.invisiblesport.com/stats.html?brandId=${encodeURIComponent(BETBY_CONFIG.brandId)}&eventId=${encodeURIComponent(bbId ?? '')}&lang=${encodeURIComponent(BETBY_CONFIG.locale)}`
-        : null);
+  const broadcast = undefined;
+  // BETBY statistics iframe intentionally disabled with the public data feeds.
+  const statsFrame = null;
   const league = leagueApiId(e.sport, e.league, e.country);
   const extraStats = hasWinHouseStats ? [] : pairsOf(betbyStats.data);
   const distRows = (distribution.markets ?? [])
     .filter((m) => String(m.market_id) in allMarkets)
     .slice(0, 4);
+  const goalInsights = isWh && !live ? whEvent?.goalApi : null;
 
-  // Ao vivo: Tracker, estatísticas e Live. Pré-jogo: Estatísticas.
-  const views: [View, string, React.ReactNode][] = live
-    ? [['tracker', 'Tracker', <Activity key="t" size={15} />], ['estatisticas', 'Estatísticas', <BarChart3 key="s" size={15} />], ['live', 'Live', <MonitorPlay key="l" size={15} />]]
-    : [['estatisticas', 'Estatísticas', <BarChart3 key="s" size={15} />]];
+  // O painel público mostra estatísticas WinHouse e contexto pré-jogo da Goal API.
+  const views: [View, string, React.ReactNode][] = [['estatisticas', 'Estatísticas', <BarChart3 key="s" size={15} />]];
 
   return (
     <>
@@ -822,6 +808,48 @@ function Inner({ id }: { id: string }) {
               <iframe src={statsFrame} title="Estatísticas do jogo" className="block h-[420px] w-full md:h-[520px]" allow="fullscreen" />
             </div>
           )}
+          {goalInsights?.form && (
+            <div className="grid gap-3 md:grid-cols-2">
+              {([[e.home, goalInsights.form.home], [e.away, goalInsights.form.away]] as const).map(([team, games]) => games?.length ? (
+                <div key={team} className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
+                  <h3 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-white/60">Últimos jogos · {team}</h3>
+                  <div className="space-y-2">
+                    {games.slice(0, 5).map((game, i) => (
+                      <div key={`${game.date ?? i}-${game.opponent}`} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="truncate text-white/70">{game.opponent ?? 'Adversário'}{game.league ? ` · ${game.league}` : ''}</span>
+                        <span className="shrink-0 font-mono font-bold">{game.score || '—'} <span className="text-white/45">{game.result || ''}</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null)}
+            </div>
+          )}
+          {!!goalInsights?.h2h?.length && (
+            <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
+              <h3 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-white/60">Confrontos diretos</h3>
+              <div className="space-y-2">
+                {goalInsights.h2h.map((game, i) => (
+                  <div key={`${game.date ?? i}-${game.home}`} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="truncate text-white/70">{game.home} · {game.away}</span>
+                    <span className="shrink-0 font-mono font-bold">{game.homeScore} - {game.awayScore}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {!!goalInsights?.standings?.length && (
+            <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
+              <h3 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-white/60">Classificação · {goalInsights.fixture?.competition || e.league}</h3>
+              <div className="space-y-2">
+                {goalInsights.standings.slice(0, 12).map((row) => (
+                  <div key={`${row.position}-${row.team}`} className={cn('grid grid-cols-[2rem_1fr_repeat(3,2rem)] gap-2 text-xs', row.team === e.home || row.team === e.away ? 'font-bold text-bet62-primary' : 'text-white/65')}>
+                    <span>{row.position}.</span><span className="truncate">{row.team}</span><span className="text-right">{row.played ?? '—'}</span><span className="text-right">{row.goalsFor ?? '—'}:{row.goalsAgainst ?? '—'}</span><span className="text-right">{row.points ?? '—'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {extraStats.length > 0 && (
             <div className="rounded-2xl border border-bet62-border bg-bet62-surface/50 p-4">
               <h3 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-white/60">Estatísticas</h3>
@@ -852,9 +880,9 @@ function Inner({ id }: { id: string }) {
               </div>
             </div>
           )}
-          {betbyStats.error && <EmptyPanel>Estatísticas da BETBY indisponíveis: {betbyStats.error}</EmptyPanel>}
-          {!stats.length && !extraStats.length && !distRows.length && !statsFrame && !betbyStats.error && (
-            <EmptyPanel>{live ? 'A BETBY não enviou estatísticas para este evento.' : cfg?.statsEndpoint ? 'A fonte configurada não devolveu estatísticas pré-jogo para este evento.' : 'Sem fonte de estatísticas pré-jogo configurada. O feed de odds da BETBY não inclui, por si só, forma, confrontos diretos ou estatísticas históricas.'}</EmptyPanel>
+          {goalInsights?.error && <EmptyPanel>Goal API: {goalInsights.error}</EmptyPanel>}
+          {!stats.length && !extraStats.length && !distRows.length && !statsFrame && !betbyStats.error && !goalInsights?.error && (
+            <EmptyPanel>{live ? 'O WinHouse ainda não devolveu estatísticas para este evento.' : 'Sem estatísticas disponíveis para este jogo neste momento.'}</EmptyPanel>
           )}
         </section>
       )}

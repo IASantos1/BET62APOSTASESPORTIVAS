@@ -1,13 +1,11 @@
 'use client';
 
-// O quadro de jogos do site: ao vivo e pré-jogo da BETBY (lidos no navegador), já filtrados pelos
-// desportos e ligas do catálogo e normalizados para as páginas (Destaques, Desporto, Ao Vivo,
-// Próximos, liga). Um único provider faz as leituras; as páginas só leem o resultado.
+// O quadro público usa WinHouse para jogos, placares, estatísticas e mercados.
 import * as React from 'react';
 import { closeDecidedMarkets, isEventFinished } from './lifecycle';
 import { oddsStale, useBetbyFeed, useBetbySide, type BetbyDictionaries, type BetbyEvent, type BetbyMarkets, type BetbySideItem } from './betby';
 import { SPORT_BY_KEY, classifyLeague, isBigTeam, sportKeyOf, sportRank, type SportKey } from './sports/catalog';
-import { linkEvents, mergeLinked, useWinHouseFeed, whToBoard, type OddsMode } from './winhouse-board';
+import { useWinHouseFeed, whToBoard, type OddsMode } from './winhouse-board';
 
 export interface BoardEvent {
   id: string;
@@ -423,65 +421,18 @@ function isSoccerFeedSilentAfterRegulation(
 export const byPriority = (a: BoardEvent, b: BoardEvent) => a.tier - b.tier || (a.startTime ?? 0) - (b.startTime ?? 0);
 
 export function BoardProvider({ children }: { children: React.ReactNode }) {
-  const live = useBetbyFeed('live', 2000);
-  const pre = useBetbyFeed('prematch', 30000);
-  const side = useBetbySide(20000);
+  // BETBY is temporarily out of the public sports feed; WinHouse supplies fixtures and markets.
+  useBetbyFeed('live', 2000, false);
+  useBetbyFeed('prematch', 30000, false);
+  const side = useBetbySide(20000, false);
   const wh = useWinHouseFeed(10000);
 
   const value = React.useMemo<BoardState>(() => {
-    const byId = new Map<string, BoardEvent>();
-    const now = Date.now();
-    const liveFeedHealthy = Boolean(
-      live.updatedAt
-      && !live.error
-      && now - live.updatedAt.getTime() < 45_000,
-    );
-    for (const raw of pre.events) {
-      if (isBetbyEventEnded(raw)) continue;
-      const e = toBoardEvent(raw, 'scheduled', pre.dictionaries);
-      // Um jogo pré-jogo cujo início já passou sai da lista (entra no ao vivo).
-      if (e && (!e.startTime || e.startTime > now - 5 * 60_000)) byId.set(e.id, e);
-    }
-    for (const raw of live.events) {
-      // Não remover apenas porque status deixou de ser 1: a BETBY pode usar estados
-      // intermédios (por exemplo HT/intervalo). Só os códigos de fim confirmam (lib/lifecycle.ts).
-      if (isBetbyEventEnded(raw)) {
-        byId.delete(raw.id);
-        continue;
-      }
-      const sportInfo = raw.desc?.sport ? live.dictionaries.sports[raw.desc.sport] : undefined;
-      const sport = sportKeyOf(sportInfo as { name?: string; slug?: string } | undefined);
-      if (
-        liveFeedHealthy
-        && sport
-        && isSoccerFeedSilentAfterRegulation(raw, sport, live.lastEventUpdates, now)
-      ) {
-        byId.delete(raw.id);
-        continue;
-      }
-      const e = toBoardEvent(raw, 'live', live.dictionaries);
-      if (e) byId.set(e.id, e);
-    }
-    // WinHouse (modo do admin): os jogos dele mandam; a BETBY liga-se a eles e completa. Sem
-    // WinHouse (desligado, coletor parado ou lista vazia) o site fica só com a BETBY.
-    // "Só WinHouse" mostra só o WinHouse mesmo sem jogos naquele momento; a BETBY só entra
-    // como reserva quando o WinHouse está desligado ou em baixo (healthy = falso).
-    const mode: OddsMode = wh.enabled && wh.healthy ? wh.mode : 'betby';
-    // Até o WinHouse responder pela 1.ª vez (máx. 4 s) o quadro espera: sem isto via-se a BETBY
-    // e logo a seguir os mesmos jogos trocados pelos do WinHouse.
-    let list = wh.ready ? [...byId.values()] : [];
-    if (mode !== 'betby') {
-      const whEvents = wh.events.map(whToBoard).filter((e): e is BoardEvent => !!e);
-      const links = linkEvents(whEvents, list);
-      const linked = new Set(links.values());
-      const merged: BoardEvent[] = [];
-      for (const w of whEvents) {
-        const b = links.has(w.id) ? byId.get(links.get(w.id)!) : undefined;
-        const e = b ? mergeLinked(w, b, mode === 'both') : w;
-        if (e.leagueKnown) merged.push(e);
-      }
-      list = mode === 'both' ? [...merged, ...list.filter((b) => !linked.has(b.id))] : merged;
-    }
+    const mode: OddsMode = 'winhouse';
+    // No provider fallback: when WinHouse is unavailable the board stays empty until it recovers.
+    const list = wh.ready && wh.healthy
+      ? wh.events.map(whToBoard).filter((e): e is BoardEvent => !!e && e.leagueKnown)
+      : [];
     const events = list.sort((a, b) => sportRank(a.sport) - sportRank(b.sport) || byPriority(a, b));
     const leagueMap = new Map<string, LeagueNode>();
     for (const e of events) {
@@ -494,19 +445,16 @@ export function BoardProvider({ children }: { children: React.ReactNode }) {
     return {
       events,
       leagues: [...leagueMap.values()],
-      loading: !wh.ready || (live.loading && pre.loading && !(mode !== 'betby' && list.length)),
-      error: live.error && pre.error ? live.error : null,
-      updatedAt: live.updatedAt ?? pre.updatedAt,
+      loading: !wh.ready,
+      error: wh.error,
+      updatedAt: wh.updatedAt ? new Date(wh.updatedAt) : null,
       widgets: side.widgets,
       broadcasts: side.broadcasts,
       mode,
-      chosenMode: wh.enabled ? wh.mode : 'betby',
-      reload: () => {
-        void live.reload();
-        void pre.reload();
-      },
+      chosenMode: 'winhouse',
+      reload: () => undefined,
     };
-  }, [live.events, live.lastEventUpdates, live.dictionaries, live.loading, live.error, live.updatedAt, pre.events, pre.dictionaries, pre.loading, pre.error, pre.updatedAt, side.widgets, side.broadcasts, wh.events, wh.mode, wh.enabled, wh.healthy, wh.ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [side.widgets, side.broadcasts, wh.events, wh.error, wh.updatedAt, wh.healthy, wh.ready]);
 
   const moves = useOddMoves(value.events);
   return (

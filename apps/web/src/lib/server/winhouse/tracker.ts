@@ -3,7 +3,7 @@ import type { WinHouseClient } from './client';
 export type WinHouseStats = Record<string, { home: number; away: number }>;
 
 const FIRST = (...values: unknown[]) => values.find((value) => value !== undefined && value !== null && value !== '');
-const NUMBER = (value: unknown) => value === null || value === undefined || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
+const NUMBER = (value: unknown) => value === null || value === undefined || value === '' || !Number.isFinite(Number(String(value).replace('%', '').replace(',', '.'))) ? null : Number(String(value).replace('%', '').replace(',', '.'));
 
 function pair(value: unknown): [number | null, number | null] {
   if (Array.isArray(value) && value.length >= 2) return [NUMBER(value[0]), NUMBER(value[1])];
@@ -33,10 +33,14 @@ const STAT_NAMES: [RegExp, string][] = [
 ];
 
 function statKey(name: string) {
-  return STAT_NAMES.find(([pattern]) => pattern.test(name))?.[1] ?? null;
+  if (/^(goals?|score|home_score|away_score|h1|h2|ht|timer|time|period|status|points|t|s\d+)$/i.test(name.trim())) return null;
+  const known = STAT_NAMES.find(([pattern]) => pattern.test(name))?.[1];
+  if (known) return known;
+  const key = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  return key && key.length <= 60 ? key : null;
 }
 
-/** Normaliza os formatos de estatísticas usados pelo endpoint /ajax/tracker/{id}. */
+/** Normaliza as estatísticas do widget-data rico e do endpoint alternativo /ajax/tracker/{id}. */
 export function normalizeWinHouseStats(body: unknown): WinHouseStats | null {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
   const outer = body as Record<string, unknown>;
@@ -74,9 +78,7 @@ export function normalizeWinHouseStats(body: unknown): WinHouseStats | null {
   const plus = data.plus && typeof data.plus === 'object' ? (data.plus as Record<string, unknown>).stats : null;
   if (plus && typeof plus === 'object') {
     const values = plus as Record<string, unknown>;
-    add('expected goals', values.xg);
-    add('fouls', values.fouls);
-    add('total shots', values.shots);
+    for (const [name, value] of Object.entries(values)) add(name === 'xg' ? 'expected goals' : name === 'shots' ? 'total shots' : name, value);
   }
   if (data.sc && typeof data.sc === 'object' && !Array.isArray(data.sc)) {
     for (const [name, value] of Object.entries(data.sc)) add(name.replace(/_/g, ' '), value);
@@ -88,6 +90,52 @@ export function normalizeWinHouseStats(body: unknown): WinHouseStats | null {
 const cache = new Map<string, { at: number; stats: WinHouseStats | null }>();
 const pending = new Map<string, Promise<WinHouseStats | null>>();
 
+function widgetCredentials(body: unknown, text = '') {
+  const raw = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  const data = raw.data && typeof raw.data === 'object' ? { ...raw, ...(raw.data as Record<string, unknown>) } : raw;
+  const eid = FIRST(data.eid, data.EID, data.event_id, data.eventId, data.tracker_id, data.match_id);
+  const akey = FIRST(data.akey, data.AKEY, data.api_key, data.apiKey, data.key, data.token);
+  if (eid && akey) return { eid: String(eid), akey: String(akey) };
+  const source = String(text || '');
+  const pick = (names: string[]) => {
+    for (const name of names) {
+      const match = new RegExp(`[?&"'\\s{,]${name}["']?\\s*(?:=|:)\\s*["']?([A-Za-z0-9_.:-]{2,128})`, 'i').exec(source);
+      if (match) return match[1];
+    }
+    return null;
+  };
+  const url = /(?:widget-data|ws-widget)[^"'\s<>]*/.exec(source)?.[0] || '';
+  const fromUrl = (names: string[]) => {
+    for (const name of names) {
+      const m = new RegExp(`[?&]${name}=([A-Za-z0-9_.:-]{2,128})`, 'i').exec(url);
+      if (m) return m[1];
+    }
+    return null;
+  };
+  const parsedEid = fromUrl(['event_id']) || pick(['EID', 'eid', 'eventId', 'event_id']);
+  const parsedKey = fromUrl(['api_key']) || pick(['AKEY', 'akey', 'apiKey', 'api_key']);
+  return parsedEid && parsedKey ? { eid: parsedEid, akey: parsedKey } : null;
+}
+
+async function readRichTracker(client: WinHouseClient, gameId: string) {
+  // The widget-data feed has richer statistics (including xG) than the plain tracker endpoint.
+  try {
+    const widget = await client.widget(gameId);
+    const credentials = widget.ok ? widgetCredentials(widget.body, widget.text) : null;
+    if (credentials) {
+      const rich = await client.widgetData(credentials.eid, credentials.akey);
+      if (rich.ok) {
+        const stats = normalizeWinHouseStats(rich.body);
+        if (stats && Object.keys(stats).length) return stats;
+      }
+    }
+  } catch {
+    // Some games do not have the richer widget; use the plain WinHouse tracker below.
+  }
+  const response = await client.tracker(gameId);
+  return response.ok ? normalizeWinHouseStats(response.body) : null;
+}
+
 /** Caches watched-match stats to keep the browser's 5s detail refresh from over-polling WinHouse. */
 export async function readWinHouseStats(client: WinHouseClient, gameId: string): Promise<WinHouseStats | null> {
   if ((process.env.WINHOUSE_TRACKER ?? 'on').toLowerCase() === 'off') return null;
@@ -97,7 +145,7 @@ export async function readWinHouseStats(client: WinHouseClient, gameId: string):
   const inProgress = pending.get(gameId);
   if (inProgress) return inProgress;
 
-  const request = client.tracker(gameId).then((response) => response.ok ? normalizeWinHouseStats(response.body) : null).catch(() => null).then((stats) => {
+  const request = readRichTracker(client, gameId).catch(() => null).then((stats) => {
     cache.set(gameId, { at: Date.now(), stats });
     if (cache.size > 300) {
       const oldest = cache.keys().next().value;

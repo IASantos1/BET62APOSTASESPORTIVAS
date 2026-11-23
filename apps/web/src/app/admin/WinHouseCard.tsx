@@ -43,9 +43,7 @@ async function post(body: Json) {
 }
 
 const MODES: { id: 'both' | 'winhouse' | 'betby'; label: string; note: string }[] = [
-  { id: 'both', label: 'Ambos', note: 'Jogos do WinHouse (com os mercados que só a BETBY tem, ex.: marcadores) + jogos e desportos que só a BETBY tem.' },
-  { id: 'winhouse', label: 'Só WinHouse', note: 'Só jogos e mercados do WinHouse. A BETBY fica só para o minicampo e as estatísticas.' },
-  { id: 'betby', label: 'Só BETBY', note: 'Como antes: tudo da BETBY. O WinHouse continua a ser recolhido, mas não aparece.' },
+  { id: 'winhouse', label: 'Só WinHouse', note: 'Jogos, estatísticas ao vivo e mercados vêm do WinHouse. Goal API complementa os dados pré-jogo; BETBY está temporariamente desligada.' },
 ];
 
 /** Fonte do site e modo diagnóstico (selos WH/BB nos jogos, mercados e boletim, só neste navegador). */
@@ -64,7 +62,7 @@ function SourceControls({ mode, configured, onChange }: { mode: string | undefin
   return (
     <div className={cn(panel, 'p-5')}>
       <div className="mb-3 font-bold">Fonte dos jogos no site</div>
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2">
         {MODES.map((m) => (
           <button
             key={m.id}
@@ -83,7 +81,7 @@ function SourceControls({ mode, configured, onChange }: { mode: string | undefin
           </button>
         ))}
       </div>
-      <p className="mt-2 text-xs text-white/45">Se o WinHouse falhar (coletor parado há mais de 2 min), o site passa sozinho para a BETBY e volta quando o WinHouse responder.</p>
+      <p className="mt-2 text-xs text-white/45">Se o WinHouse falhar, os jogos ficam indisponíveis até o coletor voltar; não há fallback para a BETBY.</p>
       {err && <p className="mt-2 text-xs text-bet62-primary">{err}</p>}
       <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-bet62-border bg-bet62-surface-2 p-3">
         <input type="checkbox" checked={diag} onChange={(e) => setDiagnostics(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--bet62-primary,#e11d48)]" />
@@ -92,8 +90,7 @@ function SourceControls({ mode, configured, onChange }: { mode: string | undefin
           <span className="mt-0.5 block text-xs text-white/55">
             Mostra no site um selo em cada jogo, mercado e seleção do boletim:
             <span className="mx-1 rounded bg-sky-500/20 px-1 font-mono text-[10px] text-sky-400">WH</span> WinHouse,
-            <span className="mx-1 rounded bg-sky-500/20 px-1 font-mono text-[10px] text-sky-400">WH+BB</span> WinHouse ligado à BETBY (minicampo),
-            <span className="mx-1 rounded bg-amber-500/20 px-1 font-mono text-[10px] text-amber-400">BB</span> BETBY. Os jogadores não veem.
+            <span className="mx-1 rounded bg-sky-500/20 px-1 font-mono text-[10px] text-sky-400">WH</span> WinHouse. Os jogadores não veem.
           </span>
         </span>
       </label>

@@ -78,11 +78,13 @@ export async function goalApiMatch(match: Match) {
     if (!fixture) return { configured: true, linked: false, fixture: null, statistics: null, lineups: null, h2h: null, standings: null, error: null };
     const get = (name: string, ttl: number, path: string) => cacheGet(`match:${fixture.id}:${name}`, ttl, () => request(path).then((v: any) => v?.data ?? v));
     const safe = (p: Promise<any>) => p.catch(() => null);
-    const [stats, lineups, h2h, standings] = await Promise.all([
+    const [stats, lineups, h2h, standings, homeForm, awayForm] = await Promise.all([
       safe(get('statistics', 60_000, `/fixtures/${encodeURIComponent(fixture.id)}/statistics`)),
       safe(get('lineups', 10 * 60_000, `/fixtures/${encodeURIComponent(fixture.id)}/lineups`)),
       safe(get('h2h', 12 * HOUR, `/h2h/${encodeURIComponent(fixture.homeId)}/${encodeURIComponent(fixture.awayId)}/direct`)),
       fixture.leagueId ? safe(get('standings', 6 * HOUR, `/standings/${encodeURIComponent(fixture.leagueId)}`)) : Promise.resolve(null),
+      safe(cacheGet(`team-form:${fixture.homeId}`, 12 * HOUR, () => request(`/teams/${encodeURIComponent(fixture.homeId)}/results`).then((v: any) => v?.data ?? v))),
+      safe(cacheGet(`team-form:${fixture.awayId}`, 12 * HOUR, () => request(`/teams/${encodeURIComponent(fixture.awayId)}/results`).then((v: any) => v?.data ?? v))),
     ]);
     const rows = Array.isArray(stats) ? stats : stats?.statistics ?? stats?.items ?? [];
     const normalizedStats: Record<string, { home: number; away: number }> = {};
@@ -93,7 +95,35 @@ export async function goalApiMatch(match: Match) {
       const away = Number(values?.away ?? values?.awayValue ?? values?.[1]?.value);
       if (name && Number.isFinite(home) && Number.isFinite(away)) normalizedStats[name] = { home, away };
     }
-    return { configured: true, linked: true, fixture: { id: fixture.id, home: fixture.home, away: fixture.away, competition: fixture.raw?.leagueName ?? fixture.raw?.league_name ?? null }, statistics: normalizedStats, lineups, h2h, standings, error: null };
+    const recent = (raw: any) => list(raw?.recentFixtures ? raw.recentFixtures : raw).slice(0, 5).map((game: any) => ({
+      date: game?.date ?? game?.matchDate ?? game?.match_date ?? null,
+      opponent: game?.opponent ?? game?.opponentName ?? game?.opponent_name ?? null,
+      score: game?.score ?? [game?.homeTeamScore ?? game?.match_hometeam_score, game?.awayTeamScore ?? game?.match_awayteam_score].filter((v) => v !== undefined).join('-'),
+      result: game?.result ?? game?.outcome ?? null,
+      league: game?.league ?? game?.leagueName ?? game?.league_name ?? null,
+    })).filter((game: any) => game.opponent || game.score);
+    const h2hRaw = h2h?.matches ?? h2h?.data?.matches ?? [];
+    const h2hMatches = (Array.isArray(h2hRaw) ? h2hRaw : []).map((game: any) => ({
+      date: game?.match_date ?? game?.date ?? null,
+      home: game?.match_hometeam_name ?? game?.homeTeam?.name ?? game?.home ?? null,
+      away: game?.match_awayteam_name ?? game?.awayTeam?.name ?? game?.away ?? null,
+      homeScore: Number(game?.match_hometeam_score ?? game?.homeScore),
+      awayScore: Number(game?.match_awayteam_score ?? game?.awayScore),
+      competition: game?.league_name ?? game?.leagueName ?? game?.league ?? null,
+    })).filter((game: any) => game.home && game.away && Number.isFinite(game.homeScore) && Number.isFinite(game.awayScore)).slice(0, 5);
+    const tableRaw = list(standings?.standings ?? standings);
+    const table = tableRaw.map((row: any) => ({
+      position: Number(row?.overallLeaguePosition ?? row?.position ?? row?.rank),
+      team: row?.teamName ?? row?.team?.name ?? row?.name,
+      played: Number(row?.overallLeaguePlayed ?? row?.played ?? row?.matchesPlayed),
+      won: Number(row?.overallLeagueW ?? row?.won),
+      drawn: Number(row?.overallLeagueD ?? row?.drawn),
+      lost: Number(row?.overallLeagueL ?? row?.lost),
+      goalsFor: Number(row?.overallLeagueGF ?? row?.goalsFor),
+      goalsAgainst: Number(row?.overallLeagueGA ?? row?.goalsAgainst),
+      points: Number(row?.overallLeaguePTS ?? row?.points),
+    })).filter((row: any) => row.team && Number.isFinite(row.position)).sort((a: any, b: any) => a.position - b.position);
+    return { configured: true, linked: true, fixture: { id: fixture.id, home: fixture.home, away: fixture.away, competition: fixture.raw?.leagueName ?? fixture.raw?.league_name ?? null }, statistics: normalizedStats, lineups, h2h: h2hMatches, standings: table, form: { home: recent(homeForm), away: recent(awayForm) }, error: null };
   } catch (error) {
     return { configured: true, linked: false, fixture: null, statistics: null, lineups: null, h2h: null, standings: null, error: error instanceof Error ? error.message : 'Falha ao consultar Goal API.' };
   }

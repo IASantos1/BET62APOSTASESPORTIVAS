@@ -5,7 +5,7 @@ import { hasDatabase, one, query } from '../../../../lib/server/db';
 import { createWinHouseClient, envOptions } from '../../../../lib/server/winhouse/client';
 import { feedSettings, runningFeed } from '../../../../lib/server/winhouse/feed';
 import { detailOdds, eventsOf, groupMarkets } from '../../../../lib/server/winhouse/parse';
-import { MODES, getMode, setMode, type OddsMode } from '../../../../lib/server/winhouse/mode';
+import { MODES, setMode, type OddsMode } from '../../../../lib/server/winhouse/mode';
 import { eventView, type WhRow } from '../../../../lib/server/winhouse/view';
 
 export const dynamic = 'force-dynamic';
@@ -30,7 +30,7 @@ export const GET = route(async () => {
     thisProcess: runningFeed() ? { running: true, leader: runningFeed()!.status.leader } : { running: false },
   };
   if (!hasDatabase()) return json(base);
-  const mode = await getMode();
+  const mode = 'winhouse' as const;
   const state = await one<{ value: Record<string, unknown>; updated_at: Date }>(`SELECT value, updated_at FROM wh_state WHERE key = 'status'`);
   const lease = await one<{ owner: string; until: Date }>(`SELECT owner, until FROM wh_state WHERE key = 'lease'`);
   const counts = await query<{ status: string; sport: string; n: string; pages: string }>(

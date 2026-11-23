@@ -12,6 +12,8 @@ export const ROUTES = {
   prematchBySport: '/ajax/prematchgamesbysport/{sportId}?lang={lang}',
   prematchEvent: '/ajax/prematchgame/{gameId}?lang={lang}',
   liveEvent: '/ajax/livegame/{gameId}?lang={lang}',
+  widget: '/ajax/widget?event_id={gameId}&bg=transparent',
+  widgetData: '/widget-data?event_id={eid}&api_key={akey}',
   tracker: '/ajax/tracker/{gameId}?lang={lang}',
 } as const;
 export type RouteKey = keyof typeof ROUTES;
@@ -25,6 +27,8 @@ const ROUTE_ENV: Record<RouteKey, string> = {
   prematchBySport: 'WINHOUSE_PREMATCH_BY_SPORT',
   prematchEvent: 'WINHOUSE_PREMATCH_EVENT',
   liveEvent: 'WINHOUSE_LIVE_EVENT',
+  widget: 'WINHOUSE_WIDGET',
+  widgetData: 'WINHOUSE_WIDGET_DATA',
   tracker: 'WINHOUSE_TRACKER_ROUTE',
 };
 
@@ -67,13 +71,15 @@ export function createWinHouseClient({ baseUrl = '', lang = 'pt', routes = {}, t
   const base = String(baseUrl || '').replace(/\/+$/, '');
   const paths: Record<RouteKey, string> = { ...ROUTES, ...Object.fromEntries(Object.entries(routes).filter(([, v]) => v)) } as Record<RouteKey, string>;
   const enabled = httpsBase(base);
-  const pathOf = (key: RouteKey, vars: { gameId?: string | number; sportId?: string | number } = {}) =>
+  const pathOf = (key: RouteKey, vars: { gameId?: string | number; sportId?: string | number; eid?: string; akey?: string } = {}) =>
     paths[key]
       .replace('{lang}', encodeURIComponent(lang))
       .replace('{gameId}', encodeURIComponent(String(vars.gameId ?? '')))
-      .replace('{sportId}', encodeURIComponent(String(vars.sportId ?? '')));
+      .replace('{sportId}', encodeURIComponent(String(vars.sportId ?? '')))
+      .replace('{eid}', encodeURIComponent(String(vars.eid ?? '')))
+      .replace('{akey}', encodeURIComponent(String(vars.akey ?? '')));
 
-  async function request(key: RouteKey, vars: { gameId?: string | number; sportId?: string | number } = {}): Promise<WhResponse> {
+  async function request(key: RouteKey, vars: { gameId?: string | number; sportId?: string | number; eid?: string; akey?: string } = {}): Promise<WhResponse> {
     if (!enabled) throw new Error('WinHouse desligado: defina WINHOUSE_BASE_URL (https://…) no servidor.');
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
@@ -170,6 +176,8 @@ export function createWinHouseClient({ baseUrl = '', lang = 'pt', routes = {}, t
     prematchEvent: (gameId: string) => request('prematchEvent', { gameId }),
     liveEvent: (gameId: string) => request('liveEvent', { gameId }),
     tracker: (gameId: string) => request('tracker', { gameId }),
+    widget: (gameId: string) => request('widget', { gameId }),
+    widgetData: (eid: string, akey: string) => request('widgetData', { eid, akey }),
   };
 }
 

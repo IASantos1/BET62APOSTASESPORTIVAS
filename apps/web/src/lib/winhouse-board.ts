@@ -35,6 +35,17 @@ export interface WhApiEvent {
   markets: BetbyMarkets;
   /** Estatísticas normalizadas do tracker WinHouse (lidas no servidor e atualizadas com cache). */
   statistics?: Record<string, { home: number; away: number }> | null;
+  /** Dados de contexto pré-jogo associados à fixture da Goal API. */
+  goalApi?: {
+    configured?: boolean;
+    linked?: boolean;
+    error?: string | null;
+    fixture?: { id: string; home: string; away: string; competition?: string | null } | null;
+    h2h?: { date?: string | null; home: string; away: string; homeScore: number; awayScore: number; competition?: string | null }[] | null;
+    standings?: { position: number; team: string; played?: number; won?: number; drawn?: number; lost?: number; goalsFor?: number; goalsAgainst?: number; points?: number }[] | null;
+    form?: { home?: { date?: string | null; opponent?: string | null; score?: string; result?: string; league?: string | null }[]; away?: { date?: string | null; opponent?: string | null; score?: string; result?: string; league?: string | null }[] } | null;
+    lineups?: unknown;
+  } | null;
   names?: Record<string, string>;
   outcomes?: Record<string, string>;
 }
