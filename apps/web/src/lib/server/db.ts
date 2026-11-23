@@ -286,13 +286,26 @@ export class DatabaseMissing extends Error {
 }
 
 async function ready() {
-  g.__bet62Schema ??= pool()
-    .query(SCHEMA)
-    .then(() => undefined)
-    .catch((e) => {
-      g.__bet62Schema = undefined;
-      throw e;
-    });
+  g.__bet62Schema ??= (async () => {
+    const client = await pool().connect();
+    const schemaLock = 62062001;
+    let locked = false;
+    try {
+      // Schema setup runs many DDL statements and may wait on another Railway replica.
+      // Give this one-time operation more time, while normal requests retain the 15 s limit.
+      await client.query(`SET statement_timeout = '60s'`);
+      await client.query('SELECT pg_advisory_lock($1)', [schemaLock]);
+      locked = true;
+      await client.query(SCHEMA);
+    } finally {
+      if (locked) await client.query('SELECT pg_advisory_unlock($1)', [schemaLock]).catch(() => undefined);
+      await client.query('RESET statement_timeout').catch(() => undefined);
+      client.release();
+    }
+  })().catch((e) => {
+    g.__bet62Schema = undefined;
+    throw e;
+  });
   return g.__bet62Schema;
 }
 
