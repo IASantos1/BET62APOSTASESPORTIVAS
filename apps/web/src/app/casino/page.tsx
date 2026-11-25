@@ -41,7 +41,7 @@ const hitRank = (name: string) => {
   return index < 0 ? 999 : index;
 };
 
-function matchesCategory(game: Game, category: string, favorites: Set<number>) {
+function matchesCategory(game: Game, category: string, favorites: Set<number>, recentIds: Set<number>) {
   const name = game.name.toLowerCase();
   switch (category) {
     case 'all': return true;
@@ -53,7 +53,7 @@ function matchesCategory(game: Game, category: string, favorites: Set<number>) {
     case 'poker': return /poker|hold'?em/i.test(name);
     case 'live': return game.type === 'live' || game.category.toLowerCase() === 'ao vivo';
     case 'megaways': return /megaways/i.test(name);
-    case 'new': return /novo|new/i.test(game.category);
+    case 'new': return /novo|new|recent/i.test(game.category) || recentIds.has(game.id);
     case 'popular': return hitRank(game.name) < POPULAR.length;
     default: return false;
   }
@@ -102,6 +102,8 @@ export default function CasinoPage() {
   const [query, setQuery] = React.useState('');
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [favorites, setFavorites] = React.useState<Set<number>>(new Set());
+  const [jackpotValues, setJackpotValues] = React.useState([128450.72, 86240.36, 36580.94]);
+  const [extraCount, setExtraCount] = React.useState(18);
   const [playing, setPlaying] = React.useState<{ game: Game; url: string | null; error?: string } | null>(null);
 
   React.useEffect(() => {
@@ -118,15 +120,24 @@ export default function CasinoPage() {
       });
   }, []);
 
+  React.useEffect(() => {
+    const steps = [0.37, 0.23, 0.17];
+    const timer = window.setInterval(() => {
+      setJackpotValues((values) => values.map((value, index) => Number((value + steps[index]).toFixed(2))));
+    }, 900);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const recentIds = React.useMemo(() => new Set(games.slice(0, 24).map((game) => game.id)), [games]);
   const providers = React.useMemo(() => [...new Set(games.map((game) => game.provider))].sort(), [games]);
   const filtered = React.useMemo(() => {
     const term = query.trim().toLocaleLowerCase();
     return games
-      .filter((game) => matchesCategory(game, category, favorites))
+      .filter((game) => matchesCategory(game, category, favorites, recentIds))
       .filter((game) => !provider || game.provider === provider)
       .filter((game) => !term || game.name.toLocaleLowerCase().includes(term) || game.provider.toLocaleLowerCase().includes(term))
       .sort((a, b) => hitRank(a.name) - hitRank(b.name) || Number(!!b.image) - Number(!!a.image) || a.name.localeCompare(b.name));
-  }, [games, category, favorites, provider, query]);
+  }, [games, category, favorites, provider, query, recentIds]);
 
   const play = async (game: Game) => {
     if (!game.demo) {
@@ -158,45 +169,66 @@ export default function CasinoPage() {
   const filteredView = category !== 'all' || Boolean(query.trim()) || Boolean(provider);
   const featured = filtered.slice(0, 9);
   const popular = games
-    .filter((game) => matchesCategory(game, 'popular', favorites))
+    .filter((game) => matchesCategory(game, 'popular', favorites, recentIds))
     .sort((a, b) => hitRank(a.name) - hitRank(b.name))
     .slice(0, 9);
+  const featuredIds = new Set(featured.map((game) => game.id));
+  const popularIds = new Set(popular.map((game) => game.id));
+  const moreGames = games
+    .filter((game) => !featuredIds.has(game.id) && !popularIds.has(game.id))
+    .sort((a, b) => Number(!!b.image) - Number(!!a.image) || a.name.localeCompare(b.name));
 
   return (
     <div className="min-h-screen bg-bet62-bg">
       <Header />
       <main className="mx-auto max-w-[1600px] space-y-5 px-3 py-4 pb-24 sm:px-5 lg:px-8">
-        <section className="grid grid-cols-3 gap-2 sm:gap-3">
-          <div className="flex min-h-24 flex-col justify-between rounded-xl bg-gradient-to-br from-[#6d28d9] to-[#a855f7] p-3 sm:min-h-28 sm:p-4">
-            <div className="text-xs font-black sm:text-sm">100 FREE SPINS</div><p className="text-[10px] opacity-90">Oferta especial para novos jogadores</p><span className="self-end text-xl">🎁</span>
-          </div>
-          <div className="flex min-h-24 flex-col justify-between rounded-xl bg-gradient-to-br from-[#a16207] to-[#facc15] p-3 text-[#251600] sm:min-h-28 sm:p-4">
-            <div className="text-xs font-black sm:text-sm">BÓNUS SEMANAL</div><p className="text-[10px] opacity-90">Surpresas todas as semanas</p><span className="self-end text-xl">🏆</span>
-          </div>
-          <div className="flex min-h-24 flex-col justify-between rounded-xl bg-gradient-to-br from-[#047857] to-[#22c55e] p-3 sm:min-h-28 sm:p-4">
-            <div className="text-xs font-black sm:text-sm">GIRO DA SORTE</div><p className="text-[10px] opacity-90">Descobre prémios especiais</p><span className="self-end text-xl">🎡</span>
-          </div>
+        <section aria-label="Promoções" className="grid grid-cols-3 gap-2 sm:gap-3">
+          <Link href="/promocoes" className="relative isolate flex min-h-24 flex-col justify-between overflow-hidden rounded-xl bg-gradient-to-br from-[#6d28d9] to-[#a855f7] p-3 sm:min-h-28 sm:p-4">
+            <img src="/casino/promo-deposito.svg" alt="" aria-hidden className="pointer-events-none absolute bottom-0 right-0 z-0 h-[76%] w-[54%] object-contain opacity-80" />
+            <span className="relative z-10 text-[10px] font-black leading-tight sm:text-sm">100€ NO 1.º DEPÓSITO</span><span className="relative z-10 max-w-[85%] text-[9px] opacity-90">Oferta de boas-vindas</span>
+          </Link>
+          <Link href="/promocoes" className="relative isolate flex min-h-24 flex-col justify-between overflow-hidden rounded-xl bg-gradient-to-br from-[#a16207] to-[#facc15] p-3 text-[#251600] sm:min-h-28 sm:p-4">
+            <img src="/casino/promo-semanal.svg" alt="" aria-hidden className="pointer-events-none absolute bottom-0 right-0 z-0 h-[76%] w-[54%] object-contain opacity-80" />
+            <span className="relative z-10 text-[10px] font-black leading-tight sm:text-sm">BÓNUS SEMANAL</span><span className="relative z-10 max-w-[85%] text-[9px] opacity-90">Surpresas todas as semanas</span>
+          </Link>
+          <Link href="/promocoes" className="relative isolate flex min-h-24 flex-col justify-between overflow-hidden rounded-xl bg-gradient-to-br from-[#047857] to-[#22c55e] p-3 sm:min-h-28 sm:p-4">
+            <img src="/casino/promo-roleta.svg" alt="" aria-hidden className="pointer-events-none absolute bottom-0 right-0 z-0 h-[76%] w-[54%] object-contain opacity-80" />
+            <span className="relative z-10 text-[10px] font-black leading-tight sm:text-sm">BÓNUS DA ROLETA</span><span className="relative z-10 max-w-[85%] text-[9px] opacity-90">Gira e descobre prémios</span>
+          </Link>
         </section>
 
-        <section className="hero-glow relative overflow-hidden rounded-2xl border border-bet62-border p-5 sm:min-h-52 sm:p-8">
-          <div className="relative z-10 max-w-[76%] sm:max-w-[65%]">
+        <section className="hero-glow relative isolate overflow-hidden rounded-2xl border border-bet62-border p-5 sm:min-h-52 sm:p-8">
+          <img src="/casino/hero.svg" alt="" aria-hidden className="pointer-events-none absolute bottom-0 right-0 h-full w-[54%] object-contain object-right-bottom sm:w-[48%]" />
+          <div className="relative z-10 max-w-[76%] sm:max-w-[58%]">
             <span className="inline-flex rounded bg-[#facc15] px-2 py-1 text-[9px] font-black text-[#171000]">🔥 OFERTA ESPECIAL</span>
             <h1 className="mt-2 text-2xl font-black leading-tight sm:text-4xl">O TEU CASINO<br />COMEÇA AQUI</h1>
             <p className="my-2 text-xs text-white/70 sm:text-sm">Descobre jogos, novidades e diversão.</p>
             <button onClick={() => document.getElementById('featured')?.scrollIntoView({ behavior: 'smooth' })} className="rounded-lg bg-[#22c55e] px-4 py-2.5 text-[10px] font-black text-[#05200f]">EXPLORAR JOGOS</button>
           </div>
-          <div className="absolute bottom-2 right-3 text-6xl drop-shadow-lg sm:bottom-3 sm:right-8 sm:text-8xl">🎰</div>
         </section>
 
-        <section className="rounded-2xl border border-[#66501c] bg-gradient-to-br from-[#332006] to-[#16120a] px-4 py-3 text-center">
-          <h2 className="mb-1 text-xs font-black tracking-widest text-[#facc15]">🏆 JACKPOT DA SORTE 🏆</h2>
-          <div className="text-2xl font-black tracking-wide text-[#ffe58a] sm:text-3xl">€128.450,72</div>
-          <p className="mt-1 text-[10px] text-[#bca76a]">Prémio ilustrativo</p>
+        <section aria-label="Jackpots ilustrativos" className="rounded-2xl border border-[#66501c] bg-bet62-surface px-3 py-4 sm:px-5">
+          <h2 className="mb-3 flex items-center justify-center gap-2 text-xs font-black tracking-widest text-[#facc15]"><Trophy size={16} /> JACKPOT DA SORTE</h2>
+          <div className="grid grid-cols-3 divide-x divide-bet62-border">
+            {[
+              { label: 'PRINCIPAL', value: jackpotValues[0] },
+              { label: 'SLOTS', value: jackpotValues[1] },
+              { label: 'CASINO LIVE', value: jackpotValues[2] },
+            ].map((jackpot) => (
+              <div key={jackpot.label} className="min-w-0 px-1 text-center sm:px-3">
+                <p className="mb-1 truncate text-[8px] font-bold tracking-wide text-white/55 sm:text-[10px]">{jackpot.label}</p>
+                <p aria-live="off" className="animate-pulse-slow truncate text-[clamp(12px,3.8vw,24px)] font-black tabular-nums text-[#ffe58a]">
+                  €{new Intl.NumberFormat('pt-PT', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(jackpot.value)}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-center text-[9px] text-white/40">Valores demonstrativos em movimento, sem ligação aos fornecedores.</p>
         </section>
 
-        <nav aria-label="Categorias de casino" className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
+        <nav id="categories" aria-label="Categorias de casino" className="-mx-3 flex gap-2 overflow-x-auto px-3 pb-1 [scrollbar-width:none] sm:mx-0 sm:px-0 [&::-webkit-scrollbar]:hidden">
           {CATEGORIES.map((item) => (
-            <button key={item.id} onClick={() => setCategory(item.id)} className={cn(
+            <button key={item.id} onClick={() => { setCategory(item.id); if (item.id !== 'all') window.requestAnimationFrame(() => document.getElementById('featured')?.scrollIntoView({ behavior: 'smooth' })); }} aria-pressed={category === item.id} className={cn(
               'shrink-0 rounded-lg border px-3 py-2.5 text-[10px] font-bold transition sm:text-xs',
               category === item.id ? 'border-bet62-primary bg-bet62-primary text-onbrand' : 'border-bet62-border bg-bet62-surface text-white/65 hover:text-white',
             )}>{item.label}</button>
@@ -225,7 +257,7 @@ export default function CasinoPage() {
             ) : (
               <>
                 <section id="featured" className="space-y-3">
-                  <div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-base font-black sm:text-lg"><Flame size={18} className="text-[#facc15]" /> Jogos em Destaque</h2><button onClick={() => setCategory('all')} className="text-xs font-bold text-bet62-primary">Ver todos ›</button></div>
+                  <div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-base font-black sm:text-lg"><Flame size={18} className="text-[#facc15]" /> Jogos em Destaque</h2><button onClick={() => { setCategory('all'); setProvider(''); setQuery(''); window.requestAnimationFrame(() => document.getElementById('more-games')?.scrollIntoView({ behavior: 'smooth' })); }} className="text-xs font-bold text-bet62-primary">Ver todos ›</button></div>
                   <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-6 xl:grid-cols-8">{featured.map((game) => <GameCard key={game.id} game={game} favorite={favorites.has(game.id)} onFavorite={() => toggleFavorite(game.id)} onPlay={() => void play(game)} />)}</div>
                 </section>
 
@@ -236,6 +268,11 @@ export default function CasinoPage() {
                 {popular.length > 0 && <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="flex items-center gap-2 text-base font-black sm:text-lg"><Sparkles size={18} className="text-[#facc15]" /> Jogos Populares</h2><button onClick={() => setCategory('popular')} className="text-xs font-bold text-bet62-primary">Ver todos ›</button></div><div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-6 xl:grid-cols-8">{popular.map((game) => <GameCard key={game.id} game={game} favorite={favorites.has(game.id)} onFavorite={() => toggleFavorite(game.id)} onPlay={() => void play(game)} />)}</div></section>}
 
                 <section className="space-y-3"><h2 className="flex items-center gap-2 text-base font-black"><Dices size={18} className="text-bet62-primary" /> Provedores</h2><div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">{providers.map((name) => <button key={name} onClick={() => setProvider(name)} className="shrink-0 rounded-lg border border-bet62-border bg-bet62-surface px-3 py-2.5 text-[10px] font-black text-white/70 hover:border-bet62-primary/50">{name}</button>)}</div></section>
+                <section id="more-games" className="space-y-3">
+                  <div className="flex items-center justify-between"><h2 className="text-base font-black sm:text-lg">🎰 Mais jogos para explorar</h2><span className="text-xs text-white/45">{moreGames.length} jogos</span></div>
+                  {moreGames.length > 0 ? <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3 md:grid-cols-6 xl:grid-cols-8">{moreGames.slice(0, extraCount).map((game) => <GameCard key={game.id} game={game} favorite={favorites.has(game.id)} onFavorite={() => toggleFavorite(game.id)} onPlay={() => void play(game)} />)}</div> : <p className="rounded-xl border border-bet62-border bg-bet62-surface p-5 text-sm text-white/55">Não há mais jogos além dos destaques.</p>}
+                  {moreGames.length > extraCount && <button onClick={() => setExtraCount((count) => count + 18)} className="w-full rounded-xl border border-bet62-border bg-bet62-surface/70 py-3 text-sm font-bold text-white/70 transition hover:border-bet62-primary/50 hover:text-white">VER MAIS JOGOS</button>}
+                </section>
                 <section className="rounded-2xl border border-[#166534] bg-gradient-to-br from-[#064e3b] via-[#14532d] to-[#0f172a] p-5 text-center"><h2 className="text-lg font-black text-[#86efac]">🎁 OFERTAS EXCLUSIVAS</h2><p className="my-2 text-xs text-[#bbf7d0]">Descobre as novidades e promoções disponíveis.</p><Link href="/promocoes" className="inline-flex rounded-lg bg-[#22c55e] px-4 py-2.5 text-[10px] font-black text-[#05200f]">VER PROMOÇÕES</Link></section>
                 <p className="text-center text-xs text-white/45">18+ · Joga com responsabilidade · Jogos apresentados em modo de demonstração.</p>
               </>
@@ -248,7 +285,7 @@ export default function CasinoPage() {
         <Link href="/" className="flex flex-col items-center justify-center gap-1 text-[9px] text-white/55"><span className="text-lg">⌂</span>Início</Link>
         <button onClick={() => document.getElementById('featured')?.scrollIntoView({ behavior: 'smooth' })} className="flex flex-col items-center justify-center gap-1 text-[9px] text-bet62-primary"><Dices size={18} />Jogos</button>
         <Link href="/promocoes" className="flex flex-col items-center justify-center gap-1 text-[9px] text-white/55"><Gift size={18} />Promoções</Link>
-        <button onClick={() => setCategory('favorites')} className="flex flex-col items-center justify-center gap-1 text-[9px] text-white/55"><Heart size={18} />Favoritos</button>
+        <button onClick={() => { setCategory('favorites'); setProvider(''); setQuery(''); window.requestAnimationFrame(() => document.getElementById('featured')?.scrollIntoView({ behavior: 'smooth' })); }} className="flex flex-col items-center justify-center gap-1 text-[9px] text-white/55"><Heart size={18} />Favoritos</button>
         <Link href="/conta" className="flex flex-col items-center justify-center gap-1 text-[9px] text-white/55"><Trophy size={18} />Conta</Link>
       </nav>
 
